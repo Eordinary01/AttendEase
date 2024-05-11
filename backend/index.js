@@ -12,13 +12,10 @@ app.use(cors({
 
 }));
 
-const authRoutes = require('./routes/auth');
-const requestRoutes = require('./routes/requests');
-const userRoutes = require('./routes/users');
 
-app.use('/api/auth', authRoutes);
-app.use('/api/requests', requestRoutes);
-app.use('/api/users', userRoutes);
+// for user routes
+const userRoute = require("./routes/userRoute");
+app.use("/api",userRoute);
 
 
 

@@ -1,9 +1,9 @@
-import Header from "../header";
+
 
 export default function Dashboard() {
     return (
         <div>
-            <Header />
+            
             <div className="bg-gray-900 text-white">
                 <div className="h-screen flex flex-col justify-center items-center">
                     <h1 className="text-3xl font-bold mt-8 mb-8">Dashboard</h1>
