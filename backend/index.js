@@ -8,10 +8,8 @@ const cors = require('cors');
 app.use(express.json());
 
 app.use(cors({
-    origin: 'http://localhost:3000',  // Allow requests from localhost:3000
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],  // Allow these methods
-    allowedHeaders: ['Content-Type', 'Authorization'],  // Allow these headers
-  }));
+  origin: 'http://127.0.0.1:3000'
+}));
 
 
 // for user routes

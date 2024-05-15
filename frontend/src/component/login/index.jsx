@@ -2,15 +2,14 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-
-
-const Register = ({setIsRegistered}) => {
+const Register = ({ setIsRegistered }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     section: '',
-    role: '' // Add role field
+    role: '',
+    rollNo: '' // Add rollNo field
   });
 
   const navigate = useNavigate();
@@ -105,6 +104,18 @@ const Register = ({setIsRegistered}) => {
                 <option value="teacher">Teacher</option>
               </select>
             </div>
+            <div className="mb-4">
+              <label htmlFor="rollNo" className="block text-gray-300 font-medium">Roll No</label>
+              <input
+                id="rollNo"
+                name="rollNo"
+                type="text"
+                className="mt-1 block w-full px-3 py-2 border border-purple-500 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm bg-gray-800 text-gray-300"
+                placeholder="Enter your Roll No"
+                value={formData.rollNo}
+                onChange={handleChange}
+              />
+            </div>
             <button
               type="submit"
               className="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 transition-colors duration-300"
@@ -117,6 +128,5 @@ const Register = ({setIsRegistered}) => {
     </div>
   );
 };
-
 
 export default Register;

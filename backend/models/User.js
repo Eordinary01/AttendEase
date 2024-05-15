@@ -21,6 +21,10 @@ const userSettingSchema = mongoose.Schema({
     type: String,
     enum: ["student", "teacher"], // Define the possible roles
     default: "student" // Set a default role
+  },
+  rollNo: {
+    type: String,
+    required: true
   }
 });
 
