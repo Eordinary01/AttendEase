@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const NewLogin = () => {
+
+const NewLogin = ({ onLogin,setIsRegistered }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    section: ''
+    section: '',
+    role: '' // Add role field
   });
 
   const navigate = useNavigate();
@@ -14,17 +16,27 @@ const NewLogin = () => {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+  
     try {
-      const response = await axios.post('http://localhost:8011/api/login', formData);
-      console.log(response.data);
-
-      // Store token in local storage
+      const { email, password, section, role } = formData;
+  
+      const response = await axios.post('http://localhost:8011/api/login', { email, password, section, role });
+      const { token } = response.data;
+      onLogin(token, role);
+  
+      // Store token, role, and section in local storage
       localStorage.setItem('token', response.data.token);
-
+      localStorage.setItem('role', role);
+      localStorage.setItem('section', section);
+      // console.log(section)s
+  
+      // Set isRegistered to true if role is 'teacher' or 'student'
+      if (role === 'teacher' || role === 'student') {
+        setIsRegistered(true);
+      }
+  
       // Redirect to dashboard
       navigate('/dashboard');
     } catch (error) {
@@ -32,6 +44,7 @@ const NewLogin = () => {
       // Handle error, e.g., show an error message
     }
   };
+  
 
   return (
     <div>
@@ -74,6 +87,20 @@ const NewLogin = () => {
                 value={formData.section}
                 onChange={handleChange}
               />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="role" className="block text-gray-300 font-medium">Role</label>
+              <select
+                id="role"
+                name="role"
+                className="mt-1 block w-full px-3 py-2 border border-purple-500 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm bg-gray-800 text-gray-300"
+                value={formData.role}
+                onChange={handleChange}
+              >
+                <option value="">Select Role</option>
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
             </div>
             <button
               type="submit"

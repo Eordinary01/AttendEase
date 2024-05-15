@@ -2,7 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt")
 const jwt = require('jsonwebtoken');
 const register = async (req, res) => {
-    const { name, email, password, section } = req.body;
+    const { name, email, password, section, role } = req.body;
 
     try {
         let existingUser = await User.findOne({ email });
@@ -13,7 +13,7 @@ const register = async (req, res) => {
 
         const hashPassword = await bcrypt.hash(password, 10);
 
-        const newUser = new User({ name, email, password: hashPassword, section });
+        const newUser = new User({ name, email, password: hashPassword, section, role });
 
         await newUser.save();
 
@@ -25,12 +25,9 @@ const register = async (req, res) => {
 };
 
 const login = async(req,res)=>{
-    // res.send('login.')
-
-    const{email,password,section} = req.body;
+    const{email,password,section,role} = req.body;
 
     try {
-
         const user = await User.findOne({email});
 
         if(!user){
@@ -41,25 +38,23 @@ const login = async(req,res)=>{
 
         if(!isPasswordValid){
             return res.status(401).json({ message: 'Invalid password' });
-
         }
 
         if (user.section !== section) {
             return res.status(401).json({ message: 'Invalid section' });
         }
 
+        if (user.role !== role) {
+            return res.status(401).json({ message: 'Invalid role' });
+        }
+
         const token = jwt.sign({ userId: user._id }, 'eyJhbGciOiJIUzI1NiJ9.ew0KICAic3ViIjogIjEyMzQ1Njc4OTAiLA0KICAibmFtZSI6ICJBbmlzaCBOYXRoIiwNCiAgImlhdCI6IDE1MTYyMzkwMjINCn0.CMEx-YapnKFDaNDYw8nW9oEAWx8UXFdtEMQWspCMgyE', { expiresIn: '1h' });
 
         res.status(200).json({ token });
-
-
-
-
         
     } catch (error) {
-
+        console.error('Error logging in user:', error);
         res.status(500).json({ message: 'Internal server error' });
-        
     }
 }
 

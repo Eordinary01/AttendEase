@@ -17,6 +17,10 @@ app.use(cors({
 const userRoute = require("./routes/userRoute");
 app.use("/api",userRoute);
 
+// for ticket routes
+const ticketRoute = require("./routes/ticketRoute");
+app.use("/api",ticketRoute);
+
 
 
 
