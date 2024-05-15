@@ -1,29 +1,37 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 
 export default function TeacherDashboard(){
 
+    const[tickets,setTickets] = useState({});
+
+    useEffect(()=>{
+        const fetchTickets = async()=>{
+            try {
+                const response = await axios.get("http://localhost:8011/api/tickets");
+                setTickets(response.data);
+                
+            } catch (error) {
+                console.error("Error fetching tickets:", error);
+                
+            }
+        };
+        fetchTickets();
+    },[])
+
     return (
         <div>
-            
-            <div className="bg-gray-900 text-white">
-                <div className="h-screen flex flex-col justify-center items-center">
-                    <h1 className="text-3xl font-bold mt-8 mb-8">Dashboard</h1>
-                    <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl overflow-x-auto">
-                        <table className="w-full table-auto">
-                            <thead>
-                                <tr>
-                                    <th className="border border-gray-700 px-4 py-2">Ticket Number</th>
-                                    <th className="border border-gray-700 px-4 py-2">Response</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {/* Table rows will be dynamically generated here */}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <h1>Teacher's Dashboard</h1>
+      <h2>Tickets:</h2>
+      <ul>
+        {tickets.map((ticket) => (
+          <li key={ticket._id}>
+            Roll No: {ticket.rollNo}, Section: {ticket.section}, Document: {ticket.document}
+          </li>
+        ))}
+      </ul>
+    </div>
     );
 
 }

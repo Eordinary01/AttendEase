@@ -17,6 +17,19 @@ const createTicket = async(req,res)=>{
     }
 };
 
-module.exports  ={
-   createTicket
+const getTickets = async(req,res)=>{
+    try {
+        const tickets = await Ticket.find({});
+        res.json(tickets);
+        
+    } catch (error) {
+        console.error("Error fetching tickets:", error);
+        res.status(500).json({ message: "Internal server error" });
+        
+    }
 }
+
+module.exports  ={
+   createTicket,
+   getTickets
+} 
