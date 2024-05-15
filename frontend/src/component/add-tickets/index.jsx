@@ -26,7 +26,7 @@ export default function Ticket(section) {
     e.preventDefault();
   
     try {
-      const response = await axios.post('http://localhost:8011/api/tickets', formData);
+      const response = await axios.post('https://attend-ease-eight.vercel.app/api/tickets', formData);
       console.log(response.data);
       // console.log(formData);
       // Handle success, e.g., show a success message

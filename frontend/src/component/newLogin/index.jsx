@@ -22,7 +22,7 @@ const NewLogin = ({ onLogin,setIsRegistered }) => {
     try {
       const { email, password, section, role } = formData;
   
-      const response = await axios.post('http://localhost:8011/api/login', { email, password, section, role });
+      const response = await axios.post('https://attend-ease-eight.vercel.app/api/login', { email, password, section, role });
       const { token } = response.data;
       onLogin(token, role);
   
