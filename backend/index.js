@@ -33,7 +33,7 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Apply CORS middleware
+// Apply CORS middleware before defining any routes
 app.use(cors(corsOptions));
 
 // Enable pre-flight requests for all routes
@@ -44,6 +44,8 @@ app.use((req, res, next) => {
   console.log('Request Origin:', req.headers.origin);
   next();
 });
+
+
 
 // Import and use routes
 const userRoute = require("./routes/userRoute");
