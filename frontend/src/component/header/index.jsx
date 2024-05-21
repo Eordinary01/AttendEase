@@ -21,7 +21,7 @@ const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
             Login
           </Link>
         )}
-        {isAuthenticated && isRegistered && (
+        {isAuthenticated && !isRegistered && (
           <>
             <Link to="/register" className="text-white mx-2"> 
               Register
@@ -33,6 +33,9 @@ const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
         )}
         <Link to="/tickets" className="text-white mx-2">
           Create Ticket
+        </Link>
+        <Link to={"/dashboard"} className='text-white mx-2'>
+          Dashboard
         </Link>
       </div>
     </div>

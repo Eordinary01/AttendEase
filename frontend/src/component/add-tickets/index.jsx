@@ -1,7 +1,9 @@
 import axios from "axios";
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Ticket() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     section: localStorage.getItem("section") || "",
     rollNo: localStorage.getItem("rollNo") || "",
@@ -9,19 +11,20 @@ export default function Ticket() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [disableSubmit, setDisableSubmit] = useState(false);
-  // const [lastSubmitTime, setLastSubmitTime] = useState(null);
-
-  // Extract localStorage items to variables
-  const localSection = localStorage.getItem("section") || "";
-  const localRollNo = localStorage.getItem("rollNo") || "";
+  const [responseStatus, setResponseStatus] = useState(null);
+  const [lastSubmitTime, setLastSubmitTime] = useState(
+    localStorage.getItem("lastSubmitTime") || null
+  );
 
   useEffect(() => {
+    const localSection = localStorage.getItem("section") || "";
+    const localRollNo = localStorage.getItem("rollNo") || "";
     setFormData((prevFormData) => ({
       ...prevFormData,
       section: localSection,
       rollNo: localRollNo,
     }));
-  }, [localSection, localRollNo]); // Use variables in the dependency array
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -34,16 +37,26 @@ export default function Ticket() {
     try {
       const response = await axios.post(
         "http://localhost:8011/api/tickets",
-        formData
+        { document: formData.document },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
       );
       console.log(response.data);
       setDisableSubmit(true);
-      setLastSubmitTime(Date.now());
-      localStorage.setItem("lastSubmitTime", Date.now());
+      const currentTime = Date.now();
+      setLastSubmitTime(currentTime);
+      localStorage.setItem("lastSubmitTime", currentTime);
+      setResponseStatus(response.data.ticket.response);
+
+      navigate("/dashboard");
 
       setTimeout(() => {
         setDisableSubmit(false);
-      }, 100000); // Enable submit button after 1 second
+      }, 100000); // Enable submit button after 100 seconds
+
       setFormData({
         section: localStorage.getItem("section") || "",
         rollNo: localStorage.getItem("rollNo") || "",
@@ -55,10 +68,6 @@ export default function Ticket() {
       setIsSubmitting(false);
     }
   };
-
-  const [lastSubmitTime, setLastSubmitTime] = useState(
-    localStorage.getItem("lastSubmitTime") || null
-  );
 
   useEffect(() => {
     if (lastSubmitTime) {
@@ -73,7 +82,9 @@ export default function Ticket() {
     }
   }, [lastSubmitTime]);
 
-  const formattedTime = new Date(lastSubmitTime).toLocaleString();
+  const formattedTime = lastSubmitTime
+    ? new Date(parseInt(lastSubmitTime)).toLocaleString()
+    : "";
 
   return (
     <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
@@ -108,7 +119,7 @@ export default function Ticket() {
               placeholder="Enter your roll no"
               value={formData.rollNo}
               onChange={handleChange}
-              disabled={disableSubmit}
+              disabled
             />
           </div>
           <div className="mb-4">
@@ -143,6 +154,11 @@ export default function Ticket() {
         {lastSubmitTime && (
           <div className="text-gray-500 mt-4">
             Last submit time: {formattedTime}
+          </div>
+        )}
+        {responseStatus && (
+          <div className="text-green-500 mt-4">
+            Ticket Status: {responseStatus}
           </div>
         )}
       </div>
