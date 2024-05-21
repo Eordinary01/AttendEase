@@ -11,6 +11,10 @@ mongoose.connect('mongodb+srv://parthmanocha2901:nM1f3T9HLQItVAqQ@cluster0.ecvzx
 const app = express();
 app.use(express.json());
 
+app.use("/",(req,res)=>{
+  res.json({message:"Hello Dev!!"});
+});
+
 // Define CORS options
 const corsOptions = {
   origin: (origin, callback) => {

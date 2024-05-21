@@ -22,7 +22,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     try {
       const { email, password, section, role, rollNo } = formData;
 
-      const response = await axios.post("https://attend-ease-kappa.vercel.app/api/login", {
+      const response = await axios.post("http://localhost:8011/api/login", {
         email,
         password,
         section,
