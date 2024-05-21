@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 
 // Connect to MongoDB
-mongoose.connect('mongodb://127.0.0.1:27017/attendease_backend', {
+mongoose.connect('mongodb+srv://parthmanocha2901:nM1f3T9HLQItVAqQ@cluster0.ecvzxuo.mongodb.net/attend_backend?retryWrites=true&w=majority&appName=Cluster0', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
