@@ -36,7 +36,7 @@ export default function Ticket() {
 
     try {
       const response = await axios.post(
-        "http://localhost:8011/api/tickets",
+        "https://attend-ease-1pf38pjbm-extraordinarys-projects.vercel.app/api/tickets",
         { document: formData.document },
         {
           headers: {
