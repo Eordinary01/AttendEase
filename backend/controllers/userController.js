@@ -28,10 +28,10 @@ const register = async (req, res) => {
     }
 };
 const login = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, section, role, rollNo } = req.body;
 
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email, section, role, rollNo });
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -49,6 +49,7 @@ const login = async (req, res) => {
             token,
             section: user.section,
             rollNo: user.rollNo,
+            role: user.role,
         });
     } catch (error) {
         console.error('Error logging in user:', error);

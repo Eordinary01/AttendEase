@@ -29,14 +29,13 @@ export default function Ticket() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-
+  
     try {
       const response = await axios.post(
-        "https://attend-ease-kappa.vercel.app/api/tickets",
+        "http://localhost:8011/api/tickets",
         { document: formData.document },
         {
           headers: {
@@ -44,24 +43,31 @@ export default function Ticket() {
           },
         }
       );
-      console.log(response.data);
-      setDisableSubmit(true);
-      const currentTime = Date.now();
-      setLastSubmitTime(currentTime);
-      localStorage.setItem("lastSubmitTime", currentTime);
-      setResponseStatus(response.data.ticket.response);
-
-      navigate("/dashboard");
-
-      setTimeout(() => {
-        setDisableSubmit(false);
-      }, 100000); // Enable submit button after 100 seconds
-
-      setFormData({
-        section: localStorage.getItem("section") || "",
-        rollNo: localStorage.getItem("rollNo") || "",
-        document: "",
-      });
+  
+      // Check if the response is successful (status code in the 2xx range)
+      if (response.status >= 200 && response.status < 300) {
+        console.log(response.data);
+        setDisableSubmit(true);
+        const currentTime = Date.now();
+        setLastSubmitTime(currentTime);
+        localStorage.setItem("lastSubmitTime", currentTime);
+        setResponseStatus(response.data.ticket.response);
+  
+        navigate("/dashboard");
+  
+        setTimeout(() => {
+          setDisableSubmit(false);
+        }, 100000); // Enable submit button after 100 seconds
+  
+        setFormData({
+          section: localStorage.getItem("section") || "",
+          rollNo: localStorage.getItem("rollNo") || "",
+          document: "",
+        });
+      } else {
+        // Handle unsuccessful response
+        console.error("Error creating ticket:", response.data);
+      }
     } catch (error) {
       console.error("Error creating ticket:", error);
     } finally {

@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  BrowserRouter as Router,
-  Routes, Route, Navigate
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import NewLogin from "./component/newLogin";
 import Header from "./component/header";
 import Register from "./component/login";
@@ -10,9 +7,9 @@ import Dashboard from "./component/Dashboard";
 import Ticket from "./component/add-tickets";
 import TeacherDashboard from "./component/teacherDashboard";
 
-const PrivateRoute = ({ element: Component, isAuthenticated, ...props }) => {
+const PrivateRoute = ({ element: Component, isAuthenticated, role, ...props }) => {
   return isAuthenticated ? (
-    <Component {...props} />
+    <Component {...props} role={role} />
   ) : (
     <Navigate to="/login" replace />
   );
@@ -59,22 +56,10 @@ const App = () => {
 
   return (
     <Router>
-      <Header
-        isAuthenticated={isAuthenticated}
-        onLogout={handleLogout}
-        isRegistered={!isRegistered}
-      />
+      <Header isAuthenticated={isAuthenticated} onLogout={handleLogout} isRegistered={!isRegistered} />
       <Routes>
-        <Route
-          path="/login"
-          element={
-            <NewLogin onLogin={handleLogin} setIsRegistered={setIsRegistered} />
-          }
-        />
-        <Route
-          path="/register"
-          element={!isAuthenticated ? <Navigate to="/login" /> :  <Register setIsRegistered={setIsRegistered} />}
-        />
+        <Route path="/login" element={<NewLogin onLogin={handleLogin} setIsRegistered={setIsRegistered} />} />
+        <Route path="/register" element={!isAuthenticated ? <Navigate to="/login" /> : <Register setIsRegistered={setIsRegistered} />} />
         <Route
           path="/dashboard"
           element={
@@ -85,21 +70,19 @@ const App = () => {
             />
           }
         />
-        <Route
-          path="/"
-          element={
-            <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />
-          }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <PrivateRoute
-              element={Ticket}
-              isAuthenticated={isAuthenticated}
-            />
-          }
-        />
+        <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
+        {role === "student" && (
+          <Route
+            path="/tickets"
+            element={
+              <PrivateRoute
+                element={Ticket}
+                isAuthenticated={isAuthenticated}
+                role={role}
+              />
+            }
+          />
+        )}
       </Routes>
     </Router>
   );

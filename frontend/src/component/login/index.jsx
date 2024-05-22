@@ -9,8 +9,9 @@ const Register = ({ setIsRegistered }) => {
     password: '',
     section: '',
     role: '',
-    rollNo: '' // Add rollNo field
+    rollNo: ''
   });
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false); // Add a state for success message
 
   const navigate = useNavigate();
 
@@ -20,16 +21,21 @@ const Register = ({ setIsRegistered }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-  
+
     try {
-      const response = await axios.post('https://attend-ease-kappa.vercel.app/api/register', formData);
+      const response = await axios.post('http://localhost:8011/api/register', formData);
       console.log(response.data);
-  
+
       // Set isRegistered to true to prevent showing the registration form again
       setIsRegistered(true);
-  
-      // Navigate to login page after successful registration
-      navigate('/login');
+
+      // Show the success message
+      setShowSuccessMessage(true);
+
+      // Redirect to the login page after a short delay (e.g., 2 seconds)
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
     } catch (error) {
       console.error('Error registering user:', error);
       // Handle error, e.g., show an error message
@@ -38,9 +44,14 @@ const Register = ({ setIsRegistered }) => {
   
   return (
     <div>
-      <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
+       <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
           <h2 className="text-2xl font-semibold mb-4">Register</h2>
+          {showSuccessMessage ? (
+            <div className="bg-green-500 text-white p-4 rounded-md mb-4">
+              Registration successful! Redirecting to login...
+            </div>
+          ) : null}
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label htmlFor="name" className="block text-gray-300 font-medium">Name</label>

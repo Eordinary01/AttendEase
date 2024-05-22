@@ -10,24 +10,26 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     role: "",
     rollNo: "",
   });
+  const [message, setMessage] = useState(""); // Add a state for success/error message
 
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
       const { email, password, section, role, rollNo } = formData;
 
-      const response = await axios.post("https://attend-ease-kappa.vercel.app/api/login", {
+      const response = await axios.post("http://localhost:8011/api/login", {
         email,
         password,
         section,
         role,
-        rollNo
+        rollNo,
       });
       const { token } = response.data;
       onLogin(token, role);
@@ -37,18 +39,31 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
       localStorage.setItem("role", role);
       localStorage.setItem("section", section);
       localStorage.setItem("rollNo", rollNo);
-      // console.log(section,rollNo)
 
       // Set isRegistered to true if role is 'teacher' or 'student'
       if (role === "teacher" || role === "student") {
         setIsRegistered(true);
       }
 
-      // Redirect to dashboard
-      navigate("/dashboard");
+      // Display success message and redirect to dashboard after 2 seconds
+      setMessage("Login successful! Redirecting to dashboard...");
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 2000);
     } catch (error) {
       console.error("Error logging in:", error);
-      // Handle error, e.g., show an error message
+      // Display error message based on the error response for 3 seconds
+      if (error.response) {
+        setMessage(`Error: ${error.response.data.message}`);
+        setTimeout(() => {
+          setMessage("");
+        }, 3000);
+      } else {
+        setMessage("An unknown error occurred. Please try again later.");
+        setTimeout(() => {
+          setMessage("");
+        }, 3000);
+      }
     }
   };
 
@@ -56,7 +71,18 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     <div>
       <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
-          <h2 className="text-2xl font-semibold mb-4">Login</h2>
+        <h2 className="text-2xl font-semibold mb-4">Login</h2>
+          {message && (
+            <div
+              className={`p-4 rounded-md mb-4 ${
+                message.includes("successful")
+                  ? "bg-green-500 text-white"
+                  : "bg-red-500 text-white"
+              }`}
+            >
+              {message}
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label
