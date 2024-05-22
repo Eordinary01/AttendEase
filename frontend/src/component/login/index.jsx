@@ -23,7 +23,7 @@ const Register = ({ setIsRegistered }) => {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://localhost:8011/api/register', formData);
+      const response = await axios.post('https://attendease-gajo.onrender.com/api/register', formData);
       console.log(response.data);
 
       // Set isRegistered to true to prevent showing the registration form again

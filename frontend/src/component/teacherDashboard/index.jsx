@@ -20,7 +20,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await axios.get("http://localhost:8011/api/tickets", {
+        const response = await axios.get("https://attendease-gajo.onrender.com/api/tickets", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -40,7 +40,7 @@ export default function TeacherDashboard() {
   const handleApprove = async (ticketId) => {
     try {
       const response = await axios.put(
-        `http://localhost:8011/api/tickets/${ticketId}/approve`,
+        `https://attendease-gajo.onrender.com/api/tickets/${ticketId}/approve`,
         {},
         {
           headers: {
@@ -66,7 +66,7 @@ export default function TeacherDashboard() {
   const handleReject = async (ticketId) => {
     try {
       const response = await axios.put(
-        `http://localhost:8011/api/tickets/${ticketId}/reject`,
+        `https://attendease-gajo.onrender.com/api/tickets/${ticketId}/reject`,
         {},
         {
           headers: {
