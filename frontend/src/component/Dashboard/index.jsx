@@ -15,7 +15,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await axios.get("http://localhost:8011/api/tickets", {
+        const response = await axios.get("https://attend-ease-kappa.vercel.app/api/tickets", {
           headers: {
             Authorization: `Bearer ${token}`, // Added a space after "Bearer"
           },
