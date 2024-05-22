@@ -35,7 +35,7 @@ export default function Ticket() {
   
     try {
       const response = await axios.post(
-        "http://localhost:8011/api/tickets",
+        "https://attendease-gajo.onrender.com/api/tickets",
         { document: formData.document },
         {
           headers: {

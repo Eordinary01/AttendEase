@@ -20,7 +20,7 @@ const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    if (['http://127.0.0.1:3000', 'http://localhost:3000','https://attend-ease-f.vercel.app/'].indexOf(origin) === -1) {
+    if (['http://127.0.0.1:3000', 'http://localhost:3000','https://attendease-gajo.onrender.com/'].indexOf(origin) === -1) {
       return callback(new Error('Not allowed by CORS'));
     }
     return callback(null, true);
