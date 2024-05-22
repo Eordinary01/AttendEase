@@ -16,29 +16,29 @@ app.get("/",(req,res)=>{
 });
 
 // Define CORS options
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (['http://127.0.0.1:3000', 'http://localhost:3000','https://attendease-gajo.onrender.com/'].indexOf(origin) === -1) {
-      return callback(new Error('Not allowed by CORS'));
-    }
-    return callback(null, true);
-  },
-  optionsSuccessStatus: 200
-};
+// const corsOptions = {
+//   origin: (origin, callback) => {
+//     // Allow requests with no origin (like mobile apps or curl requests)
+//     if (!origin) return callback(null, true);
+//     if (['http://127.0.0.1:3000', 'http://localhost:3000','https://attendease-gajo.onrender.com/'].indexOf(origin) === -1) {
+//       return callback(new Error('Not allowed by CORS'));
+//     }
+//     return callback(null, true);
+//   },
+//   optionsSuccessStatus: 200
+// };
 
-// Apply CORS middleware before defining any routes
-app.use(cors(corsOptions));
+// // Apply CORS middleware before defining any routes
+// app.use(cors(corsOptions));
 
-// Enable pre-flight requests for all routes
-app.options('*', cors(corsOptions));
+// // Enable pre-flight requests for all routes
+// app.options('*', cors(corsOptions));
 
-// Debugging middleware to log the origin of requests
-app.use((req, res, next) => {
-  console.log('Request Origin:', req.headers.origin);
-  next();
-});
+// // Debugging middleware to log the origin of requests
+// app.use((req, res, next) => {
+//   console.log('Request Origin:', req.headers.origin);
+//   next();
+// });
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
