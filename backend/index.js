@@ -11,21 +11,16 @@ mongoose.connect('mongodb+srv://parthmanocha2901:nM1f3T9HLQItVAqQ@cluster0.ecvzx
 const app = express();
 app.use(express.json());
 
-app.use("/",(req,res)=>{
-  res.json({message:"Hello Dev!!"});
+app.get("/",(req,res)=>{
+  res.json({message:"Hello Dev!!Hi"});
 });
+
 // Define CORS options
 const corsOptions = {
   origin: (origin, callback) => {
-    const allowedOrigins = [
-      'http://127.0.0.1:3000',
-      'http://localhost:3000',
-      'https://attend-ease-1pf38pjbm-extraordinarys-projects.vercel.app'
-    ];
-    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
+    if (['http://127.0.0.1:3000', 'http://localhost:3000'].indexOf(origin) === -1) {
       return callback(new Error('Not allowed by CORS'));
     }
     return callback(null, true);
@@ -44,8 +39,6 @@ app.use((req, res, next) => {
   console.log('Request Origin:', req.headers.origin);
   next();
 });
-
-
 
 // Import and use routes
 const userRoute = require("./routes/userRoute");

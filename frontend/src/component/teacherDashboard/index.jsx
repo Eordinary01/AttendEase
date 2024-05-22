@@ -20,7 +20,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await axios.get("https://attend-ease-1pf38pjbm-extraordinarys-projects.vercel.app/api/tickets", {
+        const response = await axios.get("http://localhost:8011/api/tickets", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -40,7 +40,7 @@ export default function TeacherDashboard() {
   const handleApprove = async (ticketId) => {
     try {
       const response = await axios.put(
-        `https://attend-ease-1pf38pjbm-extraordinarys-projects.vercel.app/api/tickets/${ticketId}/approve`,
+        `http://localhost:8011/api/tickets/${ticketId}/approve`,
         {},
         {
           headers: {
@@ -66,7 +66,7 @@ export default function TeacherDashboard() {
   const handleReject = async (ticketId) => {
     try {
       const response = await axios.put(
-        `https://attend-ease-1pf38pjbm-extraordinarys-projects.vercel.app/api/tickets/${ticketId}/reject`,
+        `http://localhost:8011/api/tickets/${ticketId}/reject`,
         {},
         {
           headers: {
