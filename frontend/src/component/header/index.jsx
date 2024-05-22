@@ -8,14 +8,14 @@ const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
         <h1 className="text-white text-xl font-bold">Attend Ease</h1> 
       </div>
       <div>
-        {!isAuthenticated &&(
+        {/* {!isAuthenticated &&(
           <button onClick={onLogout} className="text-white mx-2">
             Logout
           </button>
 
           
 
-        )}
+        )} */}
         {!isAuthenticated && !isRegistered && (
           <Link to="/login" className="text-white mx-2"> 
             Login
