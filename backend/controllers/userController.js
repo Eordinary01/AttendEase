@@ -1,12 +1,19 @@
 const User = require("../models/User");
-var bcrypt   = require('bcryptjs');
+var bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const { JWT_SECRET } = process.env;
 
 const register = async (req, res) => {
-    const { name, email, password, section, role, rollNo } = req.body;
+    let { name, email, password, section, role, rollNo } = req.body;
+
+    // Convert to lowercase
+    email = email.toLowerCase();
+    password = password.toLowerCase();
+    section = section.toLowerCase();
+    role = role.toLowerCase();
+    rollNo = rollNo.toLowerCase();
 
     try {
         let existingUser = await User.findOne({ email });
@@ -27,14 +34,22 @@ const register = async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
 const login = async (req, res) => {
-    const { email, password, section, role, rollNo } = req.body;
+    let { email, password, section, role, rollNo } = req.body;
+
+    // Convert to lowercase
+    email = email.toLowerCase();
+    password = password.toLowerCase();
+    section = section.toLowerCase();
+    role = role.toLowerCase();
+    rollNo = rollNo.toLowerCase();
 
     try {
         const user = await User.findOne({ email, section, role, rollNo });
 
         if (!user) {
-            return res.status(404).json({ message: 'User not found! Pls Go TO Register First' });
+            return res.status(404).json({ message: 'User not found! Please register first.' });
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -56,7 +71,6 @@ const login = async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
-
 
 module.exports = {
     register,

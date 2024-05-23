@@ -42,6 +42,8 @@ const App = () => {
     if (userRole) {
       setRole(userRole);
     }
+
+    window.alert("Database has been wiped out! Pls Register again");
   }, []);
 
   const handleLogin = (token, role) => {

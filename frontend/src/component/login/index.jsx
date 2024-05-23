@@ -12,7 +12,7 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
     rollNo: ''
   });
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // Add a state for loading
+  const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
 
@@ -22,22 +22,26 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // Set loading state to true when the request starts
+    setIsLoading(true);
 
     try {
-      const response = await axios.post('https://attendease-gajo.onrender.com/api/register', formData);
+      // Convert all relevant fields to lowercase
+      const lowercasedFormData = {
+        ...formData,
+        email: formData.email.toLowerCase(),
+        password: formData.password.toLowerCase(),
+        section: formData.section.toLowerCase(),
+        role: formData.role.toLowerCase(),
+        rollNo: formData.rollNo.toLowerCase()
+      };
+
+      const response = await axios.post('https://attendease-gajo.onrender.com/api/register', lowercasedFormData);
       console.log(response.data);
 
-      // Set isRegistered to true to prevent showing the registration form again
       setIsRegistered(true);
-
-      // Call the onRegisterSuccess prop function to notify App component
       onRegisterSuccess();
-
-      // Show the success message
       setShowSuccessMessage(true);
 
-      // Redirect to the login page after a short delay (e.g., 2 seconds)
       setTimeout(() => {
         navigate('/login');
       }, 2000);
@@ -45,20 +49,20 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       console.error('Error registering user:', error);
       // Handle error, e.g., show an error message
     } finally {
-      setIsLoading(false); // Set loading state to false when the request is finished
+      setIsLoading(false);
     }
   };
 
   return (
     <div>
-     <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
+      <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
           <h2 className="text-2xl font-semibold mb-4">Register</h2>
-          {isLoading ? ( // Show loading message if loading state is true
+          {isLoading ? (
             <div className="bg-blue-500 text-white p-4 rounded-md mb-4">
               Loading...
             </div>
-          ) : showSuccessMessage ? ( // Show success message if it's true
+          ) : showSuccessMessage ? (
             <div className="bg-green-500 text-white p-4 rounded-md mb-4">
               Registration successful! Redirecting to login...
             </div>

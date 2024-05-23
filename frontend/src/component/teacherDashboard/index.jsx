@@ -5,12 +5,13 @@ export default function TeacherDashboard() {
   const [tickets, setTickets] = useState([]);
   const [responseMessage, setResponseMessage] = useState("");
   const [filterSection, setFilterSection] = useState("");
+  const [filterRollNo, setFilterRollNo] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [token, setToken] = useState(null);
 
   const POLLING_INTERVAL = 5000;
 
   useEffect(() => {
-    // Retrieve the token from localStorage on component mount
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
       setToken(storedToken);
@@ -93,9 +94,21 @@ export default function TeacherDashboard() {
     setFilterSection(event.target.value);
   };
 
-  const filteredTickets = tickets.filter((ticket) =>
-    filterSection ? ticket.section === filterSection : true
-  );
+  const handleRollNoFilterChange = (event) => {
+    setFilterRollNo(event.target.value);
+  };
+
+  const handleStatusFilterChange = (event) => {
+    setFilterStatus(event.target.value);
+  };
+
+  const filteredTickets = tickets.filter((ticket) => {
+    return (
+      (filterSection ? ticket.section === filterSection : true) &&
+      (filterRollNo ? ticket.rollNo.includes(filterRollNo) : true) &&
+      (filterStatus ? ticket.response === filterStatus : true)
+    );
+  });
 
   return (
     <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center py-8">
@@ -104,25 +117,52 @@ export default function TeacherDashboard() {
           {responseMessage}
         </div>
       )}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-3xl">
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl">
         <h1 className="text-3xl font-semibold mb-6 text-center">
           Teacher's Dashboard
         </h1>
-        <h2 className="text-xl font-semibold mb-4">Tickets:</h2>
-        <div className="mb-4">
-          <label htmlFor="filter" className="mr-2">Filter by Section:</label>
-          <select
-            id="filter"
-            value={filterSection}
-            onChange={handleFilterChange}
-            className="bg-gray-700 text-white p-2 rounded-md"
-          >
-            <option value="">All</option>
-            {[...new Set(tickets.map(ticket => ticket.section))].map(section => (
-              <option key={section} value={section}>{section}</option>
-            ))}
-          </select>
+        <div className="mb-4 flex flex-wrap justify-between">
+          <div className="mb-2">
+            <label htmlFor="filterSection" className="mr-2">Filter by Section:</label>
+            <select
+              id="filterSection"
+              value={filterSection}
+              onChange={handleFilterChange}
+              className="bg-gray-700 text-white p-2 rounded-md"
+            >
+              <option value="">All</option>
+              {[...new Set(tickets.map(ticket => ticket.section))].map(section => (
+                <option key={section} value={section}>{section}</option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-2">
+            <label htmlFor="filterRollNo" className="mr-2">Filter by Roll No:</label>
+            <input
+              type="text"
+              id="filterRollNo"
+              value={filterRollNo}
+              onChange={handleRollNoFilterChange}
+              className="bg-gray-700 text-white p-2 rounded-md"
+              placeholder="Enter Roll No"
+            />
+          </div>
+          <div className="mb-2">
+            <label htmlFor="filterStatus" className="mr-2">Filter by Status:</label>
+            <select
+              id="filterStatus"
+              value={filterStatus}
+              onChange={handleStatusFilterChange}
+              className="bg-gray-700 text-white p-2 rounded-md"
+            >
+              <option value="">All</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
         </div>
+        <h2 className="text-xl font-semibold mb-4">Tickets:</h2>
         {filteredTickets.length === 0 ? (
           <p className="text-gray-400">No tickets available</p>
         ) : (
@@ -133,22 +173,19 @@ export default function TeacherDashboard() {
                 className="bg-gray-700 p-4 rounded-lg shadow-md"
               >
                 <p>
-                  Ticket ID: <span className="text-purple-500">{ticket._id}</span>
+                  <span className="font-semibold">Ticket ID:</span> <span className="text-purple-500">{ticket._id}</span>
                 </p>
                 <p>
-                  Roll No: <span className="text-purple-500">{ticket.rollNo}</span>
+                  <span className="font-semibold">Roll No:</span> <span className="text-purple-500">{ticket.rollNo}</span>
                 </p>
                 <p>
-                  Section:{" "}
-                  <span className="text-purple-500">{ticket.section}</span>
+                  <span className="font-semibold">Section:</span> <span className="text-purple-500">{ticket.section}</span>
                 </p>
                 <p>
-                  Document:{" "}
-                  <span className="text-purple-500">{ticket.document}</span>
+                  <span className="font-semibold">Document:</span> <span className="text-purple-500">{ticket.document}</span>
                 </p>
                 <p>
-                  Status:{" "}
-                  <span className="text-purple-500">{ticket.response || "Pending"}</span>
+                  <span className="font-semibold">Status:</span> <span className={`text-${ticket.response === "Approved" ? "green" : ticket.response === "Rejected" ? "red" : "yellow"}-500`}>{ticket.response || "Pending"}</span>
                 </p>
                 {!ticket.response || ticket.response === "Pending" ? (
                   <div className="mt-4 flex space-x-4">
@@ -156,13 +193,13 @@ export default function TeacherDashboard() {
                       onClick={() => handleApprove(ticket._id)}
                       className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors duration-300"
                     >
-                      Agree
+                      Approve
                     </button>
                     <button
                       onClick={() => handleReject(ticket._id)}
                       className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors duration-300"
                     >
-                      Disagree
+                      Reject
                     </button>
                   </div>
                 ) : (

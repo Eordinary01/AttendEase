@@ -11,7 +11,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     rollNo: "",
   });
   const [message, setMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false); // Add a state for loading
+  const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
 
@@ -21,10 +21,15 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // Set loading state to true when the request starts
+    setIsLoading(true);
 
     try {
-      const { email, password, section, role, rollNo } = formData;
+      // Convert to lowercase
+      const email = formData.email.toLowerCase();
+      const password = formData.password.toLowerCase();
+      const section = formData.section.toLowerCase();
+      const role = formData.role.toLowerCase();
+      const rollNo = formData.rollNo.toLowerCase();
 
       const response = await axios.post("https://attendease-gajo.onrender.com/api/login", {
         email,
@@ -36,25 +41,21 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
       const { token } = response.data;
       onLogin(token, role);
 
-      // Store token, role, and section in local storage
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("role", role);
       localStorage.setItem("section", section);
       localStorage.setItem("rollNo", rollNo);
 
-      // Set isRegistered to true if role is 'teacher' or 'student'
       if (role === "teacher" || role === "student") {
         setIsRegistered(true);
       }
 
-      // Display success message and redirect to dashboard after 2 seconds
       setMessage("Login successful! Redirecting to dashboard...");
       setTimeout(() => {
         navigate("/dashboard");
       }, 2000);
     } catch (error) {
       console.error("Error logging in:", error);
-      // Display error message based on the error response for 3 seconds
       if (error.response) {
         setMessage(`Error: ${error.response.data.message}`);
         setTimeout(() => {
@@ -67,7 +68,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
         }, 3000);
       }
     } finally {
-      setIsLoading(false); // Set loading state to false when the request is finished
+      setIsLoading(false);
     }
   };
 
@@ -76,11 +77,11 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
       <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
           <h2 className="text-2xl font-semibold mb-4">Login</h2>
-          {isLoading ? ( // Show loading message if loading state is true
+          {isLoading ? (
             <div className="p-4 rounded-md mb-4 bg-blue-700 text-white">
               Loading...
             </div>
-          ) : message ? ( // Show success/error message if there is a message
+          ) : message ? (
             <div
               className={`p-4 rounded-md mb-4 ${
                 message.includes("successful")
@@ -93,10 +94,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
           ) : null}
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label
-                htmlFor="email"
-                className="block text-gray-300 font-medium"
-              >
+              <label htmlFor="email" className="block text-gray-300 font-medium">
                 Email
               </label>
               <input
@@ -110,10 +108,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
               />
             </div>
             <div className="mb-4">
-              <label
-                htmlFor="password"
-                className="block text-gray-300 font-medium"
-              >
+              <label htmlFor="password" className="block text-gray-300 font-medium">
                 Password
               </label>
               <input
@@ -127,10 +122,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
               />
             </div>
             <div className="mb-4">
-              <label
-                htmlFor="section"
-                className="block text-gray-300 font-medium"
-              >
+              <label htmlFor="section" className="block text-gray-300 font-medium">
                 Section
               </label>
               <input
@@ -159,7 +151,6 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
                 <option value="teacher">Teacher</option>
               </select>
             </div>
-
             <div className="mb-4">
               <label htmlFor="rollNo" className="block text-gray-300 font-medium">Roll No</label>
               <input
@@ -172,12 +163,9 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
                 onChange={handleChange}
               />
             </div>
-
-
-
             <button
               type="submit"
-              className="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 transition-colors duration-300"
+              className="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50"
             >
               Login
             </button>
