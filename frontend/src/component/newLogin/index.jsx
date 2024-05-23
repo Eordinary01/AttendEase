@@ -10,7 +10,8 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     role: "",
     rollNo: "",
   });
-  const [message, setMessage] = useState(""); // Add a state for success/error message
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false); // Add a state for loading
 
   const navigate = useNavigate();
 
@@ -20,6 +21,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true); // Set loading state to true when the request starts
 
     try {
       const { email, password, section, role, rollNo } = formData;
@@ -64,6 +66,8 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
           setMessage("");
         }, 3000);
       }
+    } finally {
+      setIsLoading(false); // Set loading state to false when the request is finished
     }
   };
 
@@ -71,8 +75,12 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
     <div>
       <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-semibold mb-4">Login</h2>
-          {message && (
+          <h2 className="text-2xl font-semibold mb-4">Login</h2>
+          {isLoading ? ( // Show loading message if loading state is true
+            <div className="p-4 rounded-md mb-4 bg-blue-700 text-white">
+              Loading...
+            </div>
+          ) : message ? ( // Show success/error message if there is a message
             <div
               className={`p-4 rounded-md mb-4 ${
                 message.includes("successful")
@@ -82,7 +90,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
             >
               {message}
             </div>
-          )}
+          ) : null}
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label

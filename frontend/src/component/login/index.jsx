@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const Register = ({ setIsRegistered }) => {
+const Register = ({ setIsRegistered, onRegisterSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -11,7 +11,8 @@ const Register = ({ setIsRegistered }) => {
     role: '',
     rollNo: ''
   });
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false); // Add a state for success message
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // Add a state for loading
 
   const navigate = useNavigate();
 
@@ -21,6 +22,7 @@ const Register = ({ setIsRegistered }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true); // Set loading state to true when the request starts
 
     try {
       const response = await axios.post('https://attendease-gajo.onrender.com/api/register', formData);
@@ -28,6 +30,9 @@ const Register = ({ setIsRegistered }) => {
 
       // Set isRegistered to true to prevent showing the registration form again
       setIsRegistered(true);
+
+      // Call the onRegisterSuccess prop function to notify App component
+      onRegisterSuccess();
 
       // Show the success message
       setShowSuccessMessage(true);
@@ -39,15 +44,21 @@ const Register = ({ setIsRegistered }) => {
     } catch (error) {
       console.error('Error registering user:', error);
       // Handle error, e.g., show an error message
+    } finally {
+      setIsLoading(false); // Set loading state to false when the request is finished
     }
   };
-  
+
   return (
     <div>
-       <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
+     <div className="bg-gray-900 text-white h-screen flex flex-col justify-center items-center">
         <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
           <h2 className="text-2xl font-semibold mb-4">Register</h2>
-          {showSuccessMessage ? (
+          {isLoading ? ( // Show loading message if loading state is true
+            <div className="bg-blue-500 text-white p-4 rounded-md mb-4">
+              Loading...
+            </div>
+          ) : showSuccessMessage ? ( // Show success message if it's true
             <div className="bg-green-500 text-white p-4 rounded-md mb-4">
               Registration successful! Redirecting to login...
             </div>
