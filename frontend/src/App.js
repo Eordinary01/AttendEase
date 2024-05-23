@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useNavigate
 } from "react-router-dom";
 import NewLogin from "./component/newLogin";
 import Header from "./component/header";
@@ -11,6 +12,7 @@ import Register from "./component/login";
 import Dashboard from "./component/Dashboard";
 import Ticket from "./component/add-tickets";
 import TeacherDashboard from "./component/teacherDashboard";
+import NewUserPopup from "./component/userPopup";
 
 const PrivateRoute = ({
   element: Component,
@@ -29,6 +31,7 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   const [role, setRole] = useState("");
+  const [showPopup, setShowPopup] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -39,20 +42,12 @@ const App = () => {
     if (userRole) {
       setRole(userRole);
     }
-    // const userIsRegistered = localStorage.getItem("isRegistered");
-    // if (userIsRegistered) {
-    //   setIsRegistered(true);
-    // }
   }, []);
 
   const handleLogin = (token, role) => {
     localStorage.setItem("token", token);
     setIsAuthenticated(true);
     setRole(role);
-    // if (registered) {
-    //   localStorage.setItem("isRegistered", true);
-    //   setIsRegistered(true);
-    // }
   };
 
   const handleLogout = () => {
@@ -66,11 +61,8 @@ const App = () => {
 
   return (
     <Router>
-      <Header
-        isAuthenticated={isAuthenticated}
-        onLogout={handleLogout}
-        isRegistered={!isRegistered}
-      />
+      <Header isAuthenticated={isAuthenticated} onLogout={handleLogout} isRegistered={!isRegistered} />
+      {showPopup && <Popup setShowPopup={setShowPopup} />}
       <Routes>
         <Route
           path="/login"
@@ -121,6 +113,24 @@ const App = () => {
         )}
       </Routes>
     </Router>
+  );
+};
+
+const Popup = ({ setShowPopup }) => {
+  const navigate = useNavigate();
+
+  const handleYesClick = () => {
+    setShowPopup(false);
+    navigate('/register');
+  };
+  
+  const handleNoClick = () => {
+    setShowPopup(false);
+    navigate('/login');
+  };
+
+  return (
+    <NewUserPopup onYesClick={handleYesClick} onNoClick={handleNoClick} />
   );
 };
 
