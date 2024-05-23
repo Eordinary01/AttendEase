@@ -13,15 +13,15 @@ const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
             Logout
           </button>
         )}
-        {!isAuthenticated && (
-          <>
-            <Link to="/register" className="text-white mx-2">
-              Register
-            </Link>
-            <Link to="/login" className="text-white mx-2">
-              Login
-            </Link>
-          </>
+        {!isAuthenticated && !isRegistered && (
+          <Link to="/register" className="text-white mx-2">
+            Register
+          </Link>
+        )}
+        {!isAuthenticated && isRegistered && (
+          <Link to="/login" className="text-white mx-2">
+            Login
+          </Link>
         )}
         <Link to="/tickets" className="text-white mx-2">
           Create Ticket
