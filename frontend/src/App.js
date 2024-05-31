@@ -43,7 +43,7 @@ const App = () => {
       setRole(userRole);
     }
 
-    window.alert("Database has been wiped out! Pls Register again");
+    // window.alert("Database has been wiped out! Pls Register again");
   }, []);
 
   const handleLogin = (token, role) => {

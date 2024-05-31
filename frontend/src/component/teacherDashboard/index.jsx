@@ -21,11 +21,14 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await axios.get("https://attendease-gajo.onrender.com/api/tickets", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get(
+          "https://attendease-gajo.onrender.com/api/tickets",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
         setTickets(response.data);
       } catch (error) {
         console.error("Error fetching tickets:", error);
@@ -123,7 +126,9 @@ export default function TeacherDashboard() {
         </h1>
         <div className="mb-4 flex flex-wrap justify-between">
           <div className="mb-2">
-            <label htmlFor="filterSection" className="mr-2">Filter by Section:</label>
+            <label htmlFor="filterSection" className="mr-2">
+              Filter by Section:
+            </label>
             <select
               id="filterSection"
               value={filterSection}
@@ -131,13 +136,19 @@ export default function TeacherDashboard() {
               className="bg-gray-700 text-white p-2 rounded-md"
             >
               <option value="">All</option>
-              {[...new Set(tickets.map(ticket => ticket.section))].map(section => (
-                <option key={section} value={section}>{section}</option>
-              ))}
+              {[...new Set(tickets.map((ticket) => ticket.section))].map(
+                (section) => (
+                  <option key={section} value={section}>
+                    {section}
+                  </option>
+                )
+              )}
             </select>
           </div>
           <div className="mb-2">
-            <label htmlFor="filterRollNo" className="mr-2">Filter by Roll No:</label>
+            <label htmlFor="filterRollNo" className="mr-2">
+              Filter by Roll No:
+            </label>
             <input
               type="text"
               id="filterRollNo"
@@ -148,7 +159,9 @@ export default function TeacherDashboard() {
             />
           </div>
           <div className="mb-2">
-            <label htmlFor="filterStatus" className="mr-2">Filter by Status:</label>
+            <label htmlFor="filterStatus" className="mr-2">
+              Filter by Status:
+            </label>
             <select
               id="filterStatus"
               value={filterStatus}
@@ -170,22 +183,37 @@ export default function TeacherDashboard() {
             {filteredTickets.map((ticket) => (
               <li
                 key={ticket._id}
-                className="bg-gray-700 p-4 rounded-lg shadow-md"
+                className="bg-black p-4 rounded-lg shadow-md"
               >
                 <p>
-                  <span className="font-semibold">Ticket ID:</span> <span className="text-purple-500">{ticket._id}</span>
+                  <span className="font-semibold">Ticket ID:</span>{" "}
+                  <span className="text-purple-500">{ticket._id}</span>
                 </p>
                 <p>
-                  <span className="font-semibold">Roll No:</span> <span className="text-purple-500">{ticket.rollNo}</span>
+                  <span className="font-semibold">Roll No:</span>{" "}
+                  <span className="text-purple-500">{ticket.rollNo}</span>
                 </p>
                 <p>
-                  <span className="font-semibold">Section:</span> <span className="text-purple-500">{ticket.section}</span>
+                  <span className="font-semibold">Section:</span>{" "}
+                  <span className="text-purple-500">{ticket.section}</span>
                 </p>
                 <p>
-                  <span className="font-semibold">Document:</span> <span className="text-purple-500">{ticket.document}</span>
+                  <span className="font-semibold">Document:</span>{" "}
+                  <span className="text-purple-500">{ticket.document}</span>
                 </p>
                 <p>
-                  <span className="font-semibold">Status:</span> <span className={`text-${ticket.response === "Approved" ? "green" : ticket.response === "Rejected" ? "red" : "yellow"}-500`}>{ticket.response || "Pending"}</span>
+                  <span className="font-semibold">Status:</span>{" "}
+                  <span
+                    className={`text-${
+                      ticket.response === "Approved"
+                        ? "green"
+                        : ticket.response === "Rejected"
+                        ? "red"
+                        : "yellow"
+                    }-500`}
+                  >
+                    {ticket.response || "Pending"}
+                  </span>
                 </p>
                 {!ticket.response || ticket.response === "Pending" ? (
                   <div className="mt-4 flex space-x-4">

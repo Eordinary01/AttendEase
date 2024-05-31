@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
   return (
-    <div className="bg-purple-900 p-4 flex justify-between items-center">
+    <div className="bg-purple-900 p-4 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
       <div>
         <h1 className="text-white text-xl font-bold">Attend Ease</h1>
       </div>

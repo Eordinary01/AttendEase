@@ -6,18 +6,18 @@ export default function StudentDashboard() {
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    // Retrieve the token from localStorage on component mount
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
       setToken(storedToken);
     }
   }, []);
+
   useEffect(() => {
     const fetchTickets = async () => {
       try {
         const response = await axios.get("https://attendease-gajo.onrender.com/api/tickets", {
           headers: {
-            Authorization: `Bearer ${token}`, // Added a space after "Bearer"
+            Authorization: `Bearer ${token}`,
           },
         });
         setTickets(response.data);
@@ -25,7 +25,7 @@ export default function StudentDashboard() {
         console.error("Error fetching tickets:", error);
       }
     };
-  
+
     fetchTickets();
     const intervalId = setInterval(fetchTickets, 5000);
     return () => clearInterval(intervalId);
@@ -37,30 +37,28 @@ export default function StudentDashboard() {
     } else if (status === "Rejected") {
       return "red";
     }
-    return "yellow"; // Default color
+    return "yellow";
   };
 
   return (
     <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center py-8">
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-3xl">
-        <h1 className="text-3xl font-semibold mb-6 text-center">
-          Student's Dashboard
-        </h1>
-        <h2 className="text-xl font-semibold mb-4">My Tickets:</h2>
+      <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-3xl">
+        <h1 className="text-3xl font-semibold mb-6 text-center">Student's Dashboard</h1>
+        <h2 className="text-xl font-semibold mb-4">My Tickets</h2>
         {tickets.length === 0 ? (
-          <p className="text-gray-400">No tickets available</p>
+          <p className="text-gray-400 text-center">No tickets available</p>
         ) : (
-          <ul className="space-y-4">
+          <div className="space-y-4">
             {tickets.map((ticket) => (
-              <li key={ticket._id} className="bg-gray-700 p-4 rounded-lg shadow-md">
-                <p>Ticket ID: <span className="text-purple-500">{ticket._id}</span></p>
-                <p>Roll No: <span className="text-purple-500">{ticket.rollNo}</span></p>
-                <p>Section: <span className="text-purple-500">{ticket.section}</span></p>
-                <p>Document: <span className="text-purple-500">{ticket.document}</span></p>
-                <p>Status: <span style={{ color: getStatusColor(ticket.response) }}>{ticket.response || "Pending"}</span></p>
-              </li>
+              <div key={ticket._id} className="bg-black p-6 rounded-lg shadow-md">
+                <p className="mb-2"><span className="font-semibold">Ticket ID:</span> <span className="text-purple-500">{ticket._id}</span></p>
+                <p className="mb-2"><span className="font-semibold">Roll No:</span> <span className="text-purple-500">{ticket.rollNo}</span></p>
+                <p className="mb-2"><span className="font-semibold">Section:</span> <span className="text-purple-500">{ticket.section}</span></p>
+                <p className="mb-2"><span className="font-semibold">Document:</span> <span className="text-purple-500">{ticket.document}</span></p>
+                <p className="mb-2"><span className="font-semibold">Status:</span> <span style={{ color: getStatusColor(ticket.response) }}>{ticket.response || "Pending"}</span></p>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
