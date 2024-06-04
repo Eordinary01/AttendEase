@@ -50,6 +50,28 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
+// Define CORS options
+const corsOptions = {
+  origin: ['http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attendease-gajo.onrender.com'],
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Enable pre-flight requests for all routes
+app.options('*', cors(corsOptions));
+
+// Debugging middleware to log the origin of requests
+app.use((req, res, next) => {
+  console.log('Request Origin:', req.headers.origin);
+  next();
+});
+
 // Import and use routes
 const userRoute = require("./routes/userRoute");
 app.use("/api", userRoute);
