@@ -56,6 +56,8 @@ app.use("/api", userRoute);
 
 const ticketRoute = require("./routes/ticketRoute");
 app.use("/api", ticketRoute);
+const alertRoute = require("./routes/alertRoute");
+app.use("/api",alertRoute);
 
 // Start the server
 const PORT = 8011;

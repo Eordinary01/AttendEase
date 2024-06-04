@@ -7,6 +7,7 @@ export default function TeacherDashboard() {
   const [filterSection, setFilterSection] = useState("");
   const [filterRollNo, setFilterRollNo] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
   const [token, setToken] = useState(null);
 
   const POLLING_INTERVAL = 5000;
@@ -103,6 +104,31 @@ export default function TeacherDashboard() {
 
   const handleStatusFilterChange = (event) => {
     setFilterStatus(event.target.value);
+  };
+
+  const handleAlertMessageChange = (event) => {
+    setAlertMessage(event.target.value);
+  };
+
+  const handleCreateAlert = async () => {
+    try {
+      const response = await axios.post(
+        "https://attendease-gajo.onrender.com/api/alerts/create",
+        { message: alertMessage },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setResponseMessage(response.data.message);
+      setAlertMessage("");
+      setTimeout(() => {
+        setResponseMessage("");
+      }, 5000);
+    } catch (error) {
+      console.error("Error creating alert:", error);
+    }
   };
 
   const filteredTickets = tickets.filter((ticket) => {
@@ -230,15 +256,27 @@ export default function TeacherDashboard() {
                       Reject
                     </button>
                   </div>
-                ) : (
-                  <p className="mt-4 text-lg font-semibold text-green-500">
-                    {ticket.response}
-                  </p>
-                )}
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+      </div>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-6">
+        <h2 className="text-xl font-semibold mb-4">Create Alert:</h2>
+        <textarea
+          value={alertMessage}
+          onChange={handleAlertMessageChange}
+          placeholder="Enter your alert message"
+          className="bg-gray-700 text-white p-2 rounded-md w-full mb-4"
+          rows="4"
+        />
+        <button
+          onClick={handleCreateAlert}
+          className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
+        >
+          Create Alert
+        </button>
       </div>
     </div>
   );
