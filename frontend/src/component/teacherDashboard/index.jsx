@@ -9,6 +9,7 @@ export default function TeacherDashboard() {
   const [filterStatus, setFilterStatus] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [token, setToken] = useState(null);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
   const POLLING_INTERVAL = 5000;
 
@@ -113,8 +114,8 @@ export default function TeacherDashboard() {
   const handleCreateAlert = async () => {
     try {
       const response = await axios.post(
-        "https://attendease-gajo.onrender.com/api/alerts/create",
-        { message: alertMessage },
+        "https://attendease-gajo.onrender.com/api/alerts",
+        { message: "Submitted!" },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -123,6 +124,7 @@ export default function TeacherDashboard() {
       );
       setResponseMessage(response.data.message);
       setAlertMessage("");
+      setIsAlertModalOpen(false);
       setTimeout(() => {
         setResponseMessage("");
       }, 5000);
@@ -200,6 +202,14 @@ export default function TeacherDashboard() {
               <option value="Rejected">Rejected</option>
             </select>
           </div>
+          <div className="mb-2">
+            <button
+              onClick={() => setIsAlertModalOpen(true)}
+              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
+            >
+              Create Alert
+            </button>
+          </div>
         </div>
         <h2 className="text-xl font-semibold mb-4">Tickets:</h2>
         {filteredTickets.length === 0 ? (
@@ -262,22 +272,35 @@ export default function TeacherDashboard() {
           </ul>
         )}
       </div>
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-6">
-        <h2 className="text-xl font-semibold mb-4">Create Alert:</h2>
-        <textarea
-          value={alertMessage}
-          onChange={handleAlertMessageChange}
-          placeholder="Enter your alert message"
-          className="bg-gray-700 text-white p-2 rounded-md w-full mb-4"
-          rows="4"
-        />
-        <button
-          onClick={handleCreateAlert}
-          className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
-        >
-          Create Alert
-        </button>
-      </div>
+
+      {isAlertModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
+          <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-lg">
+            <h2 className="text-2xl font-semibold mb-4">Create Alert</h2>
+            <textarea
+              value={alertMessage}
+              onChange={handleAlertMessageChange}
+              rows="4"
+              className="bg-gray-700 text-white p-2 rounded-md w-full"
+              placeholder="Enter your alert message"
+            />
+            <div className="mt-4 flex justify-end space-x-4">
+              <button
+                onClick={() => setIsAlertModalOpen(false)}
+                className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors duration-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAlert}
+                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

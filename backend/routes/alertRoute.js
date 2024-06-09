@@ -1,29 +1,12 @@
-// Add this to your Express server
-
+// routes/alertRoute.js
 const express = require('express');
 const router = express.Router();
-const Alert = require('../models/Alert'); // Your Alert model
+const alertController = require('../controllers/alertController');
 
 // Create an alert
-router.post('/alerts', async (req, res) => {
-  try {
-    const { message } = req.body;
-    const newAlert = new Alert({ message });
-    await newAlert.save();
-    res.status(201).json(newAlert);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create alert' });
-  }
-});
+router.post('/alerts', alertController.createAlert);
 
 // Fetch alerts
-router.get('/alerts', async (req, res) => {
-  try {
-    const alerts = await Alert.find();
-    res.status(200).json(alerts);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch alerts' });
-  }
-});
+router.get('/alerts', alertController.getAlerts);
 
 module.exports = router;

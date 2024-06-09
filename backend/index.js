@@ -81,6 +81,11 @@ app.use("/api", ticketRoute);
 const alertRoute = require("./routes/alertRoute");
 app.use("/api",alertRoute);
 
+const attendanceRoute = require("./routes/attendanceRoute");
+app.use("/api",attendanceRoute);
+
+const calendarRoute = require("./routes/calendarRoute");
+app.use("/api",calendarRoute);
 // Start the server
 const PORT = 8011;
 app.listen(PORT, function() {
