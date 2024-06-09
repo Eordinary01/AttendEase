@@ -310,7 +310,7 @@ export default function TeacherDashboard() {
           </ul>
         )}
       </div>
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-8">
+      {/* <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-8">
         <h2 className="text-xl font-semibold mb-4">Attendance Management:</h2>
         <Calendar
           onChange={handleDateChange}
@@ -348,7 +348,7 @@ export default function TeacherDashboard() {
         >
           Update Attendance
         </button>
-      </div>
+      </div> */}
       <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-8">
         <h2 className="text-xl font-semibold mb-4">Create Alert:</h2>
         <textarea

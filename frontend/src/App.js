@@ -13,6 +13,7 @@ import Dashboard from "./component/Dashboard";
 import Ticket from "./component/add-tickets";
 import TeacherDashboard from "./component/teacherDashboard";
 import NewUserPopup from "./component/userPopup";
+import MarkAttendance from "./component/markAttendance";
 
 const PrivateRoute = ({
   element: Component,
@@ -113,6 +114,7 @@ const App = () => {
             }
           />
         )}
+        <Route path="/attendance" element={<MarkAttendance/>}></Route>
       </Routes>
     </Router>
   );

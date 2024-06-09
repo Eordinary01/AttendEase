@@ -29,6 +29,9 @@ const Header = ({ isAuthenticated, onLogout, isRegistered }) => {
         <Link to="/dashboard" className="text-white mx-2">
           Dashboard
         </Link>
+        <Link to="/attendance" className='text-white mx-2'>
+        Attendance
+        </Link>
       </div>
     </div>
   );
