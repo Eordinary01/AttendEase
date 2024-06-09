@@ -6,4 +6,4 @@ const calendarController = require("../controllers/calendarController");
 calendarRoute.get("/", calendarController.getCalendar);
 calendarRoute.post("/", calendarController.createCalendar);
 
-module.exports = router;
+module.exports = calendarRoute;

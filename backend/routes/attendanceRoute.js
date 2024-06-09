@@ -6,4 +6,4 @@ const attendanceController = require("../controllers/attendanceController");
 attendanceRoute.post("/", attendanceController.updateAttendance);
 attendanceRoute.get("/", attendanceController.getAttendanceRecords);
 
-module.exports = router;
+module.exports = attendanceRoute;

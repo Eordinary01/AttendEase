@@ -1,17 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { useEffect, useState } from "react";
+import axios from "axios";
+import Calendar from 'react-calendar';
+// import 'react-calendar/dist/Calendar.css';
 
 export default function StudentDashboard() {
   const [tickets, setTickets] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [token, setToken] = useState(null);
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [alertTimers, setAlertTimers] = useState({});
-  const [timeRemaining, setTimeRemaining] = useState({});
 
   const POLLING_INTERVAL = 5000;
-  const ALERTS_EXPIRATION_TIME = 300000; // 5 minutes
-  const UPDATE_INTERVAL = 1000; // 1 second
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
@@ -37,142 +35,84 @@ export default function StudentDashboard() {
       }
     };
 
-    const fetchAlerts = async () => {
+    const fetchAttendance = async () => {
       try {
         const response = await axios.get(
-          "https://attendease-gajo.onrender.com/api/alerts",
+          "https://attendease-gajo.onrender.com/api/attendance",
           {
             headers: {
               Authorization: `Bearer ${token}`,
             },
           }
         );
-
-        const now = Date.now();
-        const newAlerts = response.data;
-
-        // Update alert timers for new alerts
-        const newAlertTimers = { ...alertTimers };
-        newAlerts.forEach(alert => {
-          if (!alertTimers[alert._id]) {
-            newAlertTimers[alert._id] = now + ALERTS_EXPIRATION_TIME;
-          }
-        });
-        
-        setAlerts(newAlerts);
-        setAlertTimers(newAlertTimers);
+        setAttendance(response.data);
       } catch (error) {
-        console.error("Error fetching alerts:", error);
+        console.error("Error fetching attendance:", error);
       }
     };
 
     fetchTickets();
-    fetchAlerts();
+    fetchAttendance();
 
-    const ticketsIntervalId = setInterval(fetchTickets, POLLING_INTERVAL);
-    const alertsIntervalId = setInterval(fetchAlerts, POLLING_INTERVAL);
-
-    return () => {
-      clearInterval(ticketsIntervalId);
-      clearInterval(alertsIntervalId);
-    };
+    const intervalId = setInterval(fetchTickets, POLLING_INTERVAL);
+    return () => clearInterval(intervalId);
   }, [token]);
 
-  useEffect(() => {
-    const updateAlertTimers = () => {
-      const now = Date.now();
-      const newTimeRemaining = {};
-      const activeAlerts = alerts.filter(alert => {
-        const timeLeft = alertTimers[alert._id] - now;
-        if (timeLeft > 0) {
-          newTimeRemaining[alert._id] = {
-            minutes: Math.floor((timeLeft / 1000 / 60) % 60),
-            seconds: Math.floor((timeLeft / 1000) % 60)
-          };
-          return true;
-        }
-        return false;
-      });
-      setAlerts(activeAlerts);
-      setTimeRemaining(newTimeRemaining);
-    };
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+  };
 
-    const intervalId = setInterval(updateAlertTimers, UPDATE_INTERVAL);
-
-    return () => clearInterval(intervalId);
-  }, [alerts, alertTimers]);
+  const totalClasses = attendance.reduce((acc, record) => acc + record.totalClasses, 0);
+  const attendedClasses = attendance.reduce((acc, record) => acc + record.attendedClasses, 0);
+  const overallAttendance = totalClasses > 0 ? (attendedClasses / totalClasses) * 100 : 0;
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen flex">
-      <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? "translate-x-0" : "-translate-x-full"} transition-transform duration-300 ease-in-out bg-gray-800 w-64 p-6`}>
-        <h2 className="text-2xl font-semibold mb-4">Important Alerts</h2>
-        {alerts.length > 0 ? (
-          <ul className="space-y-2">
-            {alerts.map((alert) => (
-              <li
-                key={alert._id}
-                className="bg-red-500 text-white p-4 rounded-md shadow-md"
-              >
-                {alert.message}
-                {timeRemaining[alert._id] && (
-                  <p className="text-gray-400 mt-2">
-                    Expires in: {timeRemaining[alert._id].minutes}:{timeRemaining[alert._id].seconds.toString().padStart(2, '0')}
-                  </p>
-                )}
+    <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center py-8">
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl">
+        <h1 className="text-3xl font-semibold mb-6 text-center">
+          Student's Dashboard
+        </h1>
+        <h2 className="text-xl font-semibold mb-4">My Tickets:</h2>
+        {tickets.length === 0 ? (
+          <p className="text-gray-400">No tickets available</p>
+        ) : (
+          <ul className="space-y-4">
+            {tickets.map((ticket) => (
+              <li key={ticket._id} className="bg-black p-4 rounded-lg shadow-md">
+                <p>
+                  <span className="font-semibold">Ticket ID:</span>{" "}
+                  <span className="text-purple-500">{ticket._id}</span>
+                </p>
+                <p>
+                  <span className="font-semibold">Section:</span>{" "}
+                  <span className="text-purple-500">{ticket.section}</span>
+                </p>
+                <p>
+                  <span className="font-semibold">Description:</span>{" "}
+                  {ticket.description}
+                </p>
+                <p>
+                  <span className="font-semibold">Response:</span>{" "}
+                  {ticket.response}
+                </p>
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-gray-400">No alerts available</p>
         )}
-      </div>
-
-      <div className="flex-1 flex flex-col items-center py-8 px-6 ml-64">
-        <button
-          className="bg-purple-600 text-white p-2 rounded-md mb-4"
-          onClick={() => setShowSidebar(!showSidebar)}
-        >
-          {showSidebar ? "Hide Alerts" : "Show Alerts"}
-        </button>
-        <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl">
-          <h1 className="text-3xl font-semibold mb-6 text-center">
-            Student's Dashboard
-          </h1>
-          {/* Tickets section */}
-          <h2 className="text-xl font-semibold mb-4">Tickets:</h2>
-          {tickets.length === 0 ? (
-            <p className="text-gray-400">No tickets available</p>
-          ) : (
-            <ul className="space-y-4">
-              {tickets.map((ticket) => (
-                <li
-                  key={ticket._id}
-                  className="bg-black p-4 rounded-lg shadow-md"
-                >
-                  <p>
-                    <span className="font-semibold">Ticket ID:</span>{" "}
-                    <span className="text-purple-500">{ticket._id}</span>
-                  </p>
-                  <p>
-                    <span className="font-semibold">Roll No:</span>{" "}
-                    <span className="text-purple-500">{ticket.rollNo}</span>
-                  </p>
-                  <p>
-                    <span className="font-semibold">Section:</span>{" "}
-                    <span className="text-purple-500">{ticket.section}</span>
-                  </p>
-                  <p>
-                    <span className="font-semibold">Application:</span>{" "}
-                    <span className="text-purple-500">{ticket.application}</span>
-                  </p>
-                  <p>
-                    <span className="font-semibold">Status:</span>{" "}
-                    <span className="text-purple-500">{ticket.response}</span>
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
+        <h2 className="text-xl font-semibold mt-8 mb-4">Attendance:</h2>
+        <div className="mb-4">
+          <Calendar onChange={handleDateChange} value={selectedDate} />
+        </div>
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold mb-2">Overall Attendance: {overallAttendance.toFixed(2)}%</h3>
+          {attendance.map((record) => (
+            <div key={record.subject} className="mb-2">
+              <p>
+                <span className="font-semibold">{record.subject}:</span>{" "}
+                {(record.attendedClasses / record.totalClasses) * 100}%
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

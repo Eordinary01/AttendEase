@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import Calendar from "react-calendar";
+// import 'react-calendar/dist/Calendar.css';
 
 export default function TeacherDashboard() {
   const [tickets, setTickets] = useState([]);
@@ -8,8 +10,10 @@ export default function TeacherDashboard() {
   const [filterRollNo, setFilterRollNo] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [attendance, setAttendance] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [attendanceData, setAttendanceData] = useState({});
   const [token, setToken] = useState(null);
-  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
   const POLLING_INTERVAL = 5000;
 
@@ -37,7 +41,24 @@ export default function TeacherDashboard() {
       }
     };
 
+    const fetchAttendance = async () => {
+      try {
+        const response = await axios.get(
+          "https://attendease-gajo.onrender.com/api/attendance",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        setAttendance(response.data);
+      } catch (error) {
+        console.error("Error fetching attendance:", error);
+      }
+    };
+
     fetchTickets();
+    fetchAttendance();
 
     const intervalId = setInterval(fetchTickets, POLLING_INTERVAL);
     return () => clearInterval(intervalId);
@@ -115,7 +136,7 @@ export default function TeacherDashboard() {
     try {
       const response = await axios.post(
         "https://attendease-gajo.onrender.com/api/alerts",
-        { message: "Submitted!" },
+        { message: alertMessage },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -124,12 +145,46 @@ export default function TeacherDashboard() {
       );
       setResponseMessage(response.data.message);
       setAlertMessage("");
-      setIsAlertModalOpen(false);
       setTimeout(() => {
         setResponseMessage("");
       }, 5000);
     } catch (error) {
       console.error("Error creating alert:", error);
+    }
+  };
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+  };
+
+  const handleAttendanceChange = (event, studentId, subject) => {
+    const { checked } = event.target;
+    setAttendanceData((prevAttendanceData) => ({
+      ...prevAttendanceData,
+      [studentId]: {
+        ...prevAttendanceData[studentId],
+        [subject]: checked,
+      },
+    }));
+  };
+
+  const handleUpdateAttendance = async () => {
+    try {
+      const response = await axios.post(
+        "https://attendease-gajo.onrender.com/api/attendance",
+        { date: selectedDate, data: attendanceData },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setResponseMessage(response.data.message);
+      setTimeout(() => {
+        setResponseMessage("");
+      }, 5000);
+    } catch (error) {
+      console.error("Error updating attendance:", error);
     }
   };
 
@@ -202,14 +257,6 @@ export default function TeacherDashboard() {
               <option value="Rejected">Rejected</option>
             </select>
           </div>
-          <div className="mb-2">
-            <button
-              onClick={() => setIsAlertModalOpen(true)}
-              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
-            >
-              Create Alert
-            </button>
-          </div>
         </div>
         <h2 className="text-xl font-semibold mb-4">Tickets:</h2>
         {filteredTickets.length === 0 ? (
@@ -234,73 +281,88 @@ export default function TeacherDashboard() {
                   <span className="text-purple-500">{ticket.section}</span>
                 </p>
                 <p>
-                  <span className="font-semibold">Document:</span>{" "}
-                  <span className="text-purple-500">{ticket.document}</span>
+                  <span className="font-semibold">Description:</span>{" "}
+                  {ticket.description}
                 </p>
                 <p>
-                  <span className="font-semibold">Status:</span>{" "}
-                  <span
-                    className={`text-${
-                      ticket.response === "Approved"
-                        ? "green"
-                        : ticket.response === "Rejected"
-                        ? "red"
-                        : "yellow"
-                    }-500`}
-                  >
-                    {ticket.response || "Pending"}
-                  </span>
+                  <span className="font-semibold">Response:</span>{" "}
+                  {ticket.response}
                 </p>
-                {!ticket.response || ticket.response === "Pending" ? (
+                {ticket.response === "Pending" && (
                   <div className="mt-4 flex space-x-4">
                     <button
+                      className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded"
                       onClick={() => handleApprove(ticket._id)}
-                      className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors duration-300"
                     >
                       Approve
                     </button>
                     <button
+                      className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded"
                       onClick={() => handleReject(ticket._id)}
-                      className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors duration-300"
                     >
                       Reject
                     </button>
                   </div>
-                ) : null}
+                )}
               </li>
             ))}
           </ul>
         )}
       </div>
-
-      {isAlertModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
-          <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-lg">
-            <h2 className="text-2xl font-semibold mb-4">Create Alert</h2>
-            <textarea
-              value={alertMessage}
-              onChange={handleAlertMessageChange}
-              rows="4"
-              className="bg-gray-700 text-white p-2 rounded-md w-full"
-              placeholder="Enter your alert message"
-            />
-            <div className="mt-4 flex justify-end space-x-4">
-              <button
-                onClick={() => setIsAlertModalOpen(false)}
-                className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors duration-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateAlert}
-                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-300"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-8">
+        <h2 className="text-xl font-semibold mb-4">Attendance Management:</h2>
+        <Calendar
+          onChange={handleDateChange}
+          value={selectedDate}
+          className="mb-4"
+        />
+        <ul>
+          {attendance.map((student) => (
+            <li key={student._id}>
+              <p className="font-semibold mb-2">{student.name}</p>
+              <div className="flex space-x-4 mb-4">
+                {student.subjects.map((subject) => (
+                  <div key={subject}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={
+                          attendanceData[student._id]?.[subject] || false
+                        }
+                        onChange={(event) =>
+                          handleAttendanceChange(event, student._id, subject)
+                        }
+                      />
+                      {subject}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <button
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded mt-4"
+          onClick={handleUpdateAttendance}
+        >
+          Update Attendance
+        </button>
+      </div>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-4xl mt-8">
+        <h2 className="text-xl font-semibold mb-4">Create Alert:</h2>
+        <textarea
+          value={alertMessage}
+          onChange={handleAlertMessageChange}
+          className="w-full p-4 mb-4 bg-gray-700 text-white rounded-md"
+          placeholder="Enter alert message"
+        />
+        <button
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded"
+          onClick={handleCreateAlert}
+        >
+          Create Alert
+        </button>
+      </div>
     </div>
   );
 }

@@ -36,7 +36,7 @@ const updateAttendance = async (req, res) => {
 
 
 
-  module,exports= {
+  module.exports= {
     updateAttendance,
     getAttendanceRecords
   }
