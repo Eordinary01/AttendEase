@@ -1,6 +1,6 @@
 // routes/attendance.js
 const express = require("express");
-const attendanceRoute = express.Router();
+const attendanceRoute = express();
 const attendanceController = require("../controllers/attendanceController");
 
 attendanceRoute.post("/", attendanceController.updateAttendance);

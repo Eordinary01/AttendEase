@@ -1,6 +1,6 @@
 // routes/calendar.js
 const express = require("express");
-const calendarRoute = express.Router();
+const calendarRoute = express();
 const calendarController = require("../controllers/calendarController");
 
 calendarRoute.get("/", calendarController.getCalendar);
