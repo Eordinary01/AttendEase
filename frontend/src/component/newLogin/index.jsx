@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 const NewLogin = ({ onLogin, setIsRegistered }) => {
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
     password: "",
     section: "",
@@ -25,6 +26,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
 
     try {
       // Convert to lowercase
+      const name = formData.name.toLowerCase();
       const email = formData.email.toLowerCase();
       const password = formData.password.toLowerCase();
       const section = formData.section.toLowerCase();
@@ -32,19 +34,21 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
       const rollNo = formData.rollNo.toLowerCase();
 
       const response = await axios.post("https://attendease-gajo.onrender.com/api/login", {
+        name,
         email,
         password,
         section,
         role,
         rollNo,
       });
-      const { token } = response.data;
+      const { token, name: userName } = response.data;
       onLogin(token, role);
 
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("role", role);
       localStorage.setItem("section", section);
       localStorage.setItem("rollNo", rollNo);
+      localStorage.setItem("name", userName);
 
       if (role === "teacher" || role === "student") {
         setIsRegistered(true);
@@ -93,6 +97,20 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
             </div>
           ) : null}
           <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+              <label htmlFor="name" className="block text-gray-300 font-medium">
+                Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                className="mt-1 block w-full px-3 py-2 border border-purple-500 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm bg-gray-800 text-gray-300"
+                placeholder="Enter your name"
+                value={formData.name}
+                onChange={handleChange}
+              />
+            </div>
             <div className="mb-4">
               <label htmlFor="email" className="block text-gray-300 font-medium">
                 Email

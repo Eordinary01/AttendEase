@@ -14,6 +14,7 @@ const register = async (req, res) => {
     section = section.toLowerCase();
     role = role.toLowerCase();
     rollNo = rollNo.toLowerCase();
+    name = name.toLowerCase(); // Ensure name is also converted to lowercase
 
     try {
         let existingUser = await User.findOne({ email });
@@ -36,7 +37,7 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-    let { email, password, section, role, rollNo } = req.body;
+    let { name, email, password, section, role, rollNo } = req.body;
 
     // Convert to lowercase
     email = email.toLowerCase();
@@ -44,9 +45,10 @@ const login = async (req, res) => {
     section = section.toLowerCase();
     role = role.toLowerCase();
     rollNo = rollNo.toLowerCase();
+    name = name.toLowerCase(); // Ensure name is also converted to lowercase
 
     try {
-        const user = await User.findOne({ email, section, role, rollNo });
+        const user = await User.findOne({ email, section, role, rollNo, name });
 
         if (!user) {
             return res.status(404).json({ message: 'User not found! Please register first.' });
@@ -62,6 +64,7 @@ const login = async (req, res) => {
 
         res.status(200).json({
             token,
+            name: user.name,
             section: user.section,
             rollNo: user.rollNo,
             role: user.role,

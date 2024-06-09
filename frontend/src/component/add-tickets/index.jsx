@@ -7,6 +7,7 @@ export default function Ticket() {
   const [formData, setFormData] = useState({
     section: localStorage.getItem("section") || "",
     rollNo: localStorage.getItem("rollNo") || "",
+    name: localStorage.getItem("name") || "",
     document: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,32 +20,37 @@ export default function Ticket() {
   useEffect(() => {
     const localSection = localStorage.getItem("section") || "";
     const localRollNo = localStorage.getItem("rollNo") || "";
+    const localName = localStorage.getItem("name") || "";
     setFormData((prevFormData) => ({
       ...prevFormData,
       section: localSection,
       rollNo: localRollNo,
+      name: localName,
     }));
   }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-  
+
     try {
       const response = await axios.post(
         "https://attendease-gajo.onrender.com/api/tickets",
-        { document: formData.document },
+        {
+          document: formData.document,
+          name: formData.name.toLowerCase(),
+        },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         }
       );
-  
-      // Check if the response is successful (status code in the 2xx range)
+
       if (response.status >= 200 && response.status < 300) {
         console.log(response.data);
         setDisableSubmit(true);
@@ -52,20 +58,20 @@ export default function Ticket() {
         setLastSubmitTime(currentTime);
         localStorage.setItem("lastSubmitTime", currentTime);
         setResponseStatus(response.data.ticket.response);
-  
+
         navigate("/dashboard");
-  
+
         setTimeout(() => {
           setDisableSubmit(false);
         }, 100000); // Enable submit button after 100 seconds
-  
+
         setFormData({
           section: localStorage.getItem("section") || "",
           rollNo: localStorage.getItem("rollNo") || "",
+          name: localStorage.getItem("name") || "",
           document: "",
         });
       } else {
-        // Handle unsuccessful response
         console.error("Error creating ticket:", response.data);
       }
     } catch (error) {
@@ -98,10 +104,7 @@ export default function Ticket() {
         <h2 className="text-2xl font-semibold mb-4">Create Ticket:</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label
-              htmlFor="section"
-              className="block text-gray-300 font-medium"
-            >
+            <label htmlFor="section" className="block text-gray-300 font-medium">
               Section:
             </label>
             <input
@@ -129,10 +132,21 @@ export default function Ticket() {
             />
           </div>
           <div className="mb-4">
-            <label
-              htmlFor="document"
-              className="block text-gray-300 font-medium"
-            >
+            <label htmlFor="name" className="block text-gray-300 font-medium">
+              Name:
+            </label>
+            <input
+              id="name"
+              type="text"
+              className="mt-1 block w-full px-3 py-2 border border-purple-500 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm bg-gray-800 text-gray-300"
+              placeholder="Enter your name"
+              value={formData.name}
+              onChange={handleChange}
+              disabled
+            />
+          </div>
+          <div className="mb-4">
+            <label htmlFor="document" className="block text-gray-300 font-medium">
               Document:
             </label>
             <textarea

@@ -31,10 +31,11 @@ export default function TeacherDashboard() {
           "https://attendease-gajo.onrender.com/api/tickets",
           {
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
           }
         );
+        // console.log(response.data)
         setTickets(response.data);
       } catch (error) {
         console.error("Error fetching tickets:", error);
@@ -171,7 +172,7 @@ export default function TeacherDashboard() {
   const handleUpdateAttendance = async () => {
     try {
       const response = await axios.post(
-        "https://attendease-gajo.onrender.com/api/attendance",
+        "http://127.0.0.1:8011/api/attendance",
         { date: selectedDate, data: attendanceData },
         {
           headers: {

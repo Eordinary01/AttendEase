@@ -54,7 +54,7 @@ app.use((req, res, next) => {
 
 // Define CORS options
 const corsOptions = {
-  origin: ['http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attendease-gajo.onrender.com'],
+  origin: ['http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attendease-gajo.onrender.com,http://127.0.0.1:8011/'],
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
   credentials: true,
   optionsSuccessStatus: 204

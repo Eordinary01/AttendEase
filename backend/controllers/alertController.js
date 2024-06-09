@@ -2,7 +2,7 @@
 const Alert = require('../models/Alert');
 
 // Create an alert
-createAlert = async (req, res) => {
+const createAlert = async (req, res) => {
   try {
     const { message } = req.body;
     const newAlert = new Alert({ message });
@@ -14,7 +14,7 @@ createAlert = async (req, res) => {
 };
 
 // Fetch alerts
-getAlerts = async (req, res) => {
+ const getAlerts = async (req, res) => {
   try {
     const alerts = await Alert.find();
     res.status(200).json(alerts);
