@@ -14,6 +14,8 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const API_URL = process.env.REACT_APP_API_URL;
+
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -35,7 +37,7 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
         rollNo: formData.rollNo.toLowerCase()
       };
 
-      const response = await axios.post('https://attendease-gajo.onrender.com/api/register', lowercasedFormData);
+      const response = await axios.post(`${API_URL}/register`, lowercasedFormData);
       console.log(response.data);
 
       setIsRegistered(true);

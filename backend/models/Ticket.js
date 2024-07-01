@@ -13,6 +13,10 @@ const TicketSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  file: {
+    type: String,
+    required: true,
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

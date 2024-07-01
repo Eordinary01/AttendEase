@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
 
 // Connect to MongoDB
-mongoose.connect('mongodb+srv://parthmanocha2901:nM1f3T9HLQItVAqQ@cluster0.ecvzxuo.mongodb.net/attend_backend?retryWrites=true&w=majority&appName=Cluster0', {
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
@@ -54,7 +55,7 @@ app.use((req, res, next) => {
 
 // Define CORS options
 const corsOptions = {
-  origin: ['http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attendease-gajo.onrender.com,http://127.0.0.1:8011/'],
+  origin: ['https://attend-ease-kappa.vercel.app/','http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attend-ease-kappa.vercel.app/','http://127.0.0.1:8011/'],
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
   credentials: true,
   optionsSuccessStatus: 204
@@ -88,6 +89,8 @@ const calendarRoute = require("./routes/calendarRoute");
 app.use("/api",calendarRoute);
 const allUser = require("./routes/user");
 app.use("/api",allUser);
+const subjectRoute = require("./routes/subjectRoute");
+app.use("/api",subjectRoute);
 // Start the server
 const PORT = 8011;
 app.listen(PORT, function() {

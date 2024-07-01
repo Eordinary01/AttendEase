@@ -68,6 +68,7 @@ const login = async (req, res) => {
             section: user.section,
             rollNo: user.rollNo,
             role: user.role,
+            userId: user._id
         });
     } catch (error) {
         console.error('Error logging in user:', error);

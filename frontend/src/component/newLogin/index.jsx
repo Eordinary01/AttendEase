@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
+
 const NewLogin = ({ onLogin, setIsRegistered }) => {
   const [formData, setFormData] = useState({
     name: "",
@@ -13,6 +14,9 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
   });
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const API_URL = process.env.REACT_APP_API_URL;
+  // console.log("API_URL:", API_URL);
 
   const navigate = useNavigate();
 
@@ -33,7 +37,7 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
       const role = formData.role.toLowerCase();
       const rollNo = formData.rollNo.toLowerCase();
 
-      const response = await axios.post("https://attendease-gajo.onrender.com/api/login", {
+      const response = await axios.post(`${API_URL}/login`, {
         name,
         email,
         password,
@@ -41,14 +45,15 @@ const NewLogin = ({ onLogin, setIsRegistered }) => {
         role,
         rollNo,
       });
-      const { token, name: userName } = response.data;
-      onLogin(token, role);
+      const { token,userId, name: userName } = response.data;
+      onLogin(token, role,userId);
 
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("role", role);
       localStorage.setItem("section", section);
       localStorage.setItem("rollNo", rollNo);
       localStorage.setItem("name", userName);
+      localStorage.setItem("userId", userId);
 
       if (role === "teacher" || role === "student") {
         setIsRegistered(true);

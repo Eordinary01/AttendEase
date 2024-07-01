@@ -25,7 +25,14 @@ const userSettingSchema = mongoose.Schema({
   rollNo: {
     type: String,
     required: true
+  },
+  attendance: {
+    totalAttended: { type: Number, default: 0 },
+    totalClasses: { type: Number, default: 0 },
+    overallPercentage: { type: Number, default: 0 },
+    absentClasses: { type: Number, default: 0 }
   }
 });
+
 
 module.exports = mongoose.model('User', userSettingSchema);
