@@ -69,7 +69,7 @@ app.options('*', cors(corsOptions));
 
 // Debugging middleware to log the origin of requests
 app.use((req, res, next) => {
-  console.log('Request Origin:', req.headers.origin);
+  // console.log('Request Origin:', req.headers.origin);
   next();
 });
 

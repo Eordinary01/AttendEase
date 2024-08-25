@@ -6,31 +6,24 @@ const updateAttendance = async (req, res) => {
   console.log('Entire req.body:', JSON.stringify(req.body, null, 2));
   
   const { date, subject: subjectCode, data } = req.body;
-  const userId = req.user._id; // Get the userId from the request
+  const teacherId = req.user._id.toString(); // Convert teacherId to string for comparison
 
-  console.log('userId from token:', userId);
+  console.log('teacherId from token:', teacherId);
   console.log('subjectCode:', subjectCode);
   console.log('date:', date);
 
-  // Add checks
   if (!data) {
     console.log('No data provided in the request body');
     return res.status(400).send({ message: "No data provided in the request body" });
   }
 
   console.log('Data object keys:', Object.keys(data));
+  
+  // Extract the student ID from the data object keys
+  const studentId = Object.keys(data)[0];
+  console.log('studentId from data:', studentId);
 
-  // Find the correct user ID in the data object
-  const userIdInData = Object.keys(data).find(key => key === userId || key.toString() === userId.toString());
-
-  console.log('userIdInData:', userIdInData);
-
-  if (!userIdInData) {
-    console.log('No data found for the current user');
-    return res.status(400).send({ message: "No data found for the current user" });
-  }
-
-  if (!data[userIdInData][subjectCode]) {
+  if (!data[studentId][subjectCode] && data[studentId][subjectCode] !== false) {
     console.log('No data found for the specified subject');
     return res.status(400).send({ message: "No data found for the specified subject" });
   }
@@ -42,12 +35,12 @@ const updateAttendance = async (req, res) => {
       return res.status(404).send({ message: "Subject not found" });
     }
 
-    // Update attendance for the current user only
-    const attended = data[userIdInData][subjectCode];
+    // Update attendance for the student
+    const attended = data[studentId][subjectCode];
     console.log('Attendance value:', attended);
 
     let attendanceRecord = await Attendance.findOne({
-      studentId: userId,
+      studentId: studentId,
       "subject.code": subjectCode,
       date: date,
     });
@@ -58,14 +51,13 @@ const updateAttendance = async (req, res) => {
       attendanceRecord.attendedClasses += attended ? 1 : 0;
       attendanceRecord.totalClasses += 1;
       attendanceRecord.individualPercentage =
-        (attendanceRecord.attendedClasses / attendanceRecord.totalClasses) *
-        100;
+        (attendanceRecord.attendedClasses / attendanceRecord.totalClasses) * 100;
       attendanceRecord.status = attended ? "present" : "absent";
       await attendanceRecord.save();
       console.log('Updated existing attendance record');
     } else {
       attendanceRecord = await Attendance.create({
-        studentId: userId,
+        studentId: studentId,
         subject: { name: subjectDoc.name, code: subjectDoc.code },
         date: date,
         attendedClasses: attended ? 1 : 0,
@@ -77,12 +69,13 @@ const updateAttendance = async (req, res) => {
     }
 
     // Update user's attendance
-    const user = await User.findById(userId);
-    user.attendance.totalAttended += attended ? 1 : 0;
-    user.attendance.totalClasses += 1;
-    if (!attended) {
+    const user = await User.findById(studentId);
+    if (attended) {
+      user.attendance.totalAttended += 1;
+    } else {
       user.attendance.absentClasses += 1;
     }
+    user.attendance.totalClasses += 1;
     const overallPercentage =
       (user.attendance.totalAttended / user.attendance.totalClasses) * 100;
     user.attendance.overallPercentage = overallPercentage;
@@ -100,14 +93,12 @@ const updateAttendance = async (req, res) => {
 
 const getAttendanceRecords = async (req, res) => {
   const userId = req.user._id; // Get the userId from the request
-  console.log('Fetching attendance records for userId:', userId);
   try {
     // Fetch attendance records for the current user only
     const attendanceRecords = await Attendance.find({ studentId: userId }).populate(
       "studentId",
       "name section rollNo"
     );
-    console.log('Fetched attendance records:', attendanceRecords.length);
     res.status(200).send(attendanceRecords);
   } catch (error) {
     console.error("Error fetching attendance:", error);
@@ -116,7 +107,64 @@ const getAttendanceRecords = async (req, res) => {
       .send({ message: "Error fetching attendance", error: error.toString() });
   }
 };
+
+const getAttendanceOverview = async (req, res) => {
+  try {
+    const attendanceOverview = await Attendance.aggregate([
+      {
+        $group: {
+          _id: "$studentId",
+          totalClasses: { $sum: 1 },
+          classesAttended: { $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] } },
+          attendanceDetails: {
+            $push: {
+              subject: "$subject",
+              date: "$date",
+              attendedClasses: "$attendedClasses",
+              totalClasses: "$totalClasses",
+              individualPercentage: "$individualPercentage",
+              status: "$status"
+            }
+          }
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "studentInfo",
+        },
+      },
+      {
+        $unwind: "$studentInfo",
+      },
+      {
+        $project: {
+          _id: 1,
+          name: "$studentInfo.name",
+          rollNo: "$studentInfo.rollNo",
+          section: "$studentInfo.section",
+          totalClasses: 1,
+          classesAttended: 1,
+          attendancePercentage: {
+            $multiply: [{ $divide: ["$classesAttended", "$totalClasses"] }, 100],
+          },
+          attendanceDetails: 1,
+          overallPercentage: { $avg: "$attendanceDetails.individualPercentage" }
+        },
+      },
+    ]);
+
+    res.json(attendanceOverview);
+  } catch (error) {
+    console.error("Error fetching attendance overview:", error);
+    res.status(500).json({ message: "Error fetching attendance overview" });
+  }
+};
+
 module.exports = {
   updateAttendance,
   getAttendanceRecords,
+  getAttendanceOverview
 };
