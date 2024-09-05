@@ -163,8 +163,31 @@ const getAttendanceOverview = async (req, res) => {
   }
 };
 
+const getDetailedAttendance = async (req, res) => {
+  const studentId = req.user._id;
+  const { subjectCode } = req.query;
+
+  if (!subjectCode) {
+    return res.status(400).json({ message: 'Subject code is required' });
+  }
+
+  try {
+    const attendanceRecords = await Attendance.find({
+      studentId: studentId,
+      'subject.code': subjectCode,
+    }).select('date status -_id').sort({ date: -1 });
+
+    res.status(200).json(attendanceRecords);
+  } catch (error) {
+    console.error('Error fetching detailed attendance:', error);
+    res.status(500).json({ message: 'Error fetching detailed attendance', error: error.toString() });
+  }
+};
+
 module.exports = {
   updateAttendance,
   getAttendanceRecords,
-  getAttendanceOverview
+  getAttendanceOverview,
+  getDetailedAttendance
+
 };

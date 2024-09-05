@@ -1,44 +1,64 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
-import { ChevronDownIcon, UserCircleIcon, LogoutIcon, TicketIcon, ChartBarIcon, ClipboardListIcon, PencilIcon } from '@heroicons/react/outline';
-// import AttendanceTable from '../AttendanceTable'; // Import the AttendanceTable component
+import { 
+  ChevronDownIcon, 
+  UserCircleIcon, 
+  LogoutIcon, 
+  TicketIcon, 
+  ChartBarIcon, 
+  ClipboardListIcon, 
+  PencilIcon, 
+  MenuIcon, 
+  XIcon 
+} from '@heroicons/react/outline';
 
-const Header = ({ isAuthenticated, onLogout, isRegistered, role }) => {
+const Header = ({ isAuthenticated, onLogout, role }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
-    <div className="bg-purple-900 p-4 flex flex-col z-50 shadow-lg">
+    <div className="bg-purple-100 text-black p-4 flex flex-col z-50 shadow-lg">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-white text-2xl font-bold">Attend Ease</h1>
+          <h1 className="text-2xl font-bold">Attend Ease</h1>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="md:hidden">
+          {/* Hamburger Icon for small screens */}
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="focus:outline-none z-50 relative">
+            {isMenuOpen ? (
+              <XIcon className="h-6 w-6 text-black" />
+            ) : (
+              <MenuIcon className="h-6 w-6 text-black" />
+            )}
+          </button>
+        </div>
+        <div className="hidden md:flex items-center space-x-4">
           {isAuthenticated && role === 'student' && (
-            <Link to="/tickets" className="text-white mx-2 hover:text-gray-300 transition duration-300">
+            <Link to="/tickets" className="mx-2 hover:text-gray-300 transition duration-300">
               <TicketIcon className="h-5 w-5 inline mr-1" /> Create Ticket
             </Link>
           )}
-          <Link to="/dashboard" className="text-white mx-2 hover:text-gray-300 transition duration-300">
+          <Link to="/dashboard" className="mx-2 hover:text-gray-300 transition duration-300">
             <ChartBarIcon className="h-5 w-5 inline mr-1" /> Dashboard
           </Link>
           {isAuthenticated && role === 'teacher' && (
             <>
-            <Link to="/attendance" className="text-white mx-2 hover:text-gray-300 transition duration-300">
-              <PencilIcon className="h-5 w-5 inline mr-1" /> Mark Attendance
-            </Link>
+              <Link to="/attendance" className="mx-2 hover:text-gray-300 transition duration-300">
+                <PencilIcon className="h-5 w-5 inline mr-1" /> Mark Attendance
+              </Link>
 
-            <Link to="/attendance-overview" className="text-white mx-2 hover:text-gray-300 transition duration-300">
-              <ClipboardListIcon className="h-5 w-5 inline mr-1" /> Attendance Overview
-            </Link> 
-
+              <Link to="/attendance-overview" className="mx-2 hover:text-gray-300 transition duration-300">
+                <ClipboardListIcon className="h-5 w-5 inline mr-1" /> Attendance Overview
+              </Link>
             </>
           )}
           {!isAuthenticated && (
             <>
-              <Link to="/register" className="text-white mx-2 hover:text-gray-300 transition duration-300">
+              <Link to="/register" className="mx-2 hover:text-gray-300 transition duration-300">
                 Register
               </Link>
-              <Link to="/login" className="text-white mx-2 hover:text-gray-300 transition duration-300">
+              <Link to="/login" className="mx-2 hover:text-gray-300 transition duration-300">
                 Login
               </Link>
             </>
@@ -91,7 +111,60 @@ const Header = ({ isAuthenticated, onLogout, isRegistered, role }) => {
           )}
         </div>
       </div>
-      
+
+      {/* Mobile Menu with Slide-in Animation */}
+      <div
+        className={`fixed top-0 right-0 h-full w-64 bg-purple-100 transform ${
+          isMenuOpen ? 'translate-x-0' : 'translate-x-full'
+        } transition-transform duration-300 ease-in-out md:hidden z-40 shadow-lg`}
+      >
+        {/* Close Button inside the slider */}
+        <button 
+          onClick={() => setIsMenuOpen(false)} 
+          className="absolute top-4 right-4 z-50 focus:outline-none"
+        >
+          <XIcon className="h-6 w-6 text-black" />
+        </button>
+
+        <div className="flex flex-col p-4 space-y-2">
+          {isAuthenticated && role === 'student' && (
+            <Link to="/tickets" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+              <TicketIcon className="h-5 w-5 inline mr-1" /> Create Ticket
+            </Link>
+          )}
+          <Link to="/dashboard" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+            <ChartBarIcon className="h-5 w-5 inline mr-1" /> Dashboard
+          </Link>
+          {isAuthenticated && role === 'teacher' && (
+            <>
+              <Link to="/attendance" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+                <PencilIcon className="h-5 w-5 inline mr-1" /> Mark Attendance
+              </Link>
+
+              <Link to="/attendance-overview" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+                <ClipboardListIcon className="h-5 w-5 inline mr-1" /> Attendance Overview
+              </Link>
+            </>
+          )}
+          {!isAuthenticated && (
+            <>
+              <Link to="/register" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+                Register
+              </Link>
+              <Link to="/login" className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+                Login
+              </Link>
+            </>
+          )}
+          {isAuthenticated && (
+            <div className="block px-4 py-2 hover:text-gray-300 transition duration-300">
+              <button onClick={onLogout} className="flex w-full">
+                <LogoutIcon className="h-5 w-5 mr-2" /> Logout
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

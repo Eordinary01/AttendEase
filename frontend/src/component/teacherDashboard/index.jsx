@@ -281,7 +281,7 @@ export default function TeacherDashboard() {
 
   return (
     <motion.div 
-      className="bg-gradient-to-br from-gray-900 to-gray-800 text-white min-h-screen flex flex-col items-center py-8 px-4"
+      className="bg-gradient-to-br from-purple-200 to-purple-400 text-white min-h-screen flex flex-col items-center py-8 px-4"
       initial="hidden"
       animate="visible"
       variants={fadeIn}
@@ -299,7 +299,7 @@ export default function TeacherDashboard() {
         )}
       </AnimatePresence>
       
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-4xl">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl">
         <h1 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
           Teacher's Dashboard
         </h1>
@@ -329,7 +329,7 @@ export default function TeacherDashboard() {
               transition={{ duration: 0.5 }}
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Tickets</h2>
+                <h2 className="text-xl font-semibold text-purple-600">Tickets</h2>
                 <button
                   className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-full flex items-center transition-colors duration-300"
                   onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -400,7 +400,7 @@ export default function TeacherDashboard() {
                   {filteredTickets.map((ticket) => (
                     <motion.li
                       key={ticket._id}
-                      className="bg-gray-700 p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
+                      className="bg-gray-100 text-black p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >

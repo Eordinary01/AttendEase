@@ -6,5 +6,6 @@ const authenticateToken = require("../middleware/auth");
 attendanceRoute.post("/attendance", authenticateToken, attendanceController.updateAttendance);
 attendanceRoute.get("/attendance", authenticateToken, attendanceController.getAttendanceRecords);
 attendanceRoute.get("/overview",authenticateToken,attendanceController.getAttendanceOverview)
+attendanceRoute.get('/attendance/details', authenticateToken, attendanceController.getDetailedAttendance);
 
 module.exports = attendanceRoute;   

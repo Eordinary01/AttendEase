@@ -117,12 +117,12 @@ export default function MarkAttendance() {
 
   return (
     <motion.div 
-      className="bg-gradient-to-br from-gray-900 to-gray-800 text-white min-h-screen flex flex-col items-center py-8 px-4"
+      className="bg-gradient-to-br from-purple-200 to-purple-400 text-white min-h-screen flex flex-col items-center py-8 px-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-4xl">
+      <div className="bg-white text-purple-500 p-6 rounded-lg shadow-lg w-full max-w-4xl">
         <h1 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
           Mark Attendance
         </h1>
@@ -216,17 +216,17 @@ export default function MarkAttendance() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr>
-                  <th className="p-3 bg-gray-700 rounded-tl-md">Student Name</th>
-                  <th className="p-3 bg-gray-700">Roll Number</th>
-                  <th className="p-3 bg-gray-700">Section</th>
-                  <th className="p-3 bg-gray-700">Present</th>
-                  <th className="p-3 bg-gray-700 rounded-tr-md">Absent</th>
+                <tr className="bg-black">
+                  <th className="p-3  rounded-tl-md">Student Name</th>
+                  <th className="p-3 ">Roll Number</th>
+                  <th className="p-3 ">Section</th>
+                  <th className="p-3 ">Present</th>
+                  <th className="p-3  rounded-tr-md">Absent</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStudents.map((student) => (
-                  <tr key={student._id} className="bg-gray-800 hover:bg-gray-700 transition-colors duration-150">
+                  <tr key={student._id} className="bg-gray-100 hover:bg-gray-700 transition-colors duration-150">
                     <td className="p-3">{student.name}</td>
                     <td className="p-3">{student.rollNo}</td>
                     <td className="p-3">{student.section}</td>
