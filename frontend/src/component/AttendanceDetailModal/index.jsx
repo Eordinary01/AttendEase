@@ -1,136 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import styled from 'styled-components';
+import { Dialog, Transition } from '@headlessui/react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
 import axios from 'axios';
-import { FaTimes } from 'react-icons/fa';
-
-
-const Overlay = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000; 
-`;
-
-const ModalContainer = styled(motion.div)`
-  background-color: #1F2937;
-  padding: 2rem;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
-  overflow-y: auto;
-  position: relative;
-`;
-
-const CloseButton = styled.button`
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: transparent;
-  border: none;
-  color: #9CA3AF;
-  cursor: pointer;
-  font-size: 1.5rem;
-`;
-
-const SubjectTitle = styled.h2`
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #E5E7EB;
-`;
-
-const AttendanceTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-`;
-
-const TableHeader = styled.th`
-  background-color: #374151;
-  padding: 0.75rem;
-  text-align: left;
-  color: #9CA3AF;
-  font-weight: 500;
-  font-size: 0.9rem;
-`;
-
-const TableRow = styled.tr`
-  &:nth-child(even) {
-    background-color: #2D3748;
-  }
-  &:hover {
-    background-color: #4B5563;
-  }
-`;
-
-const TableData = styled.td`
-  padding: 0.75rem;
-  color: #D1D5DB;
-  font-size: 0.9rem;
-`;
-
-const StatusBadge = styled.span`
-  padding: 0.25rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: ${({ status }) => (status === 'Present' ? '#10B981' : '#EF4444')};
-  background-color: ${({ status }) => (status === 'Present' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)')};
-`;
-
-const LoadingMessage = styled.p`
-  text-align: center;
-  color: #9CA3AF;
-  font-size: 1rem;
-`;
-
-const ErrorMessage = styled.p`
-  text-align: center;
-  color: #EF4444;
-  font-size: 1rem;
-`;
-
-const NoDataMessage = styled.p`
-  text-align: center;
-  color: #9CA3AF;
-  font-size: 1rem;
-`;
-
-const PaginationContainer = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-top: 1rem;
-`;
-
-const PaginationButton = styled.button`
-  background-color: #374151;
-  color: #9CA3AF;
-  padding: 0.5rem 1rem;
-  margin: 0 0.25rem;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-
-  &:disabled {
-    background-color: #1F2937;
-    color: #4B5563;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background-color: #4B5563;
-  }
-`;
 
 const ITEMS_PER_PAGE = 10;
-const API_URL = process.env.REACT_APP_API_URL;
 
 const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => {
   const [attendanceDetails, setAttendanceDetails] = useState([]);
@@ -151,7 +25,7 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => 
           params: { subjectCode: subject.code },
         });
 
-        setAttendanceDetails(response.data);
+        setAttendanceDetails(response.data.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (err) {
         console.error('Error fetching attendance details:', err);
         setError('Failed to fetch attendance details. Please try again later.');
@@ -172,70 +46,78 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => 
   return (
     <AnimatePresence>
       {isOpen && (
-        <Overlay
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <ModalContainer
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0.9 }}
-          >
-            <CloseButton onClick={onClose}>
-              <FaTimes />
-            </CloseButton>
-            <SubjectTitle>Attendance Details - {subject.name} ({subject.code})</SubjectTitle>
+        <Transition show={isOpen} as={React.Fragment}>
+          <Dialog as="div" className="fixed inset-0 z-50 flex items-center justify-center p-4" onClose={onClose}>
+            <div className="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true" />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gray-800 p-6 rounded-lg w-full max-w-lg max-h-[80vh] overflow-y-auto relative"
+            >
+              <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Attendance Details - {subject.name} ({subject.code})
+              </h2>
 
-            {loading ? (
-              <LoadingMessage>Loading attendance details...</LoadingMessage>
-            ) : error ? (
-              <ErrorMessage>{error}</ErrorMessage>
-            ) : attendanceDetails.length === 0 ? (
-              <NoDataMessage>No attendance records found for this subject.</NoDataMessage>
-            ) : (
-              <>
-                <AttendanceTable>
-                  <thead>
-                    <tr>
-                      <TableHeader>Date</TableHeader>
-                      <TableHeader>Status</TableHeader>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentData.map((record) => (
-                      <TableRow key={record.date}>
-                        <TableData>{new Date(record.date).toLocaleDateString()}</TableData>
-                        <TableData>
-                          <StatusBadge status={record.status === 'present' ? 'Present' : 'Absent'}>
-                            {record.status === 'present' ? 'Present' : 'Absent'}
-                          </StatusBadge>
-                        </TableData>
-                      </TableRow>
-                    ))}
-                  </tbody>
-                </AttendanceTable>
+              {loading ? (
+                <p className="text-center text-gray-400">Loading attendance details...</p>
+              ) : error ? (
+                <p className="text-center text-red-500">{error}</p>
+              ) : attendanceDetails.length === 0 ? (
+                <p className="text-center text-gray-400">No attendance records found for this subject.</p>
+              ) : (
+                <>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-700">
+                        <th className="p-2 text-left text-gray-300">Date</th>
+                        <th className="p-2 text-left text-gray-300">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentData.map((record) => (
+                        <tr key={record.date} className="odd:bg-gray-800 even:bg-gray-700 hover:bg-gray-600">
+                          <td className="p-2 text-gray-300">
+                            {new Date(record.date).getDate()}/
+                            {new Date(record.date).getMonth() + 1}/
+                            {new Date(record.date).getFullYear()}
+                          </td>
+                          <td className="p-2">
+                            <span className={`px-2 py-1 rounded-full text-sm font-medium ${record.status === 'present' ? 'bg-green-500 bg-opacity-20 text-green-400' : 'bg-red-500 bg-opacity-20 text-red-400'}`}>
+                              {record.status === 'present' ? 'Present' : 'Absent'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
 
-                {totalPages > 1 && (
-                  <PaginationContainer>
-                    <PaginationButton
-                      onClick={() => setCurrentPage((prev) => prev - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </PaginationButton>
-                    <PaginationButton
-                      onClick={() => setCurrentPage((prev) => prev + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                    </PaginationButton>
-                  </PaginationContainer>
-                )}
-              </>
-            )}
-          </ModalContainer>
-        </Overlay>
+                  {totalPages > 1 && (
+                    <div className="flex justify-center mt-4">
+                      <button
+                        onClick={() => setCurrentPage((prev) => prev - 1)}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 bg-gray-700 text-gray-400 rounded-md hover:bg-gray-600 disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage((prev) => prev + 1)}
+                        disabled={currentPage === totalPages}
+                        className="ml-2 px-4 py-2 bg-gray-700 text-gray-400 rounded-md hover:bg-gray-600 disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </Dialog>
+        </Transition>
       )}
     </AnimatePresence>
   );

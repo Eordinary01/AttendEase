@@ -32,6 +32,17 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [role, setRole] = useState("");
   const [userId, setUserId] = useState(null);
+  const API_URL = process.env.REACT_APP_API_URL;
+
+  // const validateToken  = async (req,res)=>{
+  //   try {
+
+  //     const response = await  
+      
+  //   } catch (error) {
+      
+  //   }
+  // }
 
   useEffect(() => {
     const token = localStorage.getItem("token");

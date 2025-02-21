@@ -1,4 +1,3 @@
-// models/Subject.js
 const mongoose = require("mongoose");
 
 const subjectSchema = new mongoose.Schema({
@@ -10,6 +9,10 @@ const subjectSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+  },
+  sections: {
+    type: [String], 
+    required: true,
   },
 });
 

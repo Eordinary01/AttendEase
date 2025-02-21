@@ -6,26 +6,15 @@ const updateAttendance = async (req, res) => {
   console.log('Entire req.body:', JSON.stringify(req.body, null, 2));
   
   const { date, subject: subjectCode, data } = req.body;
-  const teacherId = req.user._id.toString(); // Convert teacherId to string for comparison
+  const teacherId = req.user._id.toString();
 
   console.log('teacherId from token:', teacherId);
   console.log('subjectCode:', subjectCode);
   console.log('date:', date);
 
-  if (!data) {
+  if (!data || Object.keys(data).length === 0) {
     console.log('No data provided in the request body');
     return res.status(400).send({ message: "No data provided in the request body" });
-  }
-
-  console.log('Data object keys:', Object.keys(data));
-  
-  // Extract the student ID from the data object keys
-  const studentId = Object.keys(data)[0];
-  console.log('studentId from data:', studentId);
-
-  if (!data[studentId][subjectCode] && data[studentId][subjectCode] !== false) {
-    console.log('No data found for the specified subject');
-    return res.status(400).send({ message: "No data found for the specified subject" });
   }
 
   try {
@@ -35,59 +24,72 @@ const updateAttendance = async (req, res) => {
       return res.status(404).send({ message: "Subject not found" });
     }
 
-    // Update attendance for the student
-    const attended = data[studentId][subjectCode];
-    console.log('Attendance value:', attended);
+    // Process attendance for all students
+    const updatePromises = Object.entries(data).map(async ([studentId, subjects]) => {
+      if (!subjects[subjectCode] && subjects[subjectCode] !== false) {
+        console.log(`No data found for student ${studentId} in subject ${subjectCode}`);
+        return;
+      }
 
-    let attendanceRecord = await Attendance.findOne({
-      studentId: studentId,
-      "subject.code": subjectCode,
-      date: date,
+      const attended = subjects[subjectCode];
+      console.log(`Processing attendance for student ${studentId}: ${attended}`);
+
+      // Find or create attendance record
+      let attendanceRecord = await Attendance.findOne({
+        studentId: studentId,
+        "subject.code": subjectCode,
+        date: date,
+      });
+
+      if (attendanceRecord) {
+        // Update existing record
+        attendanceRecord.attendedClasses += attended ? 1 : 0;
+        attendanceRecord.totalClasses += 1;
+        attendanceRecord.individualPercentage =
+          (attendanceRecord.attendedClasses / attendanceRecord.totalClasses) * 100;
+        attendanceRecord.status = attended ? "present" : "absent";
+        await attendanceRecord.save();
+        console.log(`Updated existing attendance record for student ${studentId}`);
+      } else {
+        // Create new record
+        attendanceRecord = await Attendance.create({
+          studentId: studentId,
+          subject: { name: subjectDoc.name, code: subjectDoc.code },
+          date: date,
+          attendedClasses: attended ? 1 : 0,
+          totalClasses: 1,
+          individualPercentage: attended ? 100 : 0,
+          status: attended ? "present" : "absent",
+        });
+        console.log(`Created new attendance record for student ${studentId}`);
+      }
+
+      // Update user's overall attendance
+      const user = await User.findById(studentId);
+      if (attended) {
+        user.attendance.totalAttended += 1;
+      } else {
+        user.attendance.absentClasses += 1;
+      }
+      user.attendance.totalClasses += 1;
+      user.attendance.overallPercentage =
+        (user.attendance.totalAttended / user.attendance.totalClasses) * 100;
+      await user.save();
+      console.log(`Updated overall attendance for student ${studentId}`);
     });
 
-    console.log('Existing attendance record:', attendanceRecord);
+    // Wait for all updates to complete
+    await Promise.all(updatePromises);
 
-    if (attendanceRecord) {
-      attendanceRecord.attendedClasses += attended ? 1 : 0;
-      attendanceRecord.totalClasses += 1;
-      attendanceRecord.individualPercentage =
-        (attendanceRecord.attendedClasses / attendanceRecord.totalClasses) * 100;
-      attendanceRecord.status = attended ? "present" : "absent";
-      await attendanceRecord.save();
-      console.log('Updated existing attendance record');
-    } else {
-      attendanceRecord = await Attendance.create({
-        studentId: studentId,
-        subject: { name: subjectDoc.name, code: subjectDoc.code },
-        date: date,
-        attendedClasses: attended ? 1 : 0,
-        totalClasses: 1,
-        individualPercentage: attended ? 100 : 0,
-        status: attended ? "present" : "absent",
-      });
-      console.log('Created new attendance record');
-    }
-
-    // Update user's attendance
-    const user = await User.findById(studentId);
-    if (attended) {
-      user.attendance.totalAttended += 1;
-    } else {
-      user.attendance.absentClasses += 1;
-    }
-    user.attendance.totalClasses += 1;
-    const overallPercentage =
-      (user.attendance.totalAttended / user.attendance.totalClasses) * 100;
-    user.attendance.overallPercentage = overallPercentage;
-    await user.save();
-    console.log('Updated user attendance');
-
-    res.status(200).send({ message: "Attendance updated successfully" });
+    res.status(200).send({ 
+      message: "Attendance updated successfully for all students" 
+    });
   } catch (error) {
     console.error("Error in updateAttendance:", error);
-    res
-      .status(500)
-      .send({ message: "Error updating attendance", error: error.toString() });
+    res.status(500).send({ 
+      message: "Error updating attendance", 
+      error: error.toString() 
+    });
   }
 };
 

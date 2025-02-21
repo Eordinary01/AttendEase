@@ -11,7 +11,7 @@ const attendanceSchema = new mongoose.Schema({
   totalClasses: { type: Number, default: 0 },
   individualPercentage: { type: Number, default: 0 },
   overallPercentage: { type: Number, default: 0 },
-  status: { type: String, enum: ['absent', 'present'], default: 'present' }
+  status: { type: String, enum: ['absent', 'present'], default: 'absent' }
 });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

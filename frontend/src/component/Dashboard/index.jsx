@@ -1,7 +1,22 @@
 import React, { useEffect, useState, useCallback } from "react";
-import axios from "axios";
-import AttendanceDetailModal from "../AttendanceDetailModal";
+import { Tab } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  Ticket,
+  AirVent,
+  LineChart as ChartIcon,
+  Bell,
+  File,
+  Image as ImageIcon,
+  X,
+  User,
+  Settings,
+  LogOut,
+  Calendar,
+  Clock,
+  TrendingUp,
+  Bookmark,
+} from "lucide-react";
 import {
   LineChart,
   Line,
@@ -12,127 +27,16 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import {
-  FaTicketAlt,
-  FaChalkboardTeacher,
-  FaChartLine,
-  FaBell,
-  FaFile,
-  FaImage,
-} from "react-icons/fa";
-import styled from "styled-components";
+import { Dialog, Transition, Menu as HeadlessMenu } from "@headlessui/react";
+import { Fragment } from "react";
+import AttendanceDetailModal from "../AttendanceDetailModal";
 
-// Styled components for the alert
-const AlertSidebar = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 300px;
-  height: 100vh;
-  background: rgba(31, 41, 55, 0.95);
-  backdrop-filter: blur(5px);
-  z-index: 1000;
-  padding: 20px;
-  overflow-y: auto;
-`;
-
-const AlertButton = styled.button`
-  position: fixed;
-  top: 100px;
-  right: 20px;
-  background: rgba(79, 70, 229, 0.9);
-  color: white;
-  padding: 10px;
-  border-radius: 50%;
-  z-index: 1001;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: none;
-  outline: none;
-`;
-
-const AlertItem = styled.div`
-  background: rgba(79, 70, 229, 0.2);
-  border-left: 4px solid #8b5cf6;
-  padding: 12px;
-  margin-bottom: 12px;
-  border-radius: 4px;
-`;
-
-const AlertTitle = styled.h3`
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 4px;
-`;
-
-const AlertMessage = styled.p`
-  font-size: 14px;
-  line-height: 1.4;
-`;
-
-// Styled components for file showcase
-const FileShowcase = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-`;
-
-const FileCard = styled(motion.div)`
-  background: rgba(79, 70, 229, 0.1);
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-`;
-
-const FileIcon = styled.div`
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-`;
-
-const FileName = styled.p`
-  font-size: 0.9rem;
-  text-align: center;
-  word-break: break-word;
-`;
-
-const Modal = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-`;
-
-const ModalContent = styled(motion.div)`
-  background: #1f2937;
-  padding: 2rem;
-  border-radius: 8px;
-  max-width: 80%;
-  max-height: 80%;
-  overflow: auto;
-  width: 100%; // Add this to ensure the modal takes full width up to max-width
-`;
-
-// Custom hook for managing alerts
 const useAlerts = () => {
   const [alerts, setAlerts] = useState([]);
-
   const addAlert = useCallback((alert) => {
     const id = Date.now();
     setAlerts((prevAlerts) => [...prevAlerts, { ...alert, id }]);
   }, []);
-
   return { alerts, addAlert };
 };
 
@@ -140,13 +44,10 @@ export default function StudentDashboard() {
   const [tickets, setTickets] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [token, setToken] = useState(null);
-  const [activeTab, setActiveTab] = useState("tickets");
   const { alerts, addAlert } = useAlerts();
   const [showAlerts, setShowAlerts] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState(null);
-
-  // modal state
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
 
@@ -155,40 +56,45 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
-    if (storedToken) {
-      setToken(storedToken);
-    }
+    if (storedToken) setToken(storedToken);
   }, []);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (token) {
-        try {
-          const [ticketsResponse, attendanceResponse, alertsResponse] =
-            await Promise.all([
-              axios.get(`${API_URL}/tickets`, {
-                headers: { Authorization: `Bearer ${token}` },
-              }),
-              axios.get(`${API_URL}/attendance`, {
-                headers: { Authorization: `Bearer ${token}` },
-              }),
-              axios.get(`${API_URL}/alerts`, {
-                headers: { Authorization: `Bearer ${token}` },
-              }),
-            ]);
-          setTickets(ticketsResponse.data);
-          setAttendance(attendanceResponse.data);
-          alertsResponse.data.forEach((alert) => addAlert(alert));
-        } catch (error) {
-          console.error("Error fetching data:", error);
-        }
+      if (!token) return;
+
+      try {
+        const [ticketsResponse, attendanceResponse, alertsResponse] =
+          await Promise.all([
+            fetch(`${API_URL}/tickets`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            fetch(`${API_URL}/attendance`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            fetch(`${API_URL}/alerts`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          ]);
+
+        const [ticketsData, attendanceData, alertsData] = await Promise.all([
+          ticketsResponse.json(),
+          attendanceResponse.json(),
+          alertsResponse.json(),
+        ]);
+
+        setTickets(ticketsData);
+        setAttendance(attendanceData);
+        alertsData.forEach(addAlert);
+      } catch (error) {
+        console.error("Error fetching data:", error);
       }
     };
 
     fetchData();
     const intervalId = setInterval(fetchData, POLLING_INTERVAL);
     return () => clearInterval(intervalId);
-  }, [token, addAlert, API_URL]);
+  }, [token, addAlert]);
 
   const aggregatedAttendance = attendance.reduce((acc, record) => {
     const { subject } = record;
@@ -225,73 +131,35 @@ export default function StudentDashboard() {
     ),
   }));
 
-  const tabVariants = {
-    active: { backgroundColor: "white", color: "purple" },
-    inactive: { backgroundColor: "#1F2937", color: "#9CA3AF" },
-  };
-
-  const contentVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-  };
-
   const renderFileIcon = (file) => {
     if (!file) return null;
     const extension = file.split(".").pop().toLowerCase();
-    switch (extension) {
-      case "pdf":
-        return <FaFile color="purple" />;
-      case "jpg":
-      case "jpeg":
-      case "png":
-        return <FaImage color="purple" />;
-      default:
-        return <FaFile color="purple" />;
-    }
+    return extension.match(/^(jpg|jpeg|png)$/) ? (
+      <ImageIcon className="w-8 h-8 text-purple-600" />
+    ) : (
+      <File className="w-8 h-8 text-purple-600" />
+    );
   };
 
   const handleFileClick = async (ticketId, file) => {
     try {
-      const response = await axios.get(`${API_URL}/tickets/${ticketId}/file`, {
+      const response = await fetch(`${API_URL}/tickets/${ticketId}/file`, {
         headers: { Authorization: `Bearer ${token}` },
-        responseType: "blob",
       });
-
-      const fileExtension = file.split(".").pop().toLowerCase();
-      const fileType = response.headers["content-type"];
+      const blob = await response.blob();
+      const fileType = response.headers.get("content-type");
 
       if (fileType.startsWith("image/")) {
-        const imageUrl = URL.createObjectURL(response.data);
-        setFileContent({ type: "image", content: imageUrl });
+        setFileContent({ type: "image", content: URL.createObjectURL(blob) });
       } else if (fileType === "application/pdf") {
-        const pdfUrl = URL.createObjectURL(response.data);
-        setFileContent({ type: "pdf", content: pdfUrl });
-      } else if (
-        fileType === "application/zip" ||
-        fileType.includes("officedocument") ||
-        fileType === "application/octet-stream"
-      ) {
-        const downloadUrl = URL.createObjectURL(response.data);
+        setFileContent({ type: "pdf", content: URL.createObjectURL(blob) });
+      } else {
         setFileContent({
           type: "download",
-          content: downloadUrl,
+          content: URL.createObjectURL(blob),
           fileName: file,
         });
-      } else {
-        // Attempt to read as text, but have a fallback for binary files
-        try {
-          const textContent = await response.data.text();
-          setFileContent({ type: "text", content: textContent });
-        } catch (error) {
-          const downloadUrl = URL.createObjectURL(response.data);
-          setFileContent({
-            type: "download",
-            content: downloadUrl,
-            fileName: file,
-          });
-        }
       }
-
       setSelectedFile({ ticketId, file });
     } catch (error) {
       console.error("Error fetching file:", error);
@@ -299,310 +167,598 @@ export default function StudentDashboard() {
     }
   };
 
-  const renderFileContent = () => {
-    if (!fileContent) return null;
-
-    switch (fileContent.type) {
-      case "image":
-        return (
-          <img
-            src={fileContent.content}
-            alt="Uploaded file"
-            className="max-w-full h-auto"
-          />
-        );
-      case "pdf":
-        return (
-          <iframe
-            src={fileContent.content}
-            title="PDF Viewer"
-            width="100%"
-            height="600px"
-            style={{ border: "none" }}
-          />
-        );
-      case "text":
-        return <pre className="whitespace-pre-wrap">{fileContent.content}</pre>;
-      case "download":
-        return (
-          <div>
-            <p className="my-7">
-              This file type cannot be displayed in the browser.
-            </p>
-            <a
-              href={fileContent.content}
-              download={fileContent.fileName}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-5  mx-5 rounded"
-            >
-              Download File
-            </a>
-          </div>
-        );
-      case "error":
-        return <p className="text-red-500">{fileContent.content}</p>;
-      default:
-        return <p>Unsupported file type</p>;
-    }
-  };
-
-  const handleAttendanceClick = (subject) => {
-    setSelectedSubject(subject);
-    setIsAttendanceModalOpen(true);
-  };
-
-  const closeAttendanceModal = () => {
-    setIsAttendanceModalOpen(false);
-    setSelectedSubject(null);
-  };
-
   return (
-    <div className="bg-purple-200 text-white min-h-screen p-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8 text-center text-purple-700">
-          Student Dashboard 
-        </h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Topbar */}
+      {/* <motion.div
+        className="fixed top-0 left-0 right-0 h-16 bg-white shadow-sm z-50 px-4"
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="h-full flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-semibold text-gray-800">
+              Student ERP Portal
+            </h1>
+          </div>
 
-        {/* Alert Button */}
-        <AlertButton onClick={() => setShowAlerts(!showAlerts)}>
-          <FaBell size={20} />
-        </AlertButton>
-
-        {/* Alert Sidebar */}
-        <AnimatePresence>
-          {showAlerts && (
-            <AlertSidebar
-              initial={{ x: 300 }}
-              animate={{ x: 0 }}
-              exit={{ x: 300 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          <div className="flex items-center space-x-4">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowAlerts(!showAlerts)}
+              className="p-2 hover:bg-gray-100 rounded-full relative"
             >
-              <h2 className="text-2xl font-semibold mb-4">Alerts</h2>
-              {alerts.length === 0 ? (
-                <p>No new alerts</p>
-              ) : (
-                alerts.map((alert) => (
-                  <AlertItem key={alert.id}>
-                    <AlertTitle>{alert.title}</AlertTitle>
-                    <AlertMessage>{alert.message}</AlertMessage>
-                  </AlertItem>
-                ))
+              <Bell className="w-5 h-5 text-gray-600" />
+              {alerts.length > 0 && (
+                <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
+                  {alerts.length}
+                </span>
               )}
-            </AlertSidebar>
-          )}
-        </AnimatePresence>
+            </motion.button>
 
-        <div className="flex space-x-4 mb-8">
-          <motion.button
-            variants={tabVariants}
-            animate={activeTab === "tickets" ? "active" : "inactive"}
-            onClick={() => setActiveTab("tickets")}
-            className="flex items-center px-4 py-2 rounded-lg transition duration-300"
-          >
-            <FaTicketAlt className="mr-2" /> Tickets
-          </motion.button>
-          <motion.button
-            variants={tabVariants}
-            animate={activeTab === "attendance" ? "active" : "inactive"}
-            onClick={() => setActiveTab("attendance")}
-            className="flex items-center px-4 py-2 rounded-lg transition duration-300"
-          >
-            <FaChalkboardTeacher className="mr-2" /> Attendance
-          </motion.button>
-          <motion.button
-            variants={tabVariants}
-            animate={activeTab === "chart" ? "active" : "inactive"}
-            onClick={() => setActiveTab("chart")}
-            className="flex items-center px-4 py-2 rounded-lg transition duration-300"
-          >
-            <FaChartLine className="mr-2" /> Chart
-          </motion.button>
-        </div>
-
-        <motion.div
-          variants={contentVariants}
-          initial="hidden"
-          animate="visible"
-          transition={{ duration: 0.5 }}
-        >
-          {activeTab === "tickets" && (
-            <div className="bg-white p-6 rounded-lg shadow-xl">
-              <h2 className="text-2xl font-semibold mb-4 text-purple-600">My Tickets</h2>
-              {tickets.length === 0 ? (
-                <p className="text-gray-400">No tickets available</p>
-              ) : (
-                <div className="space-y-4">
-                  {tickets.map((ticket) => (
-                    <motion.div
-                      key={ticket._id}
-                      className=" p-4 rounded-lg shadow-md"
-                      whileHover={{ scale: 1.02 }}
-                      transition={{ type: "spring", stiffness: 300 }}
-                    >
-                      <p className="text-sm text-purple-600 mb-2">
-                        Ticket ID: {ticket._id}
-                      </p>
-                      <p className="font-semibold mb-2 text-purple-500">{ticket.section}</p>
-                      <p className="text-gray-700 mb-2">{ticket.document}</p>
-                      <p className="text-sm italic text-green-400">
-                        {ticket.response}
-                      </p>
-                      {ticket.file && (
-                        <FileShowcase>
-                          <FileCard
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() =>
-                              handleFileClick(ticket._id, ticket.file)
-                            }
-                          >
-                            <FileIcon>{renderFileIcon(ticket.file)}</FileIcon>
-                            <FileName className="text-purple-500">{ticket.file}</FileName>
-                          </FileCard>
-                        </FileShowcase>
-                      )}
-                    </motion.div>
-                  ))}
+            <HeadlessMenu as="div" className="relative">
+              <HeadlessMenu.Button className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded-lg">
+                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-purple-600" />
                 </div>
-              )}
-            </div>
-          )}
+                <span className="text-sm font-medium text-gray-700">
+                  John Doe
+                </span>
+              </HeadlessMenu.Button>
 
-          {activeTab === "attendance" && (
-            <div className="bg-white text-purple-700 p-6 rounded-lg shadow-xl">
-              <h2 className="text-2xl font-semibold mb-4">
-                Attendance Overview
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-200">
-                      <th className="px-4 py-2 text-left">Subject</th>
-                      <th className="px-4 py-2 text-left">Attended / Total</th>
-                      <th className="px-4 py-2 text-left">Attendance (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.values(aggregatedAttendance).map((subject) => (
-                      <motion.tr
-                        key={subject.code}
-                        className="border-b border-gray-700"
-                        whileHover={{ backgroundColor: "#374151" }}
-                        onClick={() => handleAttendanceClick(subject)}
+              <Transition
+                as={Fragment}
+                enter="transition ease-out duration-100"
+                enterFrom="transform opacity-0 scale-95"
+                enterTo="transform opacity-100 scale-100"
+                leave="transition ease-in duration-75"
+                leaveFrom="transform opacity-100 scale-100"
+                leaveTo="transform opacity-0 scale-95"
+              >
+                <HeadlessMenu.Items className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1">
+                  <HeadlessMenu.Item>
+                    {({ active }) => (
+                      <button
+                        className={`${
+                          active ? "bg-gray-100" : ""
+                        } flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 w-full`}
                       >
-                        <td className="px-4 py-2">
-                          {subject.name} ({subject.code})
-                        </td>
-                        <td className="px-4 py-2">{`${subject.totalAttended} / ${subject.totalClasses}`}</td>
-                        <td className="px-4 py-2">
-                          <div className="w-full bg-gray-700 rounded-full h-2.5">
-                            <div
-                              className="bg-purple-600 h-2.5 rounded-full"
-                              style={{
-                                width: `${
-                                  (subject.totalAttended /
-                                    subject.totalClasses) *
-                                  100
-                                }%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span className="ml-2 text-sm">
-                            {(
-                              (subject.totalAttended / subject.totalClasses) *
-                              100
-                            ).toFixed(2)}
-                            %
-                          </span>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-gray-200 font-semibold">
-                      <td className="px-4 py-2">Overall Attendance:</td>
-                      <td className="px-4 py-2">{`${totalOverallAttended} / ${totalOverallClasses}`}</td>
-                      <td className="px-4 py-2">
-                        {overallAttendancePercentage}%
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
+                        <Settings className="w-4 h-4" />
+                        <span>Settings</span>
+                      </button>
+                    )}
+                  </HeadlessMenu.Item>
+                  <HeadlessMenu.Item>
+                    {({ active }) => (
+                      <button
+                        className={`${
+                          active ? "bg-gray-100" : ""
+                        } flex items-center space-x-2 px-4 py-2 text-sm text-red-600 w-full`}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Logout</span>
+                      </button>
+                    )}
+                  </HeadlessMenu.Item>
+                </HeadlessMenu.Items>
+              </Transition>
+            </HeadlessMenu>
+          </div>
+        </div>
+      </motion.div> */}
 
-          <AttendanceDetailModal
-            isOpen={isAttendanceModalOpen}
-            onClose={closeAttendanceModal}
-            subject={selectedSubject}
-            token={token}
-            API_URL={API_URL}
-          />
-
-          {activeTab === "chart" && (
-            <div className="bg-gray-800 p-6 rounded-lg shadow-xl">
-              <h2 className="text-2xl font-semibold mb-4">Attendance Chart</h2>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="name" stroke="#9CA3AF" />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#1F2937",
-                        border: "none",
-                      }}
-                      labelStyle={{ color: "#E5E7EB" }}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="attendance"
-                      stroke="#8B5CF6"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
-      <AnimatePresence>
-        {selectedFile && (
-          <Modal
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => {
-              setSelectedFile(null);
-              setFileContent(null);
-            }}
+      {/* Main Content */}
+      <div className="pt-24 px-6 pb-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Quick Stats */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"
           >
-            <ModalContent
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold">{selectedFile.file}</h3>
-                <button
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setFileContent(null);
-                  }}
-                  className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-                >
-                  Cancel
-                </button>
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <div className="flex items-center space-x-2 mb-2">
+                <Clock className="w-5 h-5 text-purple-600" />
+                <h3 className="text-sm font-medium text-gray-600">
+                  Today's Classes
+                </h3>
               </div>
-              {renderFileContent()}
-            </ModalContent>
-          </Modal>
-        )}
-      </AnimatePresence>
+              <p className="text-2xl font-semibold text-gray-800">4 Classes</p>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <div className="flex items-center space-x-2 mb-2">
+                <AirVent className="w-5 h-5 text-purple-600" />
+                <h3 className="text-sm font-medium text-gray-600">
+                  Overall Attendance
+                </h3>
+              </div>
+              <p className="text-2xl font-semibold text-gray-800">
+                {overallAttendancePercentage}%
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <div className="flex items-center space-x-2 mb-2">
+                <Ticket className="w-5 h-5 text-purple-600" />
+                <h3 className="text-sm font-medium text-gray-600">
+                  Open Tickets
+                </h3>
+              </div>
+              <p className="text-2xl font-semibold text-gray-800">
+                {tickets.length}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <div className="flex items-center space-x-2 mb-2">
+                <Bookmark className="w-5 h-5 text-purple-600" />
+                <h3 className="text-sm font-medium text-gray-600">
+                  Current Semester
+                </h3>
+              </div>
+              <p className="text-2xl font-semibold text-gray-800">Fall 2024</p>
+            </div>
+          </motion.div>
+
+          {/* Tabs */}
+          <Tab.Group>
+            <Tab.List className="flex space-x-1 rounded-xl bg-white p-1 shadow-sm mb-6">
+              <Tab
+                className={({ selected }) =>
+                  `w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200
+                  ${
+                    selected
+                      ? "bg-purple-100 text-purple-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-700"
+                  }`
+                }
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <Ticket className="w-5 h-5" />
+                  <span>Tickets</span>
+                </div>
+              </Tab>
+              <Tab
+                className={({ selected }) =>
+                  `w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200
+                  ${
+                    selected
+                      ? "bg-purple-100 text-purple-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-700"
+                  }`
+                }
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <AirVent className="w-5 h-5" />
+                  <span>Attendance</span>
+                </div>
+              </Tab>
+              <Tab
+                className={({ selected }) =>
+                  `w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200
+                  ${
+                    selected
+                      ? "bg-purple-100 text-purple-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-700"
+                  }`
+                }
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <ChartIcon className="w-5 h-5" />
+                  <span>Analytics</span>
+                </div>
+              </Tab>
+            </Tab.List>
+
+            <Tab.Panels>
+              <AnimatePresence mode="wait">
+                <Tab.Panel
+                  as={motion.div}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="bg-white rounded-xl p-6 shadow-sm"
+                >
+                  <h2 className="text-2xl font-semibold mb-6 text-gray-800">
+                    My Tickets
+                  </h2>
+                  {tickets.length === 0 ? (
+                    <p className="text-gray-500">No tickets available</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {tickets.map((ticket) => (
+                        <motion.div
+                          key={ticket._id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                        >
+                          <p className="text-sm text-purple-600 mb-2">
+                            Ticket ID: {ticket._id}
+                          </p>
+                          <p className="font-semibold text-gray-800 mb-2">
+                            {ticket.section}
+                          </p>
+                          <p className="text-gray-600 mb-2">
+                            {ticket.document}
+                          </p>
+                          <p className="text-sm italic text-green-600">
+                            {ticket.response}
+                          </p>
+                          {ticket.file && (
+                            <div className="mt-4">
+                              <button
+                                onClick={() =>
+                                  handleFileClick(ticket._id, ticket.file)
+                                }
+                                className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
+                              >
+                                {renderFileIcon(ticket.file)}
+                                <span>{ticket.file}</span>
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </Tab.Panel>
+
+                <Tab.Panel
+                  as={motion.div}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="bg-white rounded-xl p-6 shadow-lg"
+                >
+                  <div className="flex justify-between items-center mb-8">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800">
+                        Attendance Overview
+                      </h2>
+                      <p className="text-gray-500 mt-1">
+                        Click on any subject for detailed view
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="text-purple-600" size={20} />
+                        <span className="font-semibold text-purple-600">
+                          {overallAttendancePercentage}% Overall
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Calendar className="text-purple-600" />
+                        <div>
+                          <p className="text-gray-500">Total Classes</p>
+                          <p className="text-xl font-bold text-gray-800">
+                            {totalOverallClasses}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <User className="text-purple-600" />
+                        <div>
+                          <p className="text-gray-500">Classes Attended</p>
+                          <p className="text-xl font-bold text-gray-800">
+                            {totalOverallAttended}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                   
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                            Subject
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                            Attended / Total
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                            Attendance
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {Object.values(aggregatedAttendance).map((subject) => {
+                          const attendancePercentage =
+                            (subject.totalAttended / subject.totalClasses) *
+                            100;
+                          const getAttendanceColor = (percentage) => {
+                            if (percentage >= 75) return "bg-purple-600";
+                            if (percentage >= 60) return "bg-yellow-500";
+                            return "bg-red-500";
+                          };
+
+                          return (
+                            <motion.tr
+                              key={subject.code}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="hover:bg-gray-50 cursor-pointer transition-colors"
+                              onClick={() => {
+                                setSelectedSubject(subject);
+                                setIsAttendanceModalOpen(true);
+                              }}
+                            >
+                              <td className="px-6 py-4">
+                                <div>
+                                  <p className="font-medium text-gray-800">
+                                    {subject.name}
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {subject.code}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-gray-600">
+                                {subject.totalAttended} / {subject.totalClasses}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-full max-w-[200px] bg-gray-100 rounded-full h-2">
+                                    <div
+                                      className={`h-2 rounded-full ${getAttendanceColor(
+                                        attendancePercentage
+                                      )}`}
+                                      style={{
+                                        width: `${attendancePercentage}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium text-gray-600">
+                                    {attendancePercentage.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Tab.Panel>
+
+                <AttendanceDetailModal
+                  isOpen={isAttendanceModalOpen}
+                  onClose={() => setIsAttendanceModalOpen(false)}
+                  subject={selectedSubject}
+                  token={token}
+                  API_URL={API_URL}
+                />
+
+                <Tab.Panel
+                  as={motion.div}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="bg-white rounded-xl p-6 shadow-sm"
+                >
+                  <h2 className="text-2xl font-semibold mb-6 text-gray-800">
+                    Attendance Analytics
+                  </h2>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="name" stroke="#4B5563" />
+                        <YAxis stroke="#4B5563" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "white",
+                            border: "1px solid #E5E7EB",
+                          }}
+                          labelStyle={{ color: "#374151" }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="attendance"
+                          stroke="#7C3AED"
+                          strokeWidth={2}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Tab.Panel>
+              </AnimatePresence>
+            </Tab.Panels>
+          </Tab.Group>
+        </div>
+      </div>
+
+      {/* Alerts Sidebar */}
+      <Transition.Root show={showAlerts} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={setShowAlerts}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-in-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in-out duration-300"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
+                <Transition.Child
+                  as={Fragment}
+                  enter="transform transition ease-in-out duration-300"
+                  enterFrom="translate-x-full"
+                  enterTo="translate-x-0"
+                  leave="transform transition ease-in-out duration-300"
+                  leaveFrom="translate-x-0"
+                  leaveTo="translate-x-full"
+                >
+                  <Dialog.Panel className="pointer-events-auto w-screen max-w-md">
+                    <div className="flex h-full flex-col overflow-y-scroll bg-white shadow-xl">
+                      <div className="bg-purple-700 px-4 py-6 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <Dialog.Title className="text-xl font-semibold text-white">
+                            Notifications
+                          </Dialog.Title>
+                          <button
+                            type="button"
+                            className="text-white hover:text-purple-200"
+                            onClick={() => setShowAlerts(false)}
+                          >
+                            <X className="w-6 h-6" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="relative flex-1 px-4 py-6 sm:px-6">
+                        {alerts.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Bell className="mx-auto h-12 w-12 text-gray-400" />
+                            <h3 className="mt-2 text-sm font-medium text-gray-900">
+                              No notifications
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                              You're all caught up!
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {alerts.map((alert) => (
+                              <motion.div
+                                key={alert.id}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="rounded-lg border-l-4 border-purple-500 bg-purple-50 p-4"
+                              >
+                                <h3 className="text-lg font-medium text-purple-800">
+                                  {alert.title}
+                                </h3>
+                                <p className="mt-2 text-sm text-purple-700">
+                                  {alert.message}
+                                </p>
+                              </motion.div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
+      {/* File Preview Modal */}
+      <Transition appear show={!!selectedFile} as={Fragment}>
+        <Dialog
+          as="div"
+          className="relative z-50"
+          onClose={() => {
+            setSelectedFile(null);
+            setFileContent(null);
+          }}
+        >
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black bg-opacity-25" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white p-6 shadow-xl transition-all">
+                  <div className="flex justify-between items-center mb-4">
+                    <Dialog.Title className="text-lg font-medium text-gray-900">
+                      {selectedFile?.file}
+                    </Dialog.Title>
+                    <button
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setFileContent(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-500"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                  <div className="mt-4">
+                    {fileContent?.type === "image" && (
+                      <img
+                        src={fileContent.content}
+                        alt="Preview"
+                        className="max-w-full h-auto rounded-lg"
+                      />
+                    )}
+                    {fileContent?.type === "pdf" && (
+                      <iframe
+                        src={fileContent.content}
+                        title="PDF Viewer"
+                        className="w-full h-96 rounded-lg"
+                      />
+                    )}
+                    {fileContent?.type === "download" && (
+                      <div className="text-center py-8">
+                        <p className="text-gray-600 mb-4">
+                          This file type cannot be previewed in the browser
+                        </p>
+                        <a
+                          href={fileContent.content}
+                          download={fileContent.fileName}
+                          className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          Download File
+                        </a>
+                      </div>
+                    )}
+                    {fileContent?.type === "error" && (
+                      <p className="text-red-500 text-center py-4">
+                        {fileContent.content}
+                      </p>
+                    )}
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
     </div>
   );
 }

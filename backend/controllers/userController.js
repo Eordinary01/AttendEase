@@ -76,7 +76,32 @@ const login = async (req, res) => {
     }
 };
 
+const verifyToken = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.userId)
+            .select("-password") 
+            .populate('section');
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            section: user.section,
+            rollNo: user.rollNo
+        });
+    } catch (error) {
+        console.error("Verification error:", error);
+        res.status(500).json({ message: "Error while verifying token" });
+    }
+};
+
 module.exports = {
     register,
-    login
+    login,
+    verifyToken
 };
