@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
-const auth = require("../middleware/auth")
+const {authenticateToken} = require("../middleware/auth")
 
 // Get users with optional section filter
-router.get("/users", auth, async (req, res) => {
+router.get("/users", authenticateToken, async (req, res) => {
   try {
     // Check if section query parameter exists
     const filter = {};
@@ -22,7 +22,7 @@ router.get("/users", auth, async (req, res) => {
 });
 
 // Get specific user by ID
-router.get("/users/:id", auth, async (req, res) => {
+router.get("/users/:id", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.params.id, 'name section rollNo email role');
     if (!user) {

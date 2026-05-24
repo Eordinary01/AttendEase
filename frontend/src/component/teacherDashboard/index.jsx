@@ -68,12 +68,12 @@ export default function TeacherDashboard() {
         };
 
         // Fetch pending tickets - UPDATED ENDPOINT
-        const ticketsResponse = await axios.get(`${API_URL}/api/tickets/teacher/pending`, config);
+        const ticketsResponse = await axios.get(`${API_URL}/tickets/teacher/pending`, config);
         console.log("✅ Teacher tickets response:", ticketsResponse.data);
         setTickets(Array.isArray(ticketsResponse.data?.tickets) ? ticketsResponse.data.tickets : []);
 
         // Fetch verification stats - NEW ENDPOINT
-        const statsResponse = await axios.get(`${API_URL}/api/tickets/teacher/stats`, config);
+        const statsResponse = await axios.get(`${API_URL}/tickets/teacher/stats`, config);
         console.log("✅ Teacher stats response:", statsResponse.data);
         setVerificationStats(statsResponse.data?.stats);
 

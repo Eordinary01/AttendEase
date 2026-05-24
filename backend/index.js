@@ -4,95 +4,110 @@ const cors = require('cors');
 require('dotenv').config();
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/attendance_dev', {
   useNewUrlParser: true,
   useUnifiedTopology: true
+}).then(() => {
+  console.log('✅ MongoDB Connected');
+}).catch(err => {
+  console.error('❌ MongoDB Connection Error:', err.message);
 });
 
 const app = express();
-app.use(express.json());
 
-app.get("/",(req,res)=>{
-  res.json({message:"Hello Dev!!Hi"});
-});
+// Basic security for development
+app.disable('x-powered-by'); // Hide Express version
 
-// Define CORS options
-// const corsOptions = {
-//   origin: (origin, callback) => {
-//     // Allow requests with no origin (like mobile apps or curl requests)
-//     if (!origin) return callback(null, true);
-//     if (['http://127.0.0.1:3000', 'http://localhost:3000','https://attendease-gajo.onrender.com/'].indexOf(origin) === -1) {
-//       return callback(new Error('Not allowed by CORS'));
-//     }
-//     return callback(null, true);
-//   },
-//   optionsSuccessStatus: 200
-// };
+// Increase JSON limit for file uploads
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// // Apply CORS middleware before defining any routes
-// app.use(cors(corsOptions));
+// CORS Configuration - Allow all in development
+app.use(cors({
+  origin: '*', // Allow all origins in development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 
-// // Enable pre-flight requests for all routes
-// app.options('*', cors(corsOptions));
-
-// // Debugging middleware to log the origin of requests
-// app.use((req, res, next) => {
-//   console.log('Request Origin:', req.headers.origin);
-//   next();
-// });
-
+// Request logging for development
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, OPTIONS, PUT, DELETE, PATCH"
-  );
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
 
-
-// Define CORS options
-const corsOptions = {
-  origin: ['https://attend-ease-kappa.vercel.app/','http://127.0.0.1:3000', 'http://localhost:3000', 'https://attend-ease-f.vercel.app', 'https://attend-ease-kappa.vercel.app/','http://127.0.0.1:8011/'],
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  credentials: true,
-  optionsSuccessStatus: 204
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Enable pre-flight requests for all routes
-app.options('*', cors(corsOptions));
-
-// Debugging middleware to log the origin of requests
-app.use((req, res, next) => {
-  // console.log('Request Origin:', req.headers.origin);
-  next();
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({ 
+    message: "Attendance Management API - Development",
+    version: "1.0.0",
+    status: "running",
+    environment: process.env.NODE_ENV || 'development',
+    endpoints: {
+      users: "/api/users",
+      tickets: "/api/tickets",
+      attendance: "/api/attendance",
+      subjects: "/api/subjects",
+      alerts: "/api/alerts",
+      calendar: "/api/calendar"
+    },
+    docs: "Check README.md for API documentation"
+  });
 });
 
 // Import and use routes
 const userRoute = require("./routes/userRoute");
-app.use("/api", userRoute);
-
+const adminRoute = require("./routes/adminRoute");
 const ticketRoute = require("./routes/ticketRoute");
-app.use("/api", ticketRoute);
 const alertRoute = require("./routes/alertRoute");
-app.use("/api",alertRoute);
-
 const attendanceRoute = require("./routes/attendanceRoute");
-app.use("/api",attendanceRoute);
-
 const calendarRoute = require("./routes/calendarRoute");
-app.use("/api",calendarRoute);
 const allUser = require("./routes/user");
-app.use("/api",allUser);
 const subjectRoute = require("./routes/subjectRoute");
-app.use("/api",subjectRoute);
+
+// Apply routes
+app.use("/api", userRoute);
+app.use("/api/admin", adminRoute);
+app.use("/api/tickets", ticketRoute);
+app.use("/api/alerts", alertRoute);
+app.use("/api/attendance", attendanceRoute);
+app.use("/api/calendar", calendarRoute);
+app.use("/api/users", allUser);
+app.use("/api/subjects", subjectRoute);
+
+// Simple error handler for development
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err.stack);
+  
+  res.status(err.status || 500).json({
+    error: 'Error',
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Cannot ${req.method} ${req.originalUrl}`
+  });
+});
+
 // Start the server
-const PORT = 8011;
-app.listen(PORT, function() {
-  console.log("Backend connected and running at " + PORT);
+const PORT = process.env.PORT || 8011;
+app.listen(PORT, () => {
+  console.log(`🚀 Development Server running on port ${PORT}`);
+  console.log(`📁 http://localhost:${PORT}`);
+  console.log(`📁 http://127.0.0.1:${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });

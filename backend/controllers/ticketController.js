@@ -1,171 +1,789 @@
-const Ticket = require('../models/Ticket');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const upload = require('../middleware/multer');
+const Ticket = require("../models/Ticket");
+const Attendance = require("../models/Attendance");
+const User = require("../models/User");
+const Subject = require("../models/Subject");
+const fs = require('fs').promises;
 const path = require('path');
-const fs = require('fs');
+const crypto = require('crypto');
 require('dotenv').config();
 
-const JWT_SECRET = process.env.JWT_SECRET;
+/**
+ * STUDENT CREATES ABSENCE PROOF TICKET
+ * Student submits proof of absence (medical cert, permission letter, etc.)
+ */
+const createAbsenceProofTicket = async (req, res) => {
+  const studentId = req.user._id;
+  const { subjectId, absentDate, reason, reasonDescription } = req.body;
 
-// Function to create a ticket
-const createTicket = async (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ message: err });
-    }
+  // Validation
+  if (!subjectId || !absentDate || !reason || !reasonDescription) {
+    return res.status(400).json({
+      message: 'subjectId, absentDate, reason, and reasonDescription are required'
+    });
+  }
 
-    const { document } = req.body;
-    const tokenString = req.headers.authorization;
-    const token = tokenString && tokenString.split(' ')[1];
+  if (reasonDescription.length < 10 || reasonDescription.length > 500) {
+    return res.status(400).json({
+      message: 'Reason description must be between 10 and 500 characters'
+    });
+  }
 
-    try {
-      // Verify the token and extract user information
-      const decoded = jwt.verify(token, JWT_SECRET);
+  const validReasons = ['medical', 'family-emergency', 'institutional-work', 'other'];
+  if (!validReasons.includes(reason)) {
+    return res.status(400).json({
+      message: `Reason must be one of: ${validReasons.join(', ')}`
+    });
+  }
 
-      // Find the user details using the userId from the token
-      const user = await User.findById(decoded.userId);
-
-      // Extract the file filename from the uploaded file
-      const file = req.file ? req.file.filename : null;
-
-      const newTicket = new Ticket({
-        rollNo: user.rollNo, // Use the logged-in user's rollNo
-        section: user.section, // Use the logged-in user's section
-        document,
-        file,
-        userId: user._id, // User ID from the decoded token
+  try {
+    // Verify student
+    const student = await User.findById(studentId);
+    if (!student || student.role !== 'student') {
+      return res.status(403).json({
+        message: 'Only students can create absence proof tickets'
       });
+    }
 
-      await newTicket.save();
+    // Verify subject exists
+    const subject = await Subject.findById(subjectId);
+    if (!subject) {
+      return res.status(404).json({
+        message: 'Subject not found'
+      });
+    }
 
-      res.status(201).json({ message: 'Ticket created successfully', ticket: newTicket });
-    } catch (error) {
-      if (error instanceof jwt.JsonWebTokenError) {
-        return res.status(401).json({ message: 'Invalid token' });
+    // Verify date is not in future
+    const dateObj = new Date(absentDate);
+    if (dateObj > new Date()) {
+      return res.status(400).json({
+        message: 'Cannot create proof ticket for future dates'
+      });
+    }
+
+    // Handle uploaded proof documents
+    const proofDocuments = [];
+    if (req.files && req.files.length > 0) {
+      if (req.files.length > 5) {
+        return res.status(400).json({
+          message: 'Maximum 5 documents allowed'
+        });
       }
-      console.error('Error creating ticket:', error);
-      res.status(500).json({ message: 'Internal server error', error: error.message });
-    }
-  });
-};
 
-// Function to get tickets
-const getTickets = async (req, res) => {
-  const tokenString = req.headers.authorization;
-  const token = tokenString && tokenString.split(" ")[1];
-
-  try {
-    // Verify the token and extract user information
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Check if the user is a teacher
-    const user = await User.findById(decoded.userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    let tickets;
-    if (user.role === "teacher") {
-      // Fetch all tickets for teachers
-      tickets = await Ticket.find();
+      req.files.forEach(file => {
+        // Generate unique file ID
+        const fileId = new require('mongoose').Types.ObjectId();
+        proofDocuments.push({
+          _id: fileId,
+          filename: file.filename,
+          originalName: file.originalname,
+          fileType: req.body.fileType || 'other',
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          uploadedAt: Date.now()
+        });
+      });
     } else {
-      // Fetch only the logged-in user's tickets
-      tickets = await Ticket.find({ userId: decoded.userId });
+      return res.status(400).json({
+        message: 'At least one proof document is required'
+      });
     }
 
-    res.status(200).json(tickets);
+    // Create ticket
+    const newTicket = new Ticket({
+      studentId: studentId,
+      student: {
+        name: student.name,
+        rollNo: student.rollNo,
+        section: student.section,
+        email: student.email
+      },
+      subjectId: subjectId,
+      subjectInfo: {
+        subjectCode: subject.subjectCode,
+        subjectName: subject.subjectName
+      },
+      absentDate: dateObj,
+      reason: reason,
+      reasonDescription: reasonDescription.trim(),
+      proofDocuments: proofDocuments,
+      status: 'open',
+      verificationStatus: 'pending'
+    });
+
+    await newTicket.save();
+
+    return res.status(201).json({
+      message: 'Absence proof ticket created successfully',
+      ticket: {
+        id: newTicket._id,
+        student: newTicket.student,
+        subject: newTicket.subjectInfo,
+        absentDate: newTicket.absentDate,
+        reason: newTicket.reason,
+        status: newTicket.status,
+        verificationStatus: newTicket.verificationStatus,
+        documentsCount: newTicket.proofDocuments.length,
+        createdAt: newTicket.createdAt
+      }
+    });
+
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ message: "Invalid token" });
-    }
-    console.error("Error fetching tickets:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    console.error('Error creating absence proof ticket:', error);
+    return res.status(500).json({
+      message: 'Error creating ticket',
+      error: error.message
+    });
   }
 };
 
-// Function to approve ticket
-const approveTicket = async (req, res) => {
-  const { ticketId } = req.params;
+/**
+ * TEACHER VIEWS PENDING ABSENCE PROOF TICKETS
+ * Teacher sees tickets for their subject that need verification
+ */
+const getPendingAbsenceTickets = async (req, res) => {
+  const teacherId = req.user._id;
+  const { status, subjectId } = req.query;
 
   try {
-    // Update the ticket response to 'Approved'
-    const updatedTicket = await Ticket.findByIdAndUpdate(
-      ticketId,
-      { response: "Approved" },
-      { new: true }
-    );
-
-    if (!updatedTicket) {
-      return res.status(404).json({ message: "Ticket not found" });
+    // Verify user is teacher
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(403).json({
+        message: 'Only teachers can view absence proof tickets'
+      });
     }
 
-    res.status(200).json({ message: "Ticket approved", ticket: updatedTicket });
+    // Get subjects taught by this teacher
+    const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
+
+    let query = {
+      subjectId: { $in: teacherSubjects },
+      verificationStatus: { $in: ['pending', 'needs-more-info'] }
+    };
+
+    // Filter by specific subject if provided
+    if (subjectId) {
+      if (!teacherSubjects.includes(subjectId)) {
+        return res.status(403).json({
+          message: 'You are not assigned to teach this subject'
+        });
+      }
+      query.subjectId = subjectId;
+    }
+
+    // Filter by status if provided
+    if (status && ['pending', 'needs-more-info'].includes(status)) {
+      query.verificationStatus = status;
+    }
+
+    // Fetch tickets
+    const tickets = await Ticket.find(query)
+      .populate('studentId', 'name rollNo section email')
+      .populate('subjectId', 'subjectCode subjectName')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      message: 'Pending absence proof tickets retrieved',
+      count: tickets.length,
+      tickets: tickets.map(ticket => ({
+        id: ticket._id,
+        student: ticket.student,
+        subject: ticket.subjectInfo,
+        absentDate: ticket.absentDate,
+        reason: ticket.reason,
+        reasonDescription: ticket.reasonDescription,
+        documentsCount: ticket.proofDocuments.length,
+        status: ticket.status,
+        verificationStatus: ticket.verificationStatus,
+        createdAt: ticket.createdAt
+      }))
+    });
+
   } catch (error) {
-    console.error("Error approving ticket:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    console.error('Error fetching tickets:', error);
+    return res.status(500).json({
+      message: 'Error fetching tickets',
+      error: error.message
+    });
   }
 };
 
-// Function to reject ticket
-const rejectTicket = async (req, res) => {
+/**
+ * TEACHER VERIFIES ABSENCE PROOF
+ * Teacher verifies the document and approves/rejects the absence
+ */
+const verifyAbsenceProof = async (req, res) => {
   const { ticketId } = req.params;
+  const { verificationStatus, verificationRemarks } = req.body;
+  const teacherId = req.user._id;
+
+  // Validation
+  const validStatuses = ['verified', 'rejected', 'needs-more-info'];
+  if (!validStatuses.includes(verificationStatus)) {
+    return res.status(400).json({
+      message: `Verification status must be one of: ${validStatuses.join(', ')}`
+    });
+  }
 
   try {
-    // Update the ticket response to 'Rejected'
-    const updatedTicket = await Ticket.findByIdAndUpdate(
-      ticketId,
-      { response: "Rejected" },
-      { new: true }
-    );
-
-    if (!updatedTicket) {
-      return res.status(404).json({ message: "Ticket not found" });
+    // Verify user is teacher
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(403).json({
+        message: 'Only teachers can verify absence proofs'
+      });
     }
 
-    res.status(200).json({ message: "Ticket rejected", ticket: updatedTicket });
-  } catch (error) {
-    console.error("Error rejecting ticket:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
-  }
-};
-
-const getUploadedFile = async (req, res) => {
-  const { ticketId } = req.params;
-  const userId = req.user.id; // Assuming the authenticateToken middleware adds user info to req
-
-  try {
+    // Find ticket
     const ticket = await Ticket.findById(ticketId);
-
-    if (!ticket || !ticket.file) {
-      return res.status(404).json({ message: "Ticket not found or file not uploaded" });
+    if (!ticket) {
+      return res.status(404).json({
+        message: 'Ticket not found'
+      });
     }
 
-    // Check if the user is authorized to access this file
-    if (ticket.userId.toString() !== userId && req.user.role !== 'teacher') {
-      return res.status(403).json({ message: "Unauthorized access to this file" });
+    // Check if teacher is assigned to this subject
+    const isAssigned = teacher.assignedSubjects?.some(
+      assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
+    );
+
+    if (!isAssigned) {
+      return res.status(403).json({
+        message: 'You are not assigned to teach this subject'
+      });
     }
 
-    // Construct the file path
-    const filePath = path.join(__dirname, '..', 'uploads', ticket.file);
+    // Update verification
+    ticket.verificationStatus = verificationStatus;
+    ticket.verificationRemarks = verificationRemarks || null;
+    ticket.verifiedByTeacherId = teacherId;
+    ticket.verifiedTeacher = {
+      name: teacher.name,
+      email: teacher.email
+    };
+    ticket.verifiedAt = Date.now();
 
-    // Check if the file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: "File not found" });
+    // Update overall status
+    if (verificationStatus === 'verified') {
+      ticket.status = 'verified';
+    } else if (verificationStatus === 'rejected') {
+      ticket.status = 'rejected';
+    } else if (verificationStatus === 'needs-more-info') {
+      ticket.status = 'under-review';
     }
 
-    // Stream the file for download
-    res.sendFile(filePath);
+    await ticket.save();
+
+    return res.status(200).json({
+      message: 'Absence proof verified successfully',
+      ticket: {
+        id: ticket._id,
+        student: ticket.student,
+        verificationStatus: ticket.verificationStatus,
+        status: ticket.status,
+        verifiedAt: ticket.verifiedAt
+      }
+    });
+
   } catch (error) {
-    console.error("Error fetching uploaded file:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    console.error('Error verifying proof:', error);
+    return res.status(500).json({
+      message: 'Error verifying proof',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * TEACHER MARKS ATTENDANCE AFTER VERIFICATION
+ * After verifying proof, teacher marks student as present for that date
+ */
+const markAttendanceAfterVerification = async (req, res) => {
+  const { ticketId } = req.params;
+  const teacherId = req.user._id;
+
+  try {
+    // Verify user is teacher
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(403).json({
+        message: 'Only teachers can mark attendance'
+      });
+    }
+
+    // Find ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({
+        message: 'Ticket not found'
+      });
+    }
+
+    // Can only mark after verification
+    if (ticket.verificationStatus !== 'verified') {
+      return res.status(400).json({
+        message: 'Can only mark attendance for verified proofs'
+      });
+    }
+
+    // Check if teacher is assigned to this subject
+    const isAssigned = teacher.assignedSubjects?.some(
+      assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
+    );
+
+    if (!isAssigned) {
+      return res.status(403).json({
+        message: 'You are not assigned to teach this subject'
+      });
+    }
+
+    // Find or create attendance record
+    let attendance = await Attendance.findOne({
+      studentId: ticket.studentId,
+      subjectId: ticket.subjectId,
+      date: ticket.absentDate
+    });
+
+    if (attendance) {
+      // Update existing record
+      attendance.status = 'present';
+      attendance.remarks = `Marked present based on absence proof verification (Ticket: ${ticket._id})`;
+    } else {
+      // Create new attendance record
+      const subject = await Subject.findById(ticket.subjectId);
+      attendance = new Attendance({
+        studentId: ticket.studentId,
+        subjectId: ticket.subjectId,
+        subject: {
+          subjectCode: subject.subjectCode,
+          subjectName: subject.subjectName
+        },
+        teacherId: teacherId,
+        section: ticket.student.section,
+        date: ticket.absentDate,
+        status: 'present',
+        remarks: `Marked present based on absence proof verification (Ticket: ${ticket._id})`,
+        semester: subject.semester,
+        createdBy: teacherId
+      });
+    }
+
+    await attendance.save();
+
+    // Update ticket
+    ticket.attendanceMarked = true;
+    ticket.attendanceMarkedBy = teacherId;
+    ticket.attendanceMarkedAt = Date.now();
+    ticket.status = 'attendance-updated';
+    await ticket.save();
+
+    return res.status(200).json({
+      message: 'Attendance marked successfully based on verified proof',
+      ticket: {
+        id: ticket._id,
+        student: ticket.student,
+        subject: ticket.subjectInfo,
+        absentDate: ticket.absentDate,
+        attendanceMarked: true,
+        attendanceMarkedAt: ticket.attendanceMarkedAt,
+        status: ticket.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Error marking attendance:', error);
+    return res.status(500).json({
+      message: 'Error marking attendance',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * STUDENT VIEWS THEIR ABSENCE PROOF TICKETS
+ * Student can see the status of their submitted proofs
+ */
+const getStudentAbsenceTickets = async (req, res) => {
+  const studentId = req.user._id;
+
+  try {
+    // Verify user is student
+    const student = await User.findById(studentId);
+    if (!student || student.role !== 'student') {
+      return res.status(403).json({
+        message: 'Only students can view their tickets'
+      });
+    }
+
+    // Fetch student's tickets
+    const tickets = await Ticket.find({ studentId: studentId })
+      .populate('subjectId', 'subjectCode subjectName')
+      .populate('verifiedByTeacherId', 'name email')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      message: 'Student absence proof tickets retrieved',
+      count: tickets.length,
+      tickets: tickets.map(ticket => ({
+        id: ticket._id,
+        subject: ticket.subjectInfo,
+        absentDate: ticket.absentDate,
+        reason: ticket.reason,
+        status: ticket.status,
+        verificationStatus: ticket.verificationStatus,
+        verificationRemarks: ticket.verificationRemarks,
+        attendanceMarked: ticket.attendanceMarked,
+        documents: ticket.proofDocuments.map(doc => ({
+          id: doc._id,
+          originalName: doc.originalName,
+          fileType: doc.fileType,
+          fileSize: doc.fileSize
+        })),
+        createdAt: ticket.createdAt,
+        verifiedAt: ticket.verifiedAt,
+        attendanceMarkedAt: ticket.attendanceMarkedAt
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error fetching student tickets:', error);
+    return res.status(500).json({
+      message: 'Error fetching tickets',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * TEACHER ADDS INTERNAL NOTES
+ * Teacher can add notes about the proof verification
+ */
+const addVerificationNote = async (req, res) => {
+  const { ticketId } = req.params;
+  const { content } = req.body;
+  const teacherId = req.user._id;
+
+  if (!content || content.trim().length === 0) {
+    return res.status(400).json({
+      message: 'Note content cannot be empty'
+    });
+  }
+
+  try {
+    // Verify user is teacher
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(403).json({
+        message: 'Only teachers can add notes'
+      });
+    }
+
+    // Find and update ticket
+    const ticket = await Ticket.findByIdAndUpdate(
+      ticketId,
+      {
+        $push: {
+          internalNotes: {
+            noteBy: teacherId,
+            noteByName: teacher.name,
+            content: content.trim(),
+            addedAt: Date.now()
+          }
+        },
+        updatedAt: Date.now()
+      },
+      { new: true }
+    );
+
+    if (!ticket) {
+      return res.status(404).json({
+        message: 'Ticket not found'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Note added successfully',
+      note: ticket.internalNotes[ticket.internalNotes.length - 1]
+    });
+
+  } catch (error) {
+    console.error('Error adding note:', error);
+    return res.status(500).json({
+      message: 'Error adding note',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET TICKET STATISTICS
+ * View statistics on absence proof verification
+ */
+const getVerificationStats = async (req, res) => {
+  const teacherId = req.user._id;
+
+  try {
+    // Verify user is teacher
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(403).json({
+        message: 'Only teachers can view statistics'
+      });
+    }
+
+    // Get teacher's assigned subjects
+    const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
+
+    // Get statistics for teacher's subjects
+    const stats = await Ticket.aggregate([
+      { 
+        $match: { 
+          subjectId: { $in: teacherSubjects },
+          verifiedByTeacherId: new (require('mongoose').Types.ObjectId)(teacherId)
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          totalTickets: { $sum: 1 },
+          pendingTickets: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'pending'] }, 1, 0] }
+          },
+          verifiedTickets: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'verified'] }, 1, 0] }
+          },
+          rejectedTickets: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'rejected'] }, 1, 0] }
+          },
+          needsMoreInfoTickets: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'needs-more-info'] }, 1, 0] }
+          },
+          attendanceMarkedCount: {
+            $sum: { $cond: [{ $eq: ['$attendanceMarked', true] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      message: 'Verification statistics retrieved',
+      stats: stats.length > 0 ? stats[0] : {
+        totalTickets: 0,
+        pendingTickets: 0,
+        verifiedTickets: 0,
+        rejectedTickets: 0,
+        needsMoreInfoTickets: 0,
+        attendanceMarkedCount: 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return res.status(500).json({
+      message: 'Error fetching statistics',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET UPLOADED FILE - SECURE FILE ACCESS
+ * Access uploaded proof documents with authentication
+ */
+const getUploadedFile = async (req, res) => {
+  const { ticketId, fileId } = req.params;
+  const userId = req.user._id;
+
+  try {
+    // Find ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({
+        message: 'Ticket not found'
+      });
+    }
+
+    // Find specific file
+    const file = ticket.proofDocuments.id(fileId);
+    if (!file) {
+      return res.status(404).json({
+        message: 'File not found'
+      });
+    }
+
+    // Verify user permissions
+    const user = await User.findById(userId);
+    let hasPermission = false;
+
+    // Student can access their own files
+    if (user.role === 'student' && ticket.studentId.toString() === userId) {
+      hasPermission = true;
+    }
+    
+    // Teacher can access if assigned to subject
+    if (user.role === 'teacher') {
+      const isAssigned = user.assignedSubjects?.some(
+        assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
+      );
+      if (isAssigned) {
+        hasPermission = true;
+      }
+    }
+
+    // Admin can access all
+    if (user.role === 'admin') {
+      hasPermission = true;
+    }
+
+    if (!hasPermission) {
+      return res.status(403).json({
+        message: 'Access denied to this file'
+      });
+    }
+
+    // Check if file exists
+    const filePath = path.join(__dirname, '../uploads/', file.filename);
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      return res.status(404).json({
+        message: 'File not found on server'
+      });
+    }
+
+    // Set security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName)}"`);
+    
+    // Determine content type
+    const ext = path.extname(file.originalName).toLowerCase();
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    };
+
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+
+    // Stream file
+    const fileStream = require('fs').createReadStream(filePath);
+    fileStream.pipe(res);
+
+  } catch (error) {
+    console.error('Error accessing file:', error);
+    return res.status(500).json({
+      message: 'Error accessing file',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET TICKET DETAILS
+ * Get detailed information about a specific ticket
+ */
+const getTicketDetails = async (req, res) => {
+  const { ticketId } = req.params;
+  const userId = req.user._id;
+
+  try {
+    // Find ticket
+    const ticket = await Ticket.findById(ticketId)
+      .populate('subjectId', 'subjectCode subjectName')
+      .populate('verifiedByTeacherId', 'name email')
+      .populate('studentId', 'name rollNo section email');
+
+    if (!ticket) {
+      return res.status(404).json({
+        message: 'Ticket not found'
+      });
+    }
+
+    // Verify user permissions
+    const user = await User.findById(userId);
+    let hasPermission = false;
+
+    // Student can view their own tickets
+    if (user.role === 'student' && ticket.studentId._id.toString() === userId) {
+      hasPermission = true;
+    }
+    
+    // Teacher can view tickets for subjects they teach
+    if (user.role === 'teacher') {
+      const isAssigned = user.assignedSubjects?.some(
+        assigned => assigned.subjectId.toString() === ticket.subjectId._id.toString()
+      );
+      if (isAssigned) {
+        hasPermission = true;
+      }
+    }
+
+    // Admin can view all tickets
+    if (user.role === 'admin') {
+      hasPermission = true;
+    }
+
+    if (!hasPermission) {
+      return res.status(403).json({
+        message: 'Access denied to view this ticket'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Ticket details retrieved',
+      ticket: {
+        id: ticket._id,
+        student: {
+          name: ticket.studentId.name,
+          rollNo: ticket.studentId.rollNo,
+          section: ticket.studentId.section,
+          email: ticket.studentId.email
+        },
+        subject: {
+          subjectCode: ticket.subjectId.subjectCode,
+          subjectName: ticket.subjectId.subjectName
+        },
+        absentDate: ticket.absentDate,
+        reason: ticket.reason,
+        reasonDescription: ticket.reasonDescription,
+        proofDocuments: ticket.proofDocuments,
+        status: ticket.status,
+        verificationStatus: ticket.verificationStatus,
+        verificationRemarks: ticket.verificationRemarks,
+        verifiedBy: ticket.verifiedByTeacherId ? {
+          name: ticket.verifiedByTeacherId.name,
+          email: ticket.verifiedByTeacherId.email
+        } : null,
+        verifiedAt: ticket.verifiedAt,
+        attendanceMarked: ticket.attendanceMarked,
+        attendanceMarkedAt: ticket.attendanceMarkedAt,
+        internalNotes: ticket.internalNotes,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching ticket details:', error);
+    return res.status(500).json({
+      message: 'Error fetching ticket details',
+      error: error.message
+    });
   }
 };
 
 module.exports = {
-  createTicket,
-  getTickets,
-  approveTicket,
-  rejectTicket,
-  getUploadedFile
+  createAbsenceProofTicket,
+  getPendingAbsenceTickets,
+  verifyAbsenceProof,
+  markAttendanceAfterVerification,
+  getStudentAbsenceTickets,
+  addVerificationNote,
+  getVerificationStats,
+  getUploadedFile,
+  getTicketDetails
 };

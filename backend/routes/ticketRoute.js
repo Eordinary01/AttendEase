@@ -1,24 +1,77 @@
 const express = require('express');
-const { createTicket, getTickets, approveTicket, rejectTicket,getUploadedFile } = require('../controllers/ticketController');
-const authenticateToken = require('../middleware/auth');
+const router = express.Router();
+const {authenticateToken} = require('../middleware/auth');
+const checkRole = require('../middleware/checkRole');
+const upload = require('../middleware/multer');
 
-const ticketRoute = express.Router();
+const {
+  createAbsenceProofTicket,
+  getPendingAbsenceTickets,
+  verifyAbsenceProof,
+  markAttendanceAfterVerification,
+  getStudentAbsenceTickets,
+  addVerificationNote,
+  getVerificationStats,
+  getUploadedFile,
+  getTicketDetails
+} = require('../controllers/ticketController');
 
+// Student routes
+router.post('/',
+  authenticateToken,
+  checkRole('student'),
+  upload.array('files', 5),
+  createAbsenceProofTicket
+);
 
+router.get('/student',
+  authenticateToken,
+  checkRole('student'),
+  getStudentAbsenceTickets
+);
 
-// Route for creating a new ticket (requires authentication)
-ticketRoute.post('/tickets', authenticateToken, createTicket);
+// Teacher routes
+router.get('/teacher/pending',
+  authenticateToken,
+  checkRole('teacher'),
+  getPendingAbsenceTickets
+);
 
-// Route for getting all tickets (requires authentication)
-ticketRoute.get('/tickets', authenticateToken, getTickets);
+router.put('/:ticketId/verify',
+  authenticateToken,
+  checkRole('teacher'),
+  verifyAbsenceProof
+);
 
-// Route for approving a ticket (requires authentication)
-ticketRoute.put('/tickets/:ticketId/approve', authenticateToken, approveTicket);
+router.post('/:ticketId/mark-attendance',
+  authenticateToken,
+  checkRole('teacher'),
+  markAttendanceAfterVerification
+);
 
-// Route for rejecting a ticket (requires authentication)
-ticketRoute.put('/tickets/:ticketId/reject', authenticateToken, rejectTicket);
-    
-ticketRoute.get('/tickets/:ticketId/file', authenticateToken,getUploadedFile);
+router.post('/:ticketId/notes',
+  authenticateToken,
+  checkRole('teacher'),
+  addVerificationNote
+);
 
+router.get('/teacher/stats',
+  authenticateToken,
+  checkRole('teacher'),
+  getVerificationStats
+);
 
-module.exports = ticketRoute;
+// Shared routes
+router.get('/:ticketId',
+  authenticateToken,
+  checkRole('student', 'teacher', 'admin'),
+  getTicketDetails
+);
+
+router.get('/:ticketId/files/:fileId',
+  authenticateToken,
+  checkRole('student', 'teacher', 'admin'),
+  getUploadedFile
+);
+
+module.exports = router;

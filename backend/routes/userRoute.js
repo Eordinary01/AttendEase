@@ -1,15 +1,36 @@
 const express = require("express");
-const user_route= express();
-const authenticateToken = require('../middleware/auth');
+const authRoute = express.Router();
+const {authenticateToken} = require('../middleware/auth');
+const {
+  registerStudent,
+  registerTeacherFirstLogin,
+  login,
+  verifyToken,
+  changePassword
+} = require("../controllers/userController");
+
+/**
+ * STUDENT ROUTES
+ */
+
+// Student Registration with Enrollment Verification
+authRoute.post('/register/student', registerStudent);
+
+/**
+ * TEACHER ROUTES
+ */
+
+// Teacher First Login (changes temp password)
+authRoute.post('/register/teacher/first-login', registerTeacherFirstLogin);
 
 
+// Login for all users (student, teacher, admin)
+authRoute.post('/login', login);
 
+// Verify token and get user details
+authRoute.get('/verify', authenticateToken, verifyToken);
 
-const{register,login,verifyToken} =  require("../controllers/userController")
+// Change password (for any logged-in user)
+authRoute.post('/change-password', authenticateToken, changePassword);
 
-user_route.post('/register',register);
-user_route.post('/login',login);
-
-user_route.get('/verify',authenticateToken,verifyToken );
-
-module.exports = user_route;
+module.exports = authRoute;
