@@ -25,6 +25,7 @@ router.get("/users", authenticateToken, async (req, res) => {
 router.get("/users/:id", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.params.id, 'name section rollNo email role');
+    console.log("Fetched user:", user);
     if (!user) {
       return res.status(404).json({ message: "User not found.." });
     }

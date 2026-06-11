@@ -191,7 +191,7 @@ export default function TeacherDashboard() {
     try {
       setIsLoading(true);
       const response = await axios.post(
-        `${API_URL}/api/alerts`,
+        `${API_URL}/alerts/alerts`,
         { message: alertMessage },
         { 
           headers: { 

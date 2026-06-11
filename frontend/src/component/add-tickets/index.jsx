@@ -1,3 +1,4 @@
+// src/components/Ticket.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,16 +12,28 @@ import {
   IdCard,
   Upload,
   FileText,
-  X
+  X,
+  Calendar,
+  Info,
+  Loader2
 } from "lucide-react";
+import axios from "axios";
 
 const API_URL = process.env.REACT_APP_API_URL;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg', 
+  'image/jpg', 
+  'image/png', 
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+];
 
-const InputField = ({ id, icon: Icon, label, value, onChange, disabled }) => (
+const InputField = ({ id, icon: Icon, label, value, onChange, disabled, required = false }) => (
   <div className="flex-1">
     <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-1">
-      {label}
+      {label} {required && <span className="text-red-400">*</span>}
     </label>
     <div className="relative">
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -38,14 +51,41 @@ const InputField = ({ id, icon: Icon, label, value, onChange, disabled }) => (
         value={value}
         onChange={onChange}
         disabled={disabled}
+        required={required}
       />
     </div>
   </div>
 );
 
-const FileUploadArea = ({ file, setFile }) => {
+const FileUploadArea = ({ file, setFile, error, setError }) => {
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef(null);
+
+  const validateFile = (selectedFile) => {
+    if (!selectedFile) return false;
+    
+    if (!ALLOWED_FILE_TYPES.includes(selectedFile.type)) {
+      setError("Invalid file type. Please upload PDF, DOC, DOCX, or images (JPG, PNG)");
+      return false;
+    }
+    
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError("File size exceeds 5MB limit");
+      return false;
+    }
+    
+    setError(null);
+    return true;
+  };
+
+  const handleFileSelect = (selectedFile) => {
+    if (validateFile(selectedFile)) {
+      setFile(selectedFile);
+    } else {
+      setFile(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -57,35 +97,45 @@ const FileUploadArea = ({ file, setFile }) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files?.[0]) setFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files?.[0]) handleFileSelect(e.dataTransfer.files[0]);
   };
 
   return (
     <div
       className={`
         relative h-full min-h-[200px] rounded-lg border-2 border-dashed
-        transition-all duration-200
-        ${dragActive ? 'border-violet-500 bg-violet-500/10' : 'border-gray-600'}
+        transition-all duration-200 cursor-pointer
+        ${dragActive ? 'border-violet-500 bg-violet-500/10' : 'border-gray-600 hover:border-violet-400'}
+        ${error ? 'border-red-500' : ''}
       `}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
       onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
     >
       <input
         ref={inputRef}
         type="file"
         className="hidden"
-        onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
-        accept=".pdf,.doc,.docx"
+        onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
       />
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         {file ? (
           <div className="flex flex-col items-center gap-2">
             <FileText className="h-10 w-10 text-violet-500" />
-            <p className="text-sm text-gray-300">{file.name}</p>
+            <p className="text-sm text-gray-300 break-all max-w-[200px]">{file.name}</p>
+            <p className="text-xs text-gray-500">
+              {(file.size / 1024 / 1024).toFixed(2)} MB
+            </p>
             <button
-              onClick={() => setFile(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFile(null);
+                if (inputRef.current) inputRef.current.value = '';
+                setError(null);
+              }}
               className="flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
             >
               <X className="h-4 w-4" />
@@ -96,12 +146,10 @@ const FileUploadArea = ({ file, setFile }) => {
           <>
             <Upload className="h-10 w-10 text-violet-500 mb-2" />
             <p className="text-sm text-gray-300 mb-2">Drag and drop your file here, or</p>
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="text-violet-500 hover:text-violet-400 transition-colors"
-            >
-              Select a file
-            </button>
+            <p className="text-xs text-gray-500">Click to browse</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Supported: PDF, DOC, DOCX, JPG, PNG (Max 5MB)
+            </p>
           </>
         )}
       </div>
@@ -111,10 +159,14 @@ const FileUploadArea = ({ file, setFile }) => {
 
 export default function Ticket() {
   const navigate = useNavigate();
+  const [userData, setUserData] = useState({
+    name: "",
+    email: "",
+    section: "",
+    rollNo: "",
+    userId: ""
+  });
   const [formData, setFormData] = useState({
-    section: localStorage.getItem("section") || "",
-    rollNo: localStorage.getItem("rollNo") || "",
-    name: localStorage.getItem("name") || "",
     document: "",
   });
   const [file, setFile] = useState(null);
@@ -122,30 +174,69 @@ export default function Ticket() {
   const [disableSubmit, setDisableSubmit] = useState(false);
   const [responseStatus, setResponseStatus] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [fileError, setFileError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [lastSubmitTime, setLastSubmitTime] = useState(
-    localStorage.getItem("lastSubmitTime") || null
+    localStorage.getItem("lastTicketSubmitTime") || null
   );
 
-  useEffect(() => {
-    const localSection = localStorage.getItem("section") || "";
-    const localRollNo = localStorage.getItem("rollNo") || "";
-    const localName = localStorage.getItem("name") || "";
-    setFormData((prev) => ({
-      ...prev,
-      section: localSection,
-      rollNo: localRollNo,
-      name: localName,
-    }));
-  }, []);
+  const token = localStorage.getItem("token");
 
+  // Fetch user data from API
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userId = localStorage.getItem("userId");
+        if (!userId) {
+          throw new Error("User ID not found");
+        }
+
+        const response = await axios.get(`${API_URL}/users/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const user = response.data;
+        setUserData({
+          name: user.name || "",
+          email: user.email || "",
+          section: user.section || "",
+          rollNo: user.rollNo || "",
+          userId: user._id || userId
+        });
+
+        // Also store in localStorage for backup
+        localStorage.setItem("name", user.name || "");
+        localStorage.setItem("section", user.section || "");
+        localStorage.setItem("rollNo", user.rollNo || "");
+        
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        // Fallback to localStorage
+        setUserData({
+          name: localStorage.getItem("name") || "",
+          email: localStorage.getItem("userEmail") || "",
+          section: localStorage.getItem("section") || "",
+          rollNo: localStorage.getItem("rollNo") || "",
+          userId: localStorage.getItem("userId") || ""
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [token]);
+
+  // Check cooldown period
   useEffect(() => {
     if (lastSubmitTime) {
-      const elapsed = Date.now() - lastSubmitTime;
-      if (elapsed < 100000) {
+      const elapsed = Date.now() - parseInt(lastSubmitTime);
+      const cooldownPeriod = 100000; // 100 seconds
+      if (elapsed < cooldownPeriod) {
         setDisableSubmit(true);
         const timeout = setTimeout(() => {
           setDisableSubmit(false);
-        }, 100000 - elapsed);
+        }, cooldownPeriod - elapsed);
         return () => clearTimeout(timeout);
       }
     }
@@ -157,179 +248,287 @@ export default function Ticket() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!formData.document.trim()) {
+      setErrorMessage("Please provide document details");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
-  
+    setResponseStatus(null);
+
     try {
       const formDataToSend = new FormData();
       formDataToSend.append("document", formData.document);
-      formDataToSend.append("name", formData.name.toLowerCase());
+      
       if (file) {
-        formDataToSend.append("file", file);
+        formDataToSend.append("files", file);
       }
-  
+
       const response = await fetch(`${API_URL}/tickets`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${token}`,
         },
         body: formDataToSend,
       });
-  
+
       const data = await response.json();
-  
+
       if (response.ok) {
         setDisableSubmit(true);
         const currentTime = Date.now();
         setLastSubmitTime(currentTime);
-        localStorage.setItem("lastSubmitTime", currentTime);
+        localStorage.setItem("lastTicketSubmitTime", currentTime);
         setResponseStatus("success");
-  
+
+        // Reset form
+        setFormData({ document: "" });
+        setFile(null);
+        setFileError(null);
+
         setTimeout(() => {
           navigate("/dashboard");
         }, 2000);
-  
-        setFormData({ ...formData, document: "" });
-        setFile(null);
       } else {
         setResponseStatus("error");
         setErrorMessage(data.message || "An error occurred while creating the ticket.");
       }
     } catch (error) {
       console.error("Error creating ticket:", error);
-  
-      // Extract and stringify error details if error is an object
-      const errorDetails = error?.message || JSON.stringify(error);
       setResponseStatus("error");
-      setErrorMessage(`An error occurred: ${errorDetails}`);
+      setErrorMessage(error.message || "An error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
-  
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-violet-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 text-violet-500 animate-spin" />
+          <p className="text-gray-300">Loading your information...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-violet-900 p-6">
-      <div className="max-w-6xl mx-auto bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-violet-300">Create Support Ticket</h1>
-            {lastSubmitTime && (
-              <div className="flex items-center gap-2 text-sm text-gray-400 bg-gray-800/50 px-3 py-1.5 rounded-full">
-                <Clock className="h-4 w-4" />
-                <span>Last submitted: {new Date(parseInt(lastSubmitTime)).toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex gap-6">
-              <InputField
-                id="section"
-                icon={BookOpen}
-                label="Section"
-                value={formData.section}
-                onChange={handleChange}
-                disabled
-              />
-              <InputField
-                id="rollNo"
-                icon={IdCard}
-                label="Roll Number"
-                value={formData.rollNo}
-                onChange={handleChange}
-                disabled
-              />
-              <InputField
-                id="name"
-                icon={User}
-                label="Name"
-                value={formData.name}
-                onChange={handleChange}
-                disabled
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header Card */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl p-6 text-white">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Document Details
-                </label>
-                <textarea
-                  id="document"
-                  className={`
-                    w-full h-[200px] px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg
-                    text-gray-100 resize-none transition-all duration-200
-                    focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
-                    disabled:opacity-50 disabled:bg-gray-700
-                  `}
-                  value={formData.document}
-                  onChange={handleChange}
-                  disabled={disableSubmit}
-                  placeholder="Enter your document details here..."
-                />
+                <h1 className="text-2xl font-bold mb-2">Create Support Ticket</h1>
+                <p className="text-violet-100">
+                  Submit a request for absence proof or document verification
+                </p>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Upload File
-                </label>
-                <FileUploadArea file={file} setFile={setFile} />
-              </div>
-            </div>
-
-            <div className="flex justify-end items-center gap-4">
-              {errorMessage && (
-                <div className="flex items-center text-red-400 text-sm">
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  {errorMessage}
+              {lastSubmitTime && (
+                <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
+                  <Clock className="h-4 w-4" />
+                  <span className="text-sm">Last: {new Date(parseInt(lastSubmitTime)).toLocaleTimeString()}</span>
                 </div>
               )}
-              
-              <button
-                type="submit"
-                disabled={disableSubmit || isSubmitting}
-                className={`
-                  px-6 py-2 bg-violet-600 rounded-lg font-medium flex items-center gap-2
-                  transition-all duration-200
-                  hover:bg-violet-700
-                  disabled:opacity-50 disabled:hover:bg-violet-600
-                  focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900
-                `}
-                title={disableSubmit ? "Please wait before submitting another ticket" : "Submit ticket"}
-              >
-                {isSubmitting ? (
-                  <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Send className="h-4 w-4" />
-                    </motion.div>
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    Submit Ticket
-                  </>
-                )}
-              </button>
             </div>
+          </div>
+        </motion.div>
 
-            {responseStatus && (
-              <div className={`flex items-center gap-2 ${
-                responseStatus === "error" ? "text-red-400" : "text-green-400"
-              }`}>
-                {responseStatus === "error" ? 
-                  <AlertCircle className="h-4 w-4" /> : 
-                  <CheckCircle className="h-4 w-4" />
-                }
-                Status: {responseStatus}
+        {/* Main Form Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden"
+        >
+          <div className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* User Information Section */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-violet-300 flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Student Information
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <InputField
+                    id="name"
+                    icon={User}
+                    label="Full Name"
+                    value={userData.name}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <InputField
+                    id="email"
+                    icon={User}
+                    label="Email"
+                    value={userData.email}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <InputField
+                    id="section"
+                    icon={BookOpen}
+                    label="Section"
+                    value={userData.section}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <InputField
+                    id="rollNo"
+                    icon={IdCard}
+                    label="Roll Number"
+                    value={userData.rollNo}
+                    onChange={() => {}}
+                    disabled
+                  />
+                </div>
               </div>
-            )}
-          </form>
-        </div>
+
+              {/* Ticket Details Section */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-violet-300 flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Ticket Details
+                </h2>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Document Details */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Document Details <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      id="document"
+                      className={`
+                        w-full h-[200px] px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg
+                        text-gray-100 resize-none transition-all duration-200
+                        focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
+                        disabled:opacity-50 disabled:bg-gray-700
+                      `}
+                      value={formData.document}
+                      onChange={handleChange}
+                      disabled={disableSubmit}
+                      placeholder="Describe your issue or reason for absence in detail..."
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      <Info className="h-3 w-3 inline mr-1" />
+                      Please provide all necessary details for verification
+                    </p>
+                  </div>
+                  
+                  {/* File Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Supporting Documents
+                    </label>
+                    <FileUploadArea 
+                      file={file} 
+                      setFile={setFile} 
+                      error={fileError}
+                      setError={setFileError}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex flex-col sm:flex-row justify-end items-center gap-4 pt-4 border-t border-gray-700">
+                {errorMessage && (
+                  <div className="flex items-center text-red-400 text-sm bg-red-500/10 px-3 py-2 rounded-lg">
+                    <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+                
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/dashboard")}
+                    className="px-6 py-2 bg-gray-700 rounded-lg font-medium transition-all duration-200 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button
+                    type="submit"
+                    disabled={disableSubmit || isSubmitting}
+                    className={`
+                      px-6 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg font-medium flex items-center gap-2
+                      transition-all duration-200 hover:from-violet-700 hover:to-indigo-700
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900
+                    `}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Submit Ticket
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Response Status */}
+              <AnimatePresence>
+                {responseStatus && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className={`flex items-center gap-2 p-3 rounded-lg ${
+                      responseStatus === "error" 
+                        ? "bg-red-500/10 text-red-400 border border-red-500/20" 
+                        : "bg-green-500/10 text-green-400 border border-green-500/20"
+                    }`}
+                  >
+                    {responseStatus === "error" ? 
+                      <AlertCircle className="h-4 w-4" /> : 
+                      <CheckCircle className="h-4 w-4" />
+                    }
+                    <span>
+                      {responseStatus === "error" 
+                        ? "Failed to create ticket. Please try again." 
+                        : "Ticket created successfully! Redirecting..."
+                      }
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </form>
+          </div>
+        </motion.div>
+
+        {/* Info Card */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="mt-6 p-4 bg-gray-800/30 rounded-lg border border-gray-700"
+        >
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-violet-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-gray-400">
+              <p className="mb-1"><strong className="text-gray-300">Note:</strong> Your ticket will be reviewed by your teacher.</p>
+              <p>You can track the status of your tickets from your dashboard.</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
