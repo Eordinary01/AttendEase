@@ -112,6 +112,21 @@ const userSchema = mongoose.Schema(
     parentPhone: { type: String, trim: true },
     parentEmail: { type: String, lowercase: true, trim: true },
 
+    // Face recognition (ATTEND-AI integration — Phase 1)
+    // Stored descriptor from face-api.js (128-dim or 512-dim FloatArray,
+    // serialized as a plain number array). Null until a face is registered.
+    faceDescriptor: {
+      type: [Number],
+      default: null,
+    },
+    // URL to the registered face image (stored in backend/uploads/face-attendance/).
+    // Optional — kept for audit/debugging, not used for recognition at runtime.
+    faceImageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     // Academic structure (students)
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },
     courseName: { type: String, trim: true, default: "" },
