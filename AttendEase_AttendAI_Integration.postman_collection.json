@@ -1,0 +1,409 @@
+{
+  "info": {
+    "_postman_id": "8c3b4e2a-71de-4b71-9f93-9c4c7980ef55",
+    "name": "AttendEase ↔ ATTEND-AI Integration (Phase 1)",
+    "description": "Postman collection for testing the AttendEase ↔ ATTEND-AI Phase 1 Face Attendance bridge endpoints, Mobile Login, and Data Sync workflows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth & Setup",
+      "item": [
+        {
+          "name": "1.1 Teacher Subdomain Login (Auto-sets Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response && response.token) {",
+                  "    pm.collectionVariables.set('teacherToken', response.token);",
+                  "    console.log('✅ teacherToken set successfully in collection variables');",
+                  "}",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{teacherEmail}}\",\n  \"password\": \"{{teacherPassword}}\",\n  \"subdomain\": \"{{subdomain}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Logs in as a teacher using institutional subdomain (`{{subdomain}}`) + email + password. Automatically extracts & saves the JWT token to `{{teacherToken}}` for subsequent requests."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Student Mobile Login (by Roll Number)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response && response.token) {",
+                  "    pm.collectionVariables.set('studentToken', response.token);",
+                  "    console.log('✅ studentToken set successfully in collection variables');",
+                  "}",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enrollmentNumber\": \"{{studentEnrollmentNumber}}\",\n  \"password\": \"{{studentPassword}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"deviceFingerprint\": \"postman-test-client\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/mobile-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "mobile-login"
+              ]
+            },
+            "description": "Authenticates a student using enrollmentNumber (rollNo) + password + tenantId. Returns 15m JWT + 7d refresh token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Face Recognition Management",
+      "item": [
+        {
+          "name": "2.1 Register Student Face Descriptor & Photo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const response = pm.response.json();",
+                  "pm.test('Descriptor registered successfully', function () {",
+                  "    pm.expect(response.success).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{teacherToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "faceDescriptor",
+                  "value": "[0.045, -0.128, 0.542, 0.089, -0.321, 0.441, -0.012, 0.231, -0.119, 0.084]",
+                  "type": "text",
+                  "description": "FloatArray serialized as JSON string or numbers"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional/Required face image file (JPEG/PNG, max 5MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/faces/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "faces",
+                "register"
+              ]
+            },
+            "description": "Teacher/Admin endpoint to register a student's face descriptor array and audit photo."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Get Student Face Descriptor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const response = pm.response.json();",
+                  "pm.test('Returns descriptor array', function () {",
+                  "    pm.expect(response.faceDescriptor).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{teacherToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/faces/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "faces",
+                "{{studentId}}"
+              ]
+            },
+            "description": "Fetches a student's stored face descriptor and photo URL for offline mobile caching or audit."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Face-Verified Attendance Marking",
+      "item": [
+        {
+          "name": "3.1 Mark Attendance Batch (Face Verified)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 207', function () {",
+                  "    pm.expect([200, 207]).to.include(pm.response.code);",
+                  "});",
+                  "const response = pm.response.json();",
+                  "pm.test('Response contains marked list', function () {",
+                  "    pm.expect(response.marked).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{teacherToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timetableId\": \"{{timetableId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"verifiedStudents\": [\n    {\n      \"studentId\": \"{{studentId}}\",\n      \"confidence\": 0.93\n    }\n  ],\n  \"remarks\": \"Marked via ATTEND-AI Face Recognition\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/mark-face-detection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "attendance",
+                "mark-face-detection"
+              ]
+            },
+            "description": "Marks attendance for a batch of face-verified student IDs against a timetable slot with section and teacher verification."
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Mark Attendance Duplicate Test (Resilience)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const response = pm.response.json();",
+                  "pm.test('Student is skipped gracefully without 500 crash', function () {",
+                  "    pm.expect(response.skipped).to.include(pm.collectionVariables.get('studentId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{teacherToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timetableId\": \"{{timetableId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"verifiedStudents\": [\n    {\n      \"studentId\": \"{{studentId}}\",\n      \"confidence\": 0.93\n    }\n  ],\n  \"remarks\": \"Duplicate submission test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/mark-face-detection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "attendance",
+                "mark-face-detection"
+              ]
+            },
+            "description": "Re-submitting the exact same student session should gracefully put the student into the `skipped` list with a 200 OK status."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "subdomain",
+      "value": "dpit",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "6a8025dc363c10d25f11f04a",
+      "type": "string"
+    },
+    {
+      "key": "teacherEmail",
+      "value": "parthofficial169@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "teacherPassword",
+      "value": "Teacher@123",
+      "type": "string"
+    },
+    {
+      "key": "teacherToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentEnrollmentNumber",
+      "value": "EN001001",
+      "type": "string"
+    },
+    {
+      "key": "studentPassword",
+      "value": "Student@123",
+      "type": "string"
+    },
+    {
+      "key": "studentToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "6a81bbf0537cc3d8aa542c35",
+      "type": "string"
+    },
+    {
+      "key": "subjectId",
+      "value": "6a803729cb8e6837bfa35923",
+      "type": "string"
+    },
+    {
+      "key": "timetableId",
+      "value": "6a8073dc8e46981537b5e1d6",
+      "type": "string"
+    }
+  ]
+}

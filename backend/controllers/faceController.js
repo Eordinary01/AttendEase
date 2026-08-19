@@ -23,7 +23,7 @@ try {
 // POST /api/faces/register — register a student's face descriptor
 // ============================================================
 const registerFace = async (req, res) => {
-  const { studentId, faceDescriptor } = req.body;
+  let { studentId, faceDescriptor } = req.body;
   const tenantId = req.user.tenantId;
   const requesterId = req.user._id;
   const requesterRole = req.user.role;
@@ -36,6 +36,20 @@ const registerFace = async (req, res) => {
     });
   }
 
+  // If sent via multipart/form-data, faceDescriptor is received as a string
+  if (typeof faceDescriptor === "string") {
+    try {
+      faceDescriptor = JSON.parse(faceDescriptor);
+    } catch (e) {
+      if (faceDescriptor.includes(",")) {
+        faceDescriptor = faceDescriptor
+          .split(",")
+          .map((n) => parseFloat(n.trim()))
+          .filter((n) => !isNaN(n));
+      }
+    }
+  }
+
   if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length === 0) {
     return res.status(400).json({
       success: false,
@@ -43,15 +57,18 @@ const registerFace = async (req, res) => {
     });
   }
 
-  // Validate that every element is a finite number
+  // Validate and cast every element to a finite number
   for (let i = 0; i < faceDescriptor.length; i++) {
-    if (typeof faceDescriptor[i] !== "number" || !isFinite(faceDescriptor[i])) {
+    const num = typeof faceDescriptor[i] === "number" ? faceDescriptor[i] : Number(faceDescriptor[i]);
+    if (!isFinite(num)) {
       return res.status(400).json({
         success: false,
         message: `faceDescriptor[${i}] is not a valid number`,
       });
     }
+    faceDescriptor[i] = num;
   }
+
 
   // --- Role + tenant check ---
   if (requesterRole !== "teacher" && requesterRole !== "admin" && requesterRole !== "super_admin") {
@@ -192,7 +209,7 @@ const getFaceDescriptor = async (req, res) => {
       role: "student",
       isActive: true,
       isDeleted: false,
-    }).select("name rollNo section faceDescriptor faceImageUrl createdAt");
+    }).select("name rollNo section tenantId faceDescriptor faceImageUrl createdAt");
   } catch (err) {
     logger.error("getFaceDescriptor: error fetching student", { studentId, err: err?.message });
     return res.status(500).json({
@@ -208,7 +225,7 @@ const getFaceDescriptor = async (req, res) => {
     });
   }
 
-  if (requesterRole !== "super_admin" && student.tenantId.toString() !== tenantId.toString()) {
+  if (requesterRole !== "super_admin" && student.tenantId && student.tenantId.toString() !== tenantId.toString()) {
     return res.status(403).json({
       success: false,
       message: "Cross-tenant access denied",
@@ -522,7 +539,23 @@ const markFaceDetection = async (req, res) => {
   // --- Recalculate attendance summaries for affected students ---
   if (marked.length > 0) {
     try {
-      await User.bulkUpdateAttendance(marked, tenantId);
+      for (const sId of marked) {
+        // 1. Update running stats on Attendance records
+        if (typeof Attendance.updateStudentTotals === "function") {
+          await Attendance.updateStudentTotals(sId, subjectId, tenantId);
+        }
+
+        // 2. Update summary on Student User model
+        const studentUser = await User.findOne({
+          _id: sId,
+          tenantId: tenantId,
+          role: "student",
+        });
+        if (studentUser && typeof studentUser.updateAttendanceSummary === "function") {
+          await studentUser.updateAttendanceSummary();
+        }
+      }
+
       logger.info("markFaceDetection: attendance summaries recalculated", {
         markedCount: marked.length,
         classSessionId,

@@ -185,10 +185,32 @@ const disable2FA = [
     .withMessage('Password must be a string'),
 ];
 
+const mobileLogin = [
+  body('enrollmentNumber')
+    .notEmpty()
+    .withMessage('Enrollment number is required')
+    .isString()
+    .trim(),
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required')
+    .isString(),
+  body('tenantId')
+    .notEmpty()
+    .withMessage('Tenant ID is required')
+    .isMongoId()
+    .withMessage('Invalid tenantId format'),
+  body('deviceFingerprint')
+    .optional()
+    .isString()
+    .trim(),
+];
+
 module.exports = {
   login,
   superAdminLogin,
   parentLogin,
+  mobileLogin,
   registerStudent,
   registerTeacherFirstLogin,
   changePassword,

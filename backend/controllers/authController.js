@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require("../models/User");
 const Enrollment = require("../models/Enrollment");
 const Tenant = require("../models/Tenant");
@@ -26,14 +27,14 @@ const login = async (req, res) => {
   logger.debug('Login attempt', { email, subdomain });
 
   if (!email || !password) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'Email and password are required' 
+      message: 'Email and password are required'
     });
   }
 
   email = email.toLowerCase().trim();
-  
+
   // Get tenant from subdomain (if provided)
   let tenant = null;
   let tenantId = null;
@@ -46,14 +47,14 @@ const login = async (req, res) => {
   }
 
   if (subdomain) {
-    tenant = await Tenant.findOne({ 
+    tenant = await Tenant.findOne({
       $or: [
         { subdomain: subdomain.toLowerCase() },
         { domain: subdomain.toLowerCase() }
       ],
-      isActive: true 
+      isActive: true
     }).lean();
-    
+
     if (!tenant) {
       return res.status(404).json({
         success: false,
@@ -69,31 +70,31 @@ const login = async (req, res) => {
     if (tenantId) {
       query.tenantId = tenantId;
     }
-    
+
     const user = await User.findOne(query);
     logger.debug('User found check', { found: !!user, role: user?.role });
 
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'User not found! Please check your credentials.' 
+        message: 'User not found! Please check your credentials.'
       });
     }
 
     // Check if account is active
     if (!user.isActive) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'This account has been deactivated. Contact your administrator.' 
+        message: 'This account has been deactivated. Contact your administrator.'
       });
     }
 
     // Check account lockout
     const lockout = isLockedOut(email, tenantId);
     if (lockout && lockout.locked) {
-      return res.status(429).json({ 
+      return res.status(429).json({
         success: false,
-        message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).` 
+        message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).`
       });
     }
 
@@ -101,9 +102,9 @@ const login = async (req, res) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       recordFailedAttempt(email, tenantId);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid password' 
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password'
       });
     }
 
@@ -118,14 +119,14 @@ const login = async (req, res) => {
 
     // Generate 15-minute access token (standardized across all roles)
     const token = jwt.sign(
-      { 
-        userId: user._id, 
+      {
+        userId: user._id,
         role: user.role,
         tenantId: user.tenantId,
         isSuperAdmin: user.role === 'super_admin',
         tokenVersion: user.tokenVersion || 0
-      }, 
-      JWT_SECRET, 
+      },
+      JWT_SECRET,
       { expiresIn: '15m' }
     );
 
@@ -171,10 +172,10 @@ const login = async (req, res) => {
 
   } catch (error) {
     logger.error('Login error', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: 'Internal server error',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -184,36 +185,36 @@ const superAdminLogin = async (req, res) => {
   const { SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD } = process.env;
 
   if (!SUPER_ADMIN_EMAIL || !SUPER_ADMIN_PASSWORD) {
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Super admin not configured' 
+    return res.status(500).json({
+      success: false,
+      message: 'Super admin not configured'
     });
   }
 
   const adminEmails = (SUPER_ADMIN_EMAIL || '').split(',').map(e => e.trim().toLowerCase());
-  
+
   if (!adminEmails.includes(email?.toLowerCase())) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Invalid super admin credentials' 
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid super admin credentials'
     });
   }
 
   // Check account lockout
   const lockout = isLockedOut(email, 'super_admin');
   if (lockout && lockout.locked) {
-    return res.status(429).json({ 
+    return res.status(429).json({
       success: false,
-      message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).` 
+      message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).`
     });
   }
 
   try {
-    let superAdmin = await User.findOne({ 
+    let superAdmin = await User.findOne({
       email: email.toLowerCase(),
       role: 'super_admin'
     });
-    
+
     if (!superAdmin) {
       const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
       superAdmin = new User({
@@ -227,15 +228,15 @@ const superAdminLogin = async (req, res) => {
       });
       await superAdmin.save();
     }
-    
+
     // Verify password (bcrypt only — no plaintext fallback)
     const isValid = await bcrypt.compare(password, superAdmin.password);
 
     if (!isValid) {
       recordFailedAttempt(email, 'super_admin');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid super admin credentials' 
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid super admin credentials'
       });
     }
 
@@ -247,8 +248,8 @@ const superAdminLogin = async (req, res) => {
 
     // Generate 15-minute access token (standardized across all roles)
     const token = jwt.sign(
-      { 
-        userId: superAdmin._id, 
+      {
+        userId: superAdmin._id,
         role: 'super_admin',
         isSuperAdmin: true,
         tokenVersion: superAdmin.tokenVersion || 0
@@ -284,19 +285,19 @@ const superAdminLogin = async (req, res) => {
       message: 'Super admin login successful',
       token,
       refreshToken: rawRefreshToken,
-      user: { 
+      user: {
         id: superAdmin._id,
         name: superAdmin.name,
-        email: superAdmin.email, 
+        email: superAdmin.email,
         role: 'super_admin',
         isSuperAdmin: true
       }
     });
   } catch (error) {
     logger.error('Super admin login error', { error: error.message });
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Server error' 
+    return res.status(500).json({
+      success: false,
+      message: 'Server error'
     });
   }
 };
@@ -311,24 +312,24 @@ const registerStudent = async (req, res) => {
 
   // Validation
   if (!email || !enrollmentNumber || !password || !confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'All fields are required' 
+      message: 'All fields are required'
     });
   }
 
   if (password !== confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'Passwords do not match' 
+      message: 'Passwords do not match'
     });
   }
 
   const passwordCheck = validatePassword(password);
   if (!passwordCheck.valid) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: passwordCheck.message 
+      message: passwordCheck.message
     });
   }
 
@@ -338,16 +339,16 @@ const registerStudent = async (req, res) => {
   // Get tenant from subdomain
   let tenantId = null;
   let tenant = null;
-  
+
   if (subdomain) {
-    tenant = await Tenant.findOne({ 
+    tenant = await Tenant.findOne({
       $or: [
         { subdomain: subdomain.toLowerCase() },
         { domain: subdomain.toLowerCase() }
       ],
-      isActive: true 
+      isActive: true
     });
-    
+
     if (!tenant) {
       logger.warn('Tenant not found for registration subdomain', { subdomain });
       return res.status(404).json({
@@ -366,24 +367,24 @@ const registerStudent = async (req, res) => {
   }
 
   try {
-    const query = { 
+    const query = {
       enrollmentNumber: enrollmentNumber,
       email: email,
       tenantId: tenantId
     };
-    
+
     logger.debug('Looking for enrollment', { enrollmentNumber, tenantId });
 
     const enrollment = await Enrollment.findOne(query);
 
     if (!enrollment) {
       logger.debug('Enrollment not found for registration', { tenantId });
-      
-      const enrollmentWithoutTenant = await Enrollment.findOne({ 
+
+      const enrollmentWithoutTenant = await Enrollment.findOne({
         enrollmentNumber: enrollmentNumber,
-        email: email 
+        email: email
       });
-      
+
       if (enrollmentWithoutTenant) {
         logger.warn('Enrollment tenant mismatch', { enrollmentTenantId: enrollmentWithoutTenant.tenantId, providedTenantId: tenantId });
         return res.status(404).json({
@@ -391,10 +392,10 @@ const registerStudent = async (req, res) => {
           message: 'Enrollment found but belongs to a different institution. Please check your domain.'
         });
       }
-      
-      return res.status(404).json({ 
+
+      return res.status(404).json({
         success: false,
-        message: 'Invalid enrollment details. Please contact your institution.' 
+        message: 'Invalid enrollment details. Please contact your institution.'
       });
     }
 
@@ -404,25 +405,25 @@ const registerStudent = async (req, res) => {
 
     if (enrollment.isRegistered) {
       logger.debug('Enrollment already registered', { tenantId });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'This enrollment is already registered. Please login.' 
+        message: 'This enrollment is already registered. Please login.'
       });
     }
 
     const existingUser = await User.findOne({ email, tenantId });
     if (existingUser) {
       logger.debug('User email already registered', { tenantId });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Email already registered' 
+        message: 'Email already registered'
       });
     }
 
     if (tenant) {
       const studentCount = await User.countDocuments({ tenantId, role: 'student' });
       logger.debug('Student limit check', { studentCount, maxStudents: tenant.limits?.maxStudents });
-      
+
       if (tenant.limits?.maxStudents && studentCount >= tenant.limits.maxStudents) {
         logger.warn('Student limit reached for tenant', { tenantId });
         return res.status(403).json({
@@ -435,7 +436,7 @@ const registerStudent = async (req, res) => {
 
     logger.debug('Creating student user account');
     const hashPassword = await bcrypt.hash(password, 10);
-    
+
     const newUser = new User({
       name: `${enrollment.firstName} ${enrollment.lastName}`.trim(),
       email,
@@ -491,7 +492,7 @@ const registerStudent = async (req, res) => {
     });
 
     logger.info('Student registration completed', { userId: newUser._id, tenantId });
-    return res.status(201).json({ 
+    return res.status(201).json({
       success: true,
       message: 'Student registered successfully',
       token,
@@ -509,7 +510,7 @@ const registerStudent = async (req, res) => {
 
   } catch (error) {
     logger.error('Student registration error', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: 'Registration failed',
       error: error.message
@@ -526,24 +527,24 @@ const registerTeacherFirstLogin = async (req, res) => {
   logger.debug('Teacher activation attempt', { subdomain });
 
   if (!email || !tempPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'All fields are required' 
+      message: 'All fields are required'
     });
   }
 
   if (newPassword !== confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'Passwords do not match' 
+      message: 'Passwords do not match'
     });
   }
 
   const passwordCheck = validatePassword(newPassword);
   if (!passwordCheck.valid) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: passwordCheck.message 
+      message: passwordCheck.message
     });
   }
 
@@ -551,16 +552,16 @@ const registerTeacherFirstLogin = async (req, res) => {
 
   let tenantId = null;
   let tenant = null;
-  
+
   if (subdomain) {
-    tenant = await Tenant.findOne({ 
+    tenant = await Tenant.findOne({
       $or: [
         { subdomain: subdomain.toLowerCase() },
         { domain: subdomain.toLowerCase() }
       ],
-      isActive: true 
+      isActive: true
     });
-    
+
     if (!tenant) {
       logger.warn('Tenant not found for teacher activation subdomain', { subdomain });
       return res.status(404).json({
@@ -581,8 +582,8 @@ const registerTeacherFirstLogin = async (req, res) => {
   try {
     logger.debug('Looking for teacher to activate', { tenantId });
 
-    const teacher = await User.findOne({ 
-      email: emailLower, 
+    const teacher = await User.findOne({
+      email: emailLower,
       role: 'teacher',
       tenantId,
       isFirstLogin: true
@@ -590,25 +591,25 @@ const registerTeacherFirstLogin = async (req, res) => {
 
     if (!teacher) {
       logger.debug('Teacher not found or already activated', { tenantId });
-      
-      const existingTeacher = await User.findOne({ 
-        email: emailLower, 
+
+      const existingTeacher = await User.findOne({
+        email: emailLower,
         role: 'teacher',
         tenantId,
         isFirstLogin: false
       });
-      
+
       if (existingTeacher) {
         logger.debug('Teacher already activated', { tenantId });
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: 'This account is already activated. Please login.' 
+          message: 'This account is already activated. Please login.'
         });
       }
-      
-      return res.status(404).json({ 
+
+      return res.status(404).json({
         success: false,
-        message: 'Teacher account not found. Please check your email or contact administrator.' 
+        message: 'Teacher account not found. Please check your email or contact administrator.'
       });
     }
 
@@ -617,9 +618,9 @@ const registerTeacherFirstLogin = async (req, res) => {
     const isValid = await bcrypt.compare(tempPassword, teacher.password);
     if (!isValid) {
       logger.debug('Invalid temporary password for teacher activation', { tenantId });
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'Invalid temporary password. Please check with your administrator.' 
+        message: 'Invalid temporary password. Please check with your administrator.'
       });
     }
     logger.debug('Temporary password verified for teacher');
@@ -653,7 +654,7 @@ const registerTeacherFirstLogin = async (req, res) => {
 
     logger.info('Teacher activation completed', { teacherId: teacher._id, tenantId });
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
       message: 'Password set successfully. You are now logged in.',
       token,
@@ -674,7 +675,7 @@ const registerTeacherFirstLogin = async (req, res) => {
       stack: error.stack,
       name: error.name
     });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: 'Server error. Please try again later.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -692,9 +693,9 @@ const verifyToken = async (req, res) => {
       .populate('assignedSubjects.subjectId');
 
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "User not found" 
+        message: "User not found"
       });
     }
 
@@ -730,9 +731,9 @@ const verifyToken = async (req, res) => {
 
   } catch (error) {
     logger.error("Verification error", { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: "Error verifying token" 
+      message: "Error verifying token"
     });
   }
 };
@@ -744,41 +745,41 @@ const changePassword = async (req, res) => {
   const { oldPassword, newPassword, confirmPassword } = req.body;
 
   if (!oldPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'All fields are required' 
+      message: 'All fields are required'
     });
   }
 
   if (newPassword !== confirmPassword) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: 'Passwords do not match' 
+      message: 'Passwords do not match'
     });
   }
 
   const passwordCheck = validatePassword(newPassword);
   if (!passwordCheck.valid) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: passwordCheck.message 
+      message: passwordCheck.message
     });
   }
 
   try {
     const user = await User.findById(req.user.userId);
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'User not found' 
+        message: 'User not found'
       });
     }
 
     const isValid = await bcrypt.compare(oldPassword, user.password);
     if (!isValid) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'Current password is incorrect' 
+        message: 'Current password is incorrect'
       });
     }
 
@@ -788,16 +789,16 @@ const changePassword = async (req, res) => {
     // Invalidate user cache
     await cache.del(`user:${user._id}`);
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      message: 'Password changed successfully' 
+      message: 'Password changed successfully'
     });
 
   } catch (error) {
     logger.error('Change password error', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: 'Server error' 
+      message: 'Server error'
     });
   }
 };
@@ -822,6 +823,210 @@ const logout = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Logged out successfully'
+    });
+  }
+};
+
+/**
+ * MOBILE LOGIN — Student login by enrollmentNumber (rollNo) + password.
+ *
+ * Designed for the ATTEND-AI mobile app / Phase 2 face-attendance flow.
+ * Identifies the student via Enrollment.enrollmentNumber instead of email,
+ * requires an explicit tenantId (mobile apps have no URL host), and uses
+ * a stricter rate limit (5/15m) than web login.
+ *
+ * Reuses the same JWT (15m) + refresh token (7d) issuance as web login.
+ * Account lockout is keyed on the user's email after resolving User via Enrollment.
+ */
+const mobileLogin = async (req, res) => {
+  try {
+    let { enrollmentNumber, password, tenantId, deviceFingerprint } = req.body;
+
+    if (!enrollmentNumber || !password || !tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: "enrollmentNumber, password, and tenantId are required",
+      });
+    }
+
+    enrollmentNumber = enrollmentNumber.toUpperCase().trim();
+
+    // --- Resolve tenant from the provided tenantId ---
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid tenantId format",
+      });
+    }
+
+    const tenant = await Tenant.findById(tenantId).lean();
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: "Institution not found. Please check your tenant ID.",
+      });
+    }
+
+    if (!tenant.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "This institution is no longer active.",
+      });
+    }
+
+    // --- Look up the Enrollment record (tenant-scoped) ---
+    const enrollment = await Enrollment.findOne({
+      enrollmentNumber,
+      tenantId: tenant._id,
+    }).lean();
+
+    if (!enrollment) {
+      logger.debug("mobileLogin: enrollment not found", {
+        enrollmentNumber,
+        tenantId: tenant._id,
+      });
+      return res.status(404).json({
+        success: false,
+        message: "Invalid enrollment number or institution.",
+      });
+    }
+
+    if (!enrollment.isRegistered) {
+      logger.debug("mobileLogin: enrollment not activated", {
+        enrollmentNumber,
+        tenantId: tenant._id,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "This enrollment has not been activated yet. Please contact your institution.",
+      });
+    }
+
+    // --- Look up the User (tenant-scoped, active only) ---
+    const userId = enrollment.userId;
+    if (!userId) {
+      logger.warn("mobileLogin: enrollment has no linked user", {
+        enrollmentNumber,
+        tenantId: tenant._id,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Enrollment is not linked to a user account. Contact your institution.",
+      });
+    }
+
+    const user = await User.findOne({
+      _id: userId,
+      tenantId: tenant._id,
+      role: "student",
+      isActive: true,
+      isDeleted: false,
+    });
+
+    if (!user) {
+      logger.debug("mobileLogin: user not found or inactive", {
+        userId,
+        tenantId: tenant._id,
+      });
+      return res.status(403).json({
+        success: false,
+        message: "This account has been deactivated. Contact your administrator.",
+      });
+    }
+
+    // --- Account lockout (keyed on user's email, reuse existing lockout utils) ---
+    const lockout = isLockedOut(user.email, tenant._id);
+    if (lockout && lockout.locked) {
+      return res.status(429).json({
+        success: false,
+        message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).`,
+      });
+    }
+
+    // --- Verify password ---
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      recordFailedAttempt(user.email, tenant._id);
+      logger.debug("mobileLogin: invalid password", {
+        userId: user._id,
+        tenantId: tenant._id,
+      });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid password",
+      });
+    }
+
+    clearAttempts(user.email, tenant._id);
+
+    // --- Update last login ---
+    user.lastLoginAt = new Date();
+    user.lastLoginIP = req.ip;
+    user.loginCount = (user.loginCount || 0) + 1;
+    await user.save();
+
+    // --- Issue 15-minute access token + 7-day refresh token (same shape as web login) ---
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        role: "student",
+        tenantId: user.tenantId,
+        tokenVersion: user.tokenVersion || 0,
+      },
+      JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const rawRefreshToken = crypto.randomBytes(40).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex");
+
+    await RefreshToken.create({
+      tokenHash,
+      userId: user._id,
+      tenantId: user.tenantId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ipAddress: req.ip,
+      deviceFingerprint: deviceFingerprint || req.headers["user-agent"] || "",
+    });
+
+    logActivity({
+      tenantId: user.tenantId,
+      userId: user._id,
+      description: `Mobile login: ${user.name} (${user.rollNo})`,
+      endpoint: "/api/auth/mobile-login",
+      statusCode: 200,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    logger.info("Mobile login successful", {
+      userId: user._id,
+      rollNo: user.rollNo,
+      tenantId: user.tenantId,
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      refreshToken: rawRefreshToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: "student",
+        section: user.section,
+        rollNo: user.rollNo,
+        tenantId: user.tenantId,
+      },
+    });
+  } catch (error) {
+    logger.error("Error during mobile login", { error: error.message, stack: error.stack });
+    return res.status(500).json({
+      success: false,
+      message: "Server error during mobile login",
+      error: error.message,
     });
   }
 };
@@ -880,9 +1085,9 @@ const parentLogin = async (req, res) => {
     // Check account lockout
     const lockout = isLockedOut(email, tenantId);
     if (lockout && lockout.locked) {
-      return res.status(429).json({ 
+      return res.status(429).json({
         success: false,
-        message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).` 
+        message: `Account temporarily locked due to too many failed attempts. Try again in ${lockout.remainingMinutes} minute(s).`
       });
     }
 
@@ -1344,6 +1549,7 @@ module.exports = {
   login,
   superAdminLogin,
   parentLogin,
+  mobileLogin,
   verifyToken,
   changePassword,
   logout,
