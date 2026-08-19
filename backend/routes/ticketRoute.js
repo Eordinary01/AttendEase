@@ -1,9 +1,10 @@
+// routes/ticketRoute.js
 const express = require('express');
 const router = express.Router();
-const {authenticateToken} = require('../middleware/auth');
-const checkRole = require('../middleware/checkRole');
+const { authenticateToken, teacherAuth, studentAuth, adminAuth } = require('../middleware/auth');
 const upload = require('../middleware/multer');
-
+const validate = require("../middleware/validate");
+const { body, param } = require("express-validator");
 const {
   createAbsenceProofTicket,
   getPendingAbsenceTickets,
@@ -16,61 +17,185 @@ const {
   getTicketDetails
 } = require('../controllers/ticketController');
 
-// Student routes
+const createTicketValidator = [
+  body('subjectId')
+    .notEmpty()
+    .withMessage('Subject ID is required')
+    .isMongoId()
+    .withMessage('Invalid subject ID format'),
+  body('absentDate')
+    .notEmpty()
+    .withMessage('Absent date is required')
+    .isISO8601()
+    .withMessage('Absent date must be a valid ISO 8601 date')
+    .toDate(),
+  body('reason')
+    .notEmpty()
+    .withMessage('Reason is required')
+    .isIn(['medical', 'family', 'personal', 'academic', 'other'])
+    .withMessage('Reason must be one of: medical, family, personal, academic, other'),
+  body('reasonDescription')
+    .optional()
+    .isString()
+    .trim()
+    .withMessage('Reason description must be a string'),
+];
+
+const verifyTicketValidator = [
+  param('ticketId')
+    .notEmpty()
+    .withMessage('Ticket ID is required')
+    .isMongoId()
+    .withMessage('Invalid ticket ID format'),
+  body('verificationStatus')
+    .notEmpty()
+    .withMessage('Verification status is required')
+    .isIn(['approved', 'rejected'])
+    .withMessage('Verification status must be approved or rejected'),
+  body('verificationRemarks')
+    .optional()
+    .isString()
+    .trim()
+    .withMessage('Verification remarks must be a string'),
+];
+
+const addNoteValidator = [
+  param('ticketId')
+    .notEmpty()
+    .withMessage('Ticket ID is required')
+    .isMongoId()
+    .withMessage('Invalid ticket ID format'),
+  body('content')
+    .notEmpty()
+    .withMessage('Note content is required')
+    .isString()
+    .trim()
+    .withMessage('Note content must be a string'),
+];
+
+const getTicketValidator = [
+  param('ticketId')
+    .notEmpty()
+    .withMessage('Ticket ID is required')
+    .isMongoId()
+    .withMessage('Invalid ticket ID format'),
+];
+
+const getFileValidator = [
+  param('ticketId')
+    .notEmpty()
+    .withMessage('Ticket ID is required')
+    .isMongoId()
+    .withMessage('Invalid ticket ID format'),
+  param('fileId')
+    .notEmpty()
+    .withMessage('File ID is required')
+    .isMongoId()
+    .withMessage('Invalid file ID format'),
+];
+
+// ==================== STUDENT ROUTES ====================
+
+/**
+ * POST /api/tickets/
+ * Create a new absence proof ticket
+ * Body: { subjectId, absentDate, reason, reasonDescription } + files
+ */
 router.post('/',
   authenticateToken,
-  checkRole('student'),
+  studentAuth,
   upload.array('files', 5),
+  createTicketValidator,
   createAbsenceProofTicket
 );
 
+/**
+ * GET /api/tickets/student
+ * Get student's own tickets
+ */
 router.get('/student',
   authenticateToken,
-  checkRole('student'),
+  studentAuth,
   getStudentAbsenceTickets
 );
 
-// Teacher routes
+// ==================== TEACHER ROUTES ====================
+
+/**
+ * GET /api/tickets/teacher/pending
+ * Get pending tickets for teacher's subjects
+ */
 router.get('/teacher/pending',
   authenticateToken,
-  checkRole('teacher'),
+  teacherAuth,
   getPendingAbsenceTickets
 );
 
+/**
+ * PUT /api/tickets/:ticketId/verify
+ * Verify a ticket (approve/reject)
+ * Body: { verificationStatus, verificationRemarks }
+ */
 router.put('/:ticketId/verify',
   authenticateToken,
-  checkRole('teacher'),
+  teacherAuth,
+  verifyTicketValidator,
   verifyAbsenceProof
 );
 
+/**
+ * POST /api/tickets/:ticketId/mark-attendance
+ * Mark attendance after verification
+ */
 router.post('/:ticketId/mark-attendance',
   authenticateToken,
-  checkRole('teacher'),
+  teacherAuth,
+  getTicketValidator,
   markAttendanceAfterVerification
 );
 
+/**
+ * POST /api/tickets/:ticketId/notes
+ * Add verification notes
+ * Body: { content }
+ */
 router.post('/:ticketId/notes',
   authenticateToken,
-  checkRole('teacher'),
+  teacherAuth,
+  addNoteValidator,
   addVerificationNote
 );
 
+/**
+ * GET /api/tickets/teacher/stats
+ * Get teacher's verification statistics
+ */
 router.get('/teacher/stats',
   authenticateToken,
-  checkRole('teacher'),
+  teacherAuth,
   getVerificationStats
 );
 
-// Shared routes
+// ==================== SHARED ROUTES ====================
+// Accessible by multiple roles
+
+/**
+ * GET /api/tickets/:ticketId
+ * Get ticket details (student own, teacher assigned, admin any)
+ */
 router.get('/:ticketId',
   authenticateToken,
-  checkRole('student', 'teacher', 'admin'),
+  getTicketValidator,
   getTicketDetails
 );
 
+/**
+ * GET /api/tickets/:ticketId/files/:fileId
+ * Download uploaded file (with permission check)
+ */
 router.get('/:ticketId/files/:fileId',
   authenticateToken,
-  checkRole('student', 'teacher', 'admin'),
+  getFileValidator,
   getUploadedFile
 );
 

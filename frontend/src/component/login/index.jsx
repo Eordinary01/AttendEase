@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
-  User, Mail, Lock, BookOpen, 
-  UserCircle, Hash, ArrowRight, 
-  Key, GraduationCap, School, AlertCircle 
+  Mail, Lock, Hash, ArrowRight, 
+  Key, GraduationCap, School, AlertCircle, Globe, Eye, EyeOff 
 } from "lucide-react";
 import axios from "axios";
+import { logError } from "../../utils/logger";
+import { validatePassword, PasswordRequirements } from "../../utils/passwordValidation";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -14,7 +15,15 @@ const fadeIn = {
 };
 
 const Register = ({ setIsRegistered, onRegisterSuccess }) => {
-  const [userType, setUserType] = useState(""); // "student" or "teacher"
+  const location = useLocation();
+  const initialUserType = location.state?.userType || ""; // "student" or "teacher" from login page
+  const [userType, setUserType] = useState(initialUserType); // "student" or "teacher"
+  const [subdomain, setSubdomain] = useState("");
+
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showTempPassword, setShowTempPassword] = useState(false);
   const [formData, setFormData] = useState({
     // Student fields
     email: "",
@@ -31,7 +40,7 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [step, setStep] = useState(1); // Step 1: Select user type, Step 2: Form
+  const [step, setStep] = useState(initialUserType ? 2 : 1); // Step 1: Select user type, Step 2: Form
   
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL;
@@ -42,6 +51,11 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       ...prevState,
       [name]: value
     }));
+    setError("");
+  };
+
+  const handleSubdomainChange = (e) => {
+    setSubdomain(e.target.value.toLowerCase().trim());
     setError("");
   };
 
@@ -78,23 +92,29 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters");
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.message);
+      setIsLoading(false);
+      return;
+    }
+
+    if (!subdomain) {
+      setError("Institution subdomain is required. Please enter your college subdomain.");
       setIsLoading(false);
       return;
     }
 
     try {
-      const response = await axios.post(`${API_URL}/register/student`, {
+      const response = await axios.post(`${API_URL}/auth/register/student`, {
         email: formData.email.toLowerCase().trim(),
         enrollmentNumber: formData.enrollmentNumber.toUpperCase().trim(),
         password: formData.password,
-        confirmPassword: formData.confirmPassword
+        confirmPassword: formData.confirmPassword,
+        subdomain: subdomain.toLowerCase().trim()
       });
 
-      console.log('Registration successful:', response.data);
-      
-      // Store token and user data
+      setShowSuccessMessage(true);
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       
@@ -102,14 +122,22 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       setIsRegistered(true);
       if (onRegisterSuccess) onRegisterSuccess();
 
-      // Redirect after success
+      // Redirect to the institution's unique login page after success
       setTimeout(() => {
-        navigate('/dashboard'); // or wherever you want to redirect
+        navigate(`/login/${subdomain.toLowerCase().trim()}`);
       }, 2000);
 
     } catch (error) {
-      console.error('Error registering student:', error);
-      setError(error.response?.data?.message || "An error occurred during registration. Please try again.");
+      logError("Register Student", error);
+      
+      // Handle specific error messages
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.response?.data?.error) {
+        setError(error.response.data.error);
+      } else {
+        setError("An error occurred during registration. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -133,23 +161,29 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      setError("Password must be at least 6 characters");
+    const teacherPassValidation = validatePassword(formData.newPassword);
+    if (!teacherPassValidation.isValid) {
+      setError(teacherPassValidation.message);
+      setIsLoading(false);
+      return;
+    }
+
+    if (!subdomain) {
+      setError("Institution subdomain is required. Please enter your college subdomain.");
       setIsLoading(false);
       return;
     }
 
     try {
-      const response = await axios.post(`${API_URL}/register/teacher/first-login`, {
+      const response = await axios.post(`${API_URL}/auth/register/teacher/first-login`, {
         email: formData.email.toLowerCase().trim(),
         tempPassword: formData.tempPassword,
         newPassword: formData.newPassword,
-        confirmPassword: formData.teacherConfirmPassword
+        confirmPassword: formData.teacherConfirmPassword,
+        subdomain: subdomain.toLowerCase().trim()
       });
 
-      console.log('Teacher activation successful:', response.data);
-      
-      // Store token and user data
+      setShowSuccessMessage(true);
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       
@@ -157,14 +191,21 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
       setIsRegistered(true);
       if (onRegisterSuccess) onRegisterSuccess();
 
-      // Redirect after success
+      // Redirect to the institution's unique login page after success
       setTimeout(() => {
-        navigate('/dashboard'); // or wherever you want to redirect
+        navigate(`/login/${subdomain.toLowerCase().trim()}`);
       }, 2000);
 
     } catch (error) {
-      console.error('Error activating teacher account:', error);
-      setError(error.response?.data?.message || "An error occurred. Please check your credentials and try again.");
+      logError("Activate Teacher", error);
+      
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.response?.data?.error) {
+        setError(error.response.data.error);
+      } else {
+        setError("An error occurred. Please check your credentials and try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -216,9 +257,17 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                   "bg-red-100 text-red-700"
                 }`}
               >
-                {isLoading ? "Processing..." : 
-                 showSuccessMessage ? `${userType === "student" ? "Registration" : "Activation"} successful! Redirecting...` :
-                 error}
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-purple-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </div>
+                ) : showSuccessMessage ? 
+                  `${userType === "student" ? "Registration" : "Activation"} successful! Redirecting...` :
+                  error}
               </motion.div>
             )}
             
@@ -275,7 +324,30 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                   </motion.div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+                {/* Subdomain Input on Step 1 */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
+                  <div className="flex items-center">
+                    <Globe className="w-5 h-5 text-purple-600 mr-3 flex-shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Institution Subdomain *
+                      </label>
+                      <input
+                        type="text"
+                        value={subdomain}
+                        onChange={handleSubdomainChange}
+                        placeholder="Enter your college subdomain (e.g., mit)"
+                        className="w-full px-3 py-2 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {subdomain ? `You are registering for: ${subdomain}` : "Enter your institution's subdomain (e.g., 'mit' for mit.college.edu)"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start">
                     <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
                     <div className="text-sm text-blue-800">
@@ -283,6 +355,7 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                       <ul className="list-disc pl-4 space-y-1">
                         <li>Students must have their enrollment number and registered email</li>
                         <li>Teachers must have temporary credentials provided by administrator</li>
+                        <li>Enter your institution's subdomain correctly</li>
                         <li>If you're not sure, contact your college administrator</li>
                       </ul>
                     </div>
@@ -304,6 +377,31 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                   <ArrowRight className="w-4 h-4 rotate-180 mr-2" />
                   Back to Selection
                 </button>
+
+                {/* Subdomain Input (editable so direct registration links work) */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <Globe className="w-5 h-5 text-purple-600 mt-1 mr-3 flex-shrink-0" />
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Institution Subdomain *
+                      </label>
+                      <input
+                        type="text"
+                        value={subdomain}
+                        onChange={handleSubdomainChange}
+                        placeholder="Enter your college subdomain (e.g., mit)"
+                        className="w-full px-3 py-2 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {subdomain
+                          ? `You are registering for: ${subdomain}`
+                          : "Enter your institution's subdomain (e.g., 'mit')"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Student Registration Form */}
                 {userType === "student" ? (
@@ -342,19 +440,30 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                       </div>
 
                       {/* Password */}
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-purple-500" />
+                      <div>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Lock className="h-5 w-5 text-purple-500" />
+                          </div>
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="Create Password (min. 8 characters)"
+                            required
+                            className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(prev => !prev)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none"
+                            title={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                          </button>
                         </div>
-                        <input
-                          type="password"
-                          name="password"
-                          value={formData.password}
-                          onChange={handleChange}
-                          placeholder="Create Password (min. 6 characters)"
-                          required
-                          className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
-                        />
+                        <PasswordRequirements password={formData.password} />
                       </div>
 
                       {/* Confirm Password */}
@@ -363,14 +472,22 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                           <Lock className="h-5 w-5 text-purple-500" />
                         </div>
                         <input
-                          type="password"
+                          type={showConfirmPassword ? "text" : "password"}
                           name="confirmPassword"
                           value={formData.confirmPassword}
                           onChange={handleChange}
                           placeholder="Confirm Password"
                           required
-                          className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
+                          className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(prev => !prev)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none"
+                          title={showConfirmPassword ? "Hide password" : "Show password"}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                        </button>
                       </div>
 
                       <motion.button
@@ -410,30 +527,49 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                           <Key className="h-5 w-5 text-purple-500" />
                         </div>
                         <input
-                          type="password"
+                          type={showTempPassword ? "text" : "password"}
                           name="tempPassword"
                           value={formData.tempPassword}
                           onChange={handleChange}
                           placeholder="Temporary Password (provided by admin)"
                           required
-                          className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
+                          className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowTempPassword(prev => !prev)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none"
+                          title={showTempPassword ? "Hide password" : "Show password"}
+                        >
+                          {showTempPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                        </button>
                       </div>
 
                       {/* New Password */}
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-purple-500" />
+                      <div>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Lock className="h-5 w-5 text-purple-500" />
+                          </div>
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            name="newPassword"
+                            value={formData.newPassword}
+                            onChange={handleChange}
+                            placeholder="New Password (min. 8 characters)"
+                            required
+                            className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(prev => !prev)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none"
+                            title={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                          </button>
                         </div>
-                        <input
-                          type="password"
-                          name="newPassword"
-                          value={formData.newPassword}
-                          onChange={handleChange}
-                          placeholder="New Password (min. 6 characters)"
-                          required
-                          className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
-                        />
+                        <PasswordRequirements password={formData.newPassword} />
                       </div>
 
                       {/* Confirm New Password */}
@@ -442,14 +578,22 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                           <Lock className="h-5 w-5 text-purple-500" />
                         </div>
                         <input
-                          type="password"
+                          type={showConfirmPassword ? "text" : "password"}
                           name="teacherConfirmPassword"
                           value={formData.teacherConfirmPassword}
                           onChange={handleChange}
                           placeholder="Confirm New Password"
                           required
-                          className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
+                          className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(prev => !prev)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none"
+                          title={showConfirmPassword ? "Hide password" : "Show password"}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                        </button>
                       </div>
 
                       <motion.button
@@ -489,7 +633,7 @@ const Register = ({ setIsRegistered, onRegisterSuccess }) => {
                 Already have an active account?{" "}
                 <motion.button
                   whileHover={{ scale: 1.05 }}
-                  onClick={() => navigate("/login")}
+                  onClick={() => navigate(subdomain ? `/login/${subdomain}` : "/login")}
                   className="text-purple-600 hover:text-purple-700 font-medium"
                 >
                   Login here

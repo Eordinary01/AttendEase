@@ -1,16 +1,11 @@
 // src/components/StudentDashboard.jsx
 import React, { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Ticket,
   GraduationCap,
   Bell,
-  File,
-  Image as ImageIcon,
-  X,
   User,
-  Calendar,
-  Clock,
   TrendingUp,
   BookOpen,
   Award,
@@ -20,7 +15,9 @@ import {
   ChevronRight,
   Download,
   Eye,
+  ClipboardCheck,
 } from "lucide-react";
+import AttendanceHistory from "../AttendanceHistory";
 import {
   LineChart,
   Line,
@@ -34,13 +31,43 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Dialog, Transition, Tab } from "@headlessui/react";
+import { Tab } from "@headlessui/react";
 import { Fragment } from "react";
-import axios from "axios";
+import api from "../../utils/api";
+import { useTheme } from "../../contexts/ThemeContexts";
+import Button from "../common/ui/Button";
+import Card from "../common/ui/Card";
+import Modal from "../common/ui/Modal";
+import Badge from "../common/ui/Badge";
+import Table from "../common/ui/Table";
+import EmptyState from "../common/ui/EmptyState";
+import StatCard from "../common/ui/StatCard";
 
-const COLORS = ["#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+/** Hex → "R G B" string, used to build rgba() values from a CSS variable. */
+function hexToRgbStr(hex = "#6366f1") {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
+
 
 export default function StudentDashboard({ userId, userName, userEmail }) {
+  const { colors } = useTheme();
+
+  const primary = colors?.primary || "#6366f1";
+  const secondary = colors?.secondary || primary;
+
+  const cssVars = {
+    "--theme-primary": primary,
+    "--theme-secondary": secondary,
+    "--theme-primary-rgb": hexToRgbStr(primary),
+  };
+
   const [tickets, setTickets] = useState([]);
   const [attendanceData, setAttendanceData] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
@@ -54,59 +81,66 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
   const API_URL = process.env.REACT_APP_API_URL;
   const token = localStorage.getItem("token");
 
-  // Fetch all data
+  // ── data fetching ──────────────────────────────────────────────────────────
+
   const fetchData = useCallback(async () => {
     if (!token) {
       setError("No authentication token found");
       setLoading(false);
       return;
     }
-
     try {
       setLoading(true);
-      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const [ticketsRes, attendanceRes, announcementsRes] = await Promise.allSettled([
+        api.get('/tickets/student'),
+        api.get('/attendance/records'),
+        api.get('/alerts'),
+      ]);
 
-      // Fetch tickets
-      const ticketsRes = await axios.get(`${API_URL}/tickets/student`, config);
-      setTickets(Array.isArray(ticketsRes.data) ? ticketsRes.data : []);
+      if (ticketsRes.status === "fulfilled") {
+        const tData = ticketsRes.value.data;
+        setTickets(Array.isArray(tData) ? tData : (tData?.data || []));
+      } else {
+        setTickets([]);
+      }
 
-      // Fetch attendance records
-      const attendanceRes = await axios.get(
-        `${API_URL}/attendance/records`,
-        config
-      );
-      setAttendanceData(attendanceRes.data);
+      if (attendanceRes.status === "fulfilled") {
+        setAttendanceData(attendanceRes.value.data);
+        setError(null);
+      } else {
+        const msg = attendanceRes.reason?.response?.data?.message || "Failed to load attendance records";
+        setError(msg);
+      }
 
-      // Fetch announcements
-      const announcementsRes = await axios.get(`${API_URL}/alerts/alerts`, config);
-      setAnnouncements(Array.isArray(announcementsRes.data) ? announcementsRes.data : []);
-
-      setError(null);
+      if (announcementsRes.status === "fulfilled") {
+        const aData = announcementsRes.value.data;
+        const list = Array.isArray(aData) ? aData : (aData?.data || aData?.alerts || []);
+        setAnnouncements(Array.isArray(list) ? list : []);
+      } else {
+        setAnnouncements([]);
+      }
     } catch (err) {
-      console.error("Error fetching data:", err);
       setError(err.response?.data?.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, API_URL]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Handle file preview
+  // ── file preview ───────────────────────────────────────────────────────────
+
   const handleFilePreview = async (ticketId, fileName) => {
     try {
-      const response = await fetch(`${API_URL}/api/tickets/${ticketId}/file`, {
+      const response = await fetch(`${API_URL}/tickets/${ticketId}/file`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (!response.ok) throw new Error("Failed to fetch file");
-
       const blob = await response.blob();
       const fileType = response.headers.get("content-type");
       const url = URL.createObjectURL(blob);
-
       if (fileType.startsWith("image/")) {
         setFileContent({ type: "image", content: url });
       } else if (fileType === "application/pdf") {
@@ -115,13 +149,13 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
         setFileContent({ type: "download", content: url, fileName });
       }
       setSelectedFile({ ticketId, fileName });
-    } catch (error) {
-      console.error("Error fetching file:", error);
+    } catch {
       setFileContent({ type: "error", content: "Error loading file" });
     }
   };
 
-  // Stats from attendance data
+  // ── derived data ───────────────────────────────────────────────────────────
+
   const stats = attendanceData?.stats || {
     totalClasses: 0,
     presentCount: 0,
@@ -135,21 +169,29 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
     name: userName,
     rollNo: "N/A",
     section: "N/A",
+    courseName: "",
+    branch: "",
+    semester: null,
+    admissionYear: null,
   };
 
-  // Pie chart data
   const pieData = [
     { name: "Present", value: stats.presentCount, color: "#10b981" },
     { name: "Absent", value: stats.absentCount, color: "#ef4444" },
     { name: "Leave", value: stats.leaveCount, color: "#f59e0b" },
   ].filter((item) => item.value > 0);
 
+  // ── loading / error states ─────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your dashboard...</p>
+          <div
+            className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: `${primary}40`, borderTopColor: primary }}
+          />
+          <p className="text-ink-soft">Loading your dashboard…</p>
         </div>
       </div>
     );
@@ -157,626 +199,434 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card padding="xl" className="max-w-md w-full text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button
-            onClick={fetchData}
-            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-          >
-            Try Again
-          </button>
-        </div>
+          <h2 className="text-xl font-semibold text-ink mb-2">Error</h2>
+          <p className="text-ink-soft mb-6">{error}</p>
+          <Button onClick={fetchData} variant="primary">Try Again</Button>
+        </Card>
       </div>
     );
   }
 
+  // ── render ─────────────────────────────────────────────────────────────────
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Welcome Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-6 mb-8 text-white shadow-xl"
-        >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                Welcome back, {studentInfo.name || userName}!
-              </h1>
-              <p className="text-purple-100">Track your academic progress here</p>
-            </div>
-            <div className="mt-4 md:mt-0 flex flex-wrap gap-4 text-sm">
-              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg">
-                <User className="w-4 h-4" />
-                <span>{studentInfo.rollNo}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg">
-                <GraduationCap className="w-4 h-4" />
-                <span>Section {studentInfo.section}</span>
-              </div>
-            </div>
+    // cssVars injected here — all descendants read var(--theme-primary) freely
+    <div className="space-y-6" style={cssVars}>
+      {/* Welcome Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl p-6 text-white"
+        style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+      >
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">
+              Welcome back, {studentInfo.name || userName}!
+            </h1>
+            <p className="text-white/80">Track your academic progress here</p>
           </div>
-        </motion.div>
-
-        {/* Stats Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-        >
-          <StatCard
-            title="Total Classes"
-            value={stats.totalClasses}
-            icon={<BookOpen className="w-6 h-6" />}
-            color="purple"
-          />
-          <StatCard
-            title="Classes Attended"
-            value={stats.presentCount}
-            icon={<CheckCircle className="w-6 h-6" />}
-            color="green"
-          />
-          <StatCard
-            title="Classes Missed"
-            value={stats.absentCount + stats.leaveCount}
-            icon={<XCircle className="w-6 h-6" />}
-            color="red"
-          />
-          <StatCard
-            title="Attendance"
-            value={`${stats.attendancePercentage}%`}
-            icon={<TrendingUp className="w-6 h-6" />}
-            color="orange"
-          />
-        </motion.div>
-
-        {/* Announcements Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mb-8"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Bell className="w-6 h-6 text-purple-600" />
-              <h2 className="text-xl font-semibold text-gray-800">
-                Announcements
-              </h2>
-              <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">
-                {announcements.length}
-              </span>
-            </div>
+          <div className="mt-4 md:mt-0 flex flex-wrap gap-2 md:gap-3 text-xs md:text-sm">
+            {studentInfo.rollNo && studentInfo.rollNo !== "N/A" && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <User className="w-4 h-4 text-white/90" />
+                <span className="font-medium">{studentInfo.rollNo}</span>
+              </div>
+            )}
+            {studentInfo.courseName && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <BookOpen className="w-4 h-4 text-white/90" />
+                <span className="font-medium">{studentInfo.courseName}</span>
+              </div>
+            )}
+            {studentInfo.branch && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <Award className="w-4 h-4 text-white/90" />
+                <span className="font-medium">{studentInfo.branch}</span>
+              </div>
+            )}
+            {studentInfo.semester && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <GraduationCap className="w-4 h-4 text-white/90" />
+                <span className="font-medium">Sem {studentInfo.semester}</span>
+              </div>
+            )}
+            {studentInfo.section && studentInfo.section !== "N/A" && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <GraduationCap className="w-4 h-4 text-white/90" />
+                <span className="font-medium">Sec {studentInfo.section}</span>
+              </div>
+            )}
+            {studentInfo.admissionYear && (
+              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
+                <span className="font-medium">Batch {studentInfo.admissionYear}</span>
+              </div>
+            )}
           </div>
+        </div>
+      </motion.div>
 
-          {announcements.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center shadow-sm">
-              <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No announcements at the moment</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {announcements.map((announcement, idx) => (
-                <motion.div
-                  key={announcement._id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition cursor-pointer border-l-4 border-purple-500"
+      {/* Stat Cards */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+      >
+        <StatCard label="Total Classes" value={stats.totalClasses} icon={BookOpen} tone="primary" />
+        <StatCard label="Classes Attended" value={stats.presentCount} icon={CheckCircle} tone="success" />
+        <StatCard label="Classes Missed" value={stats.absentCount + stats.leaveCount} icon={XCircle} tone="danger" />
+        <StatCard label="Attendance" value={`${stats.attendancePercentage}%`} icon={TrendingUp} tone="warning" />
+      </motion.div>
+
+      {/* Announcements */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Bell className="w-6 h-6 theme-text" />
+          <h2 className="text-xl font-semibold text-ink">Announcements</h2>
+          <span className="theme-bg text-white text-xs px-2 py-1 rounded-full">
+            {announcements.length}
+          </span>
+        </div>
+
+        {announcements.length === 0 ? (
+          <EmptyState
+            icon={Bell}
+            title="No announcements at the moment"
+            description="Check back later for updates."
+          />
+        ) : (
+          <div className="grid gap-4">
+            {announcements.map((announcement, idx) => (
+              <motion.div
+                key={announcement._id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
+              >
+                <Card
+                  padding="md"
+                  hoverable
+                  className="theme-border-l"
                   onClick={() => setSelectedAnnouncement(announcement)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertCircle className="w-5 h-5 text-purple-600" />
-                        <span className="text-xs text-gray-400">
-                          {new Date(announcement.createdAt).toLocaleDateString(
-                            "en-US",
-                            {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            }
-                          )}
-                        </span>
-                      </div>
-                      <p className="text-gray-700 line-clamp-2">
-                        {announcement.message}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-4" />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Tabs Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Tab.Group selectedIndex={activeTab} onChange={setActiveTab}>
-            <Tab.List className="flex space-x-2 bg-white rounded-xl p-1 shadow-sm mb-6">
-              <Tab
-                className={({ selected }) =>
-                  `flex-1 py-3 rounded-lg font-medium transition-all ${
-                    selected
-                      ? "bg-purple-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-purple-50"
-                  }`
-                }
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Award className="w-5 h-5" />
-                  <span>Subject-wise Attendance</span>
-                </div>
-              </Tab>
-              <Tab
-                className={({ selected }) =>
-                  `flex-1 py-3 rounded-lg font-medium transition-all ${
-                    selected
-                      ? "bg-purple-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-purple-50"
-                  }`
-                }
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  <span>Analytics</span>
-                </div>
-              </Tab>
-              <Tab
-                className={({ selected }) =>
-                  `flex-1 py-3 rounded-lg font-medium transition-all ${
-                    selected
-                      ? "bg-purple-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-purple-50"
-                  }`
-                }
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Ticket className="w-5 h-5" />
-                  <span>My Tickets ({tickets.length})</span>
-                </div>
-              </Tab>
-            </Tab.List>
-
-            <Tab.Panels>
-              {/* Subject-wise Attendance Tab */}
-              <Tab.Panel>
-                <div className="bg-white rounded-xl shadow-sm p-6">
-                  {stats.bySubject.length === 0 ? (
-                    <div className="text-center py-12">
-                      <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">No attendance records found</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className="text-left py-4 px-4 font-semibold text-gray-700">
-                              Subject
-                            </th>
-                            <th className="text-left py-4 px-4 font-semibold text-gray-700">
-                              Subject Code
-                            </th>
-                            <th className="text-left py-4 px-4 font-semibold text-gray-700">
-                              Attended / Total
-                            </th>
-                            <th className="text-left py-4 px-4 font-semibold text-gray-700">
-                              Attendance %
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stats.bySubject.map((subject, idx) => {
-                            const percentage = parseFloat(
-                              subject.attendancePercentage
-                            );
-                            const getColor = () => {
-                              if (percentage >= 75) return "bg-green-500";
-                              if (percentage >= 60) return "bg-yellow-500";
-                              return "bg-red-500";
-                            };
-                            return (
-                              <motion.tr
-                                key={subject.subjectCode}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: idx * 0.05 }}
-                                className="border-b border-gray-100 hover:bg-gray-50 transition"
-                              >
-                                <td className="py-4 px-4 font-medium text-gray-800">
-                                  {subject.subjectName}
-                                </td>
-                                <td className="py-4 px-4 text-gray-600">
-                                  {subject.subjectCode}
-                                </td>
-                                <td className="py-4 px-4 text-gray-600">
-                                  {subject.present} / {subject.total}
-                                </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-32 bg-gray-200 rounded-full h-2">
-                                      <div
-                                        className={`h-2 rounded-full ${getColor()}`}
-                                        style={{ width: `${percentage}%` }}
-                                      />
-                                    </div>
-                                    <span
-                                      className={`text-sm font-medium ${
-                                        percentage >= 75
-                                          ? "text-green-600"
-                                          : percentage >= 60
-                                          ? "text-yellow-600"
-                                          : "text-red-600"
-                                      }`}
-                                    >
-                                      {subject.attendancePercentage}%
-                                    </span>
-                                  </div>
-                                </td>
-                              </motion.tr>
-                            );
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <AlertCircle className="w-5 h-5 theme-text" />
+                        <span className="text-xs text-ink-faint">
+                          {new Date(announcement.createdAt).toLocaleDateString("en-US", {
+                            year: "numeric", month: "long", day: "numeric",
                           })}
-                        </tbody>
-                      </table>
+                        </span>
+                        {announcement.createdBy?.name && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            By {announcement.createdBy.name} ({announcement.createdBy.role === "teacher" ? "Teacher" : "Admin"})
+                          </span>
+                        )}
+                      </div>
+                      {announcement.title && <h4 className="font-semibold text-ink mb-1">{announcement.title}</h4>}
+                      <p className="text-ink line-clamp-2">{announcement.message}</p>
                     </div>
-                  )}
-                </div>
-              </Tab.Panel>
+                    <ChevronRight className="w-5 h-5 text-ink-faint flex-shrink-0 ml-4" />
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.div>
 
-              {/* Analytics Tab */}
-              <Tab.Panel>
-                <div className="bg-white rounded-xl shadow-sm p-6">
-                  {stats.bySubject.length === 0 ? (
-                    <div className="text-center py-12">
-                      <TrendingUp className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">No data available for analytics</p>
+      {/* Tabs */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <Tab.Group selectedIndex={activeTab} onChange={setActiveTab}>
+          <Tab.List className="flex space-x-2 bg-surface rounded-xl p-1 shadow-card border border-line mb-6">
+            {[
+              { label: "Subject-wise Attendance", icon: <Award className="w-5 h-5" /> },
+              { label: "Attendance Log", icon: <ClipboardCheck className="w-5 h-5" /> },
+              { label: "Analytics", icon: <TrendingUp className="w-5 h-5" /> },
+              { label: `My Tickets (${tickets.length})`, icon: <Ticket className="w-5 h-5" /> },
+            ].map(({ label, icon }, i) => (
+              <Tab key={label} as={Fragment}>
+                {({ selected }) => (
+                  <button
+                    className={`flex-1 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+                      selected
+                        ? "text-white shadow-md"
+                        : "text-ink-soft hover:bg-background"
+                    }`}
+                    style={selected ? { backgroundColor: primary } : {}}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+
+          <Tab.Panels>
+            {/* ── Tab 1: Subject-wise Attendance ── */}
+            <Tab.Panel>
+              <Card>
+                {stats.bySubject.length === 0 ? (
+                  <EmptyState
+                    icon={BookOpen}
+                    title="No attendance records found"
+                    description="Your attendance by subject will appear here once recorded."
+                  />
+                ) : (
+                  <Table
+                    columns={[
+                      { header: "Subject", accessor: "subjectName" },
+                      { header: "Subject Code", accessor: "subjectCode" },
+                      { header: "Attended / Total", cell: (row) => `${row.present} / ${row.total}` },
+                      {
+                        header: "Attendance %",
+                        cell: (row) => {
+                          const pct = parseFloat(row.attendancePercentage);
+                          const barColor = pct >= 75 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
+                          const textColor = pct >= 75 ? "text-emerald-600" : pct >= 60 ? "text-amber-600" : "text-red-600";
+                          return (
+                            <div className="flex items-center gap-3 min-w-[150px]">
+                              <div className="flex-1 bg-line rounded-full h-2">
+                                <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className={`text-sm font-medium ${textColor}`}>
+                                {row.attendancePercentage}%
+                              </span>
+                            </div>
+                          );
+                        },
+                      },
+                    ]}
+                    data={stats.bySubject}
+                    rowKey="subjectCode"
+                  />
+                )}
+              </Card>
+            </Tab.Panel>
+
+            {/* ── Tab 2: Full Attendance History Log ── */}
+            <Tab.Panel>
+              <AttendanceHistory role="student" />
+            </Tab.Panel>
+
+            {/* ── Tab 2: Analytics ── */}
+            <Tab.Panel>
+              <Card>
+                {stats.bySubject.length === 0 ? (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="No data available for analytics"
+                    description="Charts will appear here once attendance is recorded."
+                  />
+                ) : (
+                  <div className="grid lg:grid-cols-2 gap-8">
+                    <div>
+                      <h3 className="text-lg font-semibold text-ink mb-4">Subject-wise Attendance</h3>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={stats.bySubject.map((s) => ({
+                              name: s.subjectCode,
+                              attendance: parseFloat(s.attendancePercentage),
+                            }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis domain={[0, 100]} />
+                            <Tooltip formatter={(v) => [`${v}%`, "Attendance"]} />
+                            <Legend />
+                            <Line type="monotone" dataKey="attendance" stroke={primary} strokeWidth={2} name="Attendance %" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="grid lg:grid-cols-2 gap-8">
-                      {/* Bar Chart */}
+
+                    {pieData.length > 0 && (
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                          Subject-wise Attendance
-                        </h3>
+                        <h3 className="text-lg font-semibold text-ink mb-4">Attendance Distribution</h3>
                         <div className="h-80">
                           <ResponsiveContainer width="100%" height="100%">
-                            <LineChart
-                              data={stats.bySubject.map((s) => ({
-                                name: s.subjectCode,
-                                attendance: parseFloat(s.attendancePercentage),
-                              }))}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="name" />
-                              <YAxis domain={[0, 100]} />
-                              <Tooltip
-                                formatter={(value) => [`${value}%`, "Attendance"]}
-                              />
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                cx="50%" cy="50%"
+                                innerRadius={60} outerRadius={100}
+                                paddingAngle={5} dataKey="value"
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              >
+                                {pieData.map((entry, i) => (
+                                  <Cell key={i} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
                               <Legend />
-                              <Line
-                                type="monotone"
-                                dataKey="attendance"
-                                stroke="#8b5cf6"
-                                strokeWidth={2}
-                                name="Attendance %"
-                              />
-                            </LineChart>
+                            </PieChart>
                           </ResponsiveContainer>
                         </div>
                       </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </Tab.Panel>
 
-                      {/* Pie Chart */}
-                      {pieData.length > 0 && (
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                            Attendance Distribution
-                          </h3>
-                          <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={pieData}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={60}
-                                  outerRadius={100}
-                                  paddingAngle={5}
-                                  dataKey="value"
-                                  label={({ name, percent }) =>
-                                    `${name} ${(percent * 100).toFixed(0)}%`
-                                  }
-                                >
-                                  {pieData.map((entry, index) => (
-                                    <Cell key={index} fill={entry.color} />
-                                  ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+            {/* ── Tab 3: Tickets ── */}
+            <Tab.Panel>
+              <Card>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-ink">My Tickets</h2>
+                  <Button
+                    onClick={() => (window.location.href = "/tickets")}
+                    variant="primary"
+                    size="sm"
+                  >
+                    + New Ticket
+                  </Button>
                 </div>
-              </Tab.Panel>
 
-              {/* Tickets Tab */}
-              <Tab.Panel>
-                <div className="bg-white rounded-xl shadow-sm p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-gray-800">My Tickets</h2>
-                    <button
-                      onClick={() => (window.location.href = "/tickets")}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm"
-                    >
-                      + New Ticket
-                    </button>
+                {tickets.length === 0 ? (
+                  <EmptyState
+                    icon={Ticket}
+                    title="No tickets submitted yet"
+                    description="Create a support ticket whenever you need help."
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {tickets.map((ticket) => (
+                      <TicketCard
+                        key={ticket._id}
+                        ticket={ticket}
+                        primary={primary}
+                        onPreview={handleFilePreview}
+                      />
+                    ))}
                   </div>
+                )}
+              </Card>
+            </Tab.Panel>
+          </Tab.Panels>
+        </Tab.Group>
+      </motion.div>
 
-                  {tickets.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Ticket className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">No tickets submitted yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {tickets.map((ticket) => (
-                        <div
-                          key={ticket._id}
-                          className="border border-gray-200 rounded-xl p-5 hover:shadow-md transition"
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <p className="text-xs text-gray-400 mb-1">
-                                Ticket #{ticket._id?.slice(-8)}
-                              </p>
-                              <p className="font-medium text-gray-800">
-                                {ticket.section || "General Inquiry"}
-                              </p>
-                            </div>
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                ticket.status === "approved"
-                                  ? "bg-green-100 text-green-700"
-                                  : ticket.status === "rejected"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                              }`}
-                            >
-                              {ticket.status || "pending"}
-                            </span>
-                          </div>
-
-                          <p className="text-gray-600 mb-3">{ticket.document}</p>
-
-                          {ticket.response && (
-                            <div className="bg-blue-50 rounded-lg p-3 mb-3">
-                              <p className="text-xs font-medium text-blue-600 mb-1">
-                                Response:
-                              </p>
-                              <p className="text-sm text-blue-700">{ticket.response}</p>
-                            </div>
-                          )}
-
-                          {ticket.file && (
-                            <button
-                              onClick={() =>
-                                handleFilePreview(ticket._id, ticket.file)
-                              }
-                              className="inline-flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700"
-                            >
-                              <Eye className="w-4 h-4" />
-                              View Attachment
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Tab.Panel>
-            </Tab.Panels>
-          </Tab.Group>
-        </motion.div>
-      </div>
-
-      {/* Announcement Detail Modal */}
-      <Transition appear show={!!selectedAnnouncement} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-50"
-          onClose={() => setSelectedAnnouncement(null)}
-        >
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black bg-opacity-25" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-md transform rounded-2xl bg-white p-6 shadow-xl transition-all">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Bell className="w-5 h-5 text-purple-600" />
-                      <Dialog.Title className="text-lg font-semibold text-gray-800">
-                        Announcement
-                      </Dialog.Title>
-                    </div>
-                    <button
-                      onClick={() => setSelectedAnnouncement(null)}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="mb-3">
-                    <p className="text-xs text-gray-400">
-                      {selectedAnnouncement?.createdAt &&
-                        new Date(selectedAnnouncement.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <p className="text-gray-700 leading-relaxed">
-                    {selectedAnnouncement?.message}
-                  </p>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
+      {/* Announcement Modal */}
+      <Modal
+        isOpen={!!selectedAnnouncement}
+        onClose={() => setSelectedAnnouncement(null)}
+        title={selectedAnnouncement?.title || "Announcement"}
+        subtitle={
+          selectedAnnouncement?.createdAt
+            ? `${new Date(selectedAnnouncement.createdAt).toLocaleString()}${
+                selectedAnnouncement?.createdBy?.name
+                  ? ` • Posted by ${selectedAnnouncement.createdBy.name} (${selectedAnnouncement.createdBy.role === "teacher" ? "Teacher" : "Admin"})`
+                  : ""
+              }`
+            : undefined
+        }
+      >
+        {selectedAnnouncement?.createdBy?.name && (
+          <div className="mb-4 p-3 bg-surface rounded-xl border border-line flex items-center justify-between text-xs">
+            <span className="text-ink-faint font-medium">Sent By</span>
+            <span className="font-semibold text-ink">
+              {selectedAnnouncement.createdBy.name} ({selectedAnnouncement.createdBy.role === "teacher" ? "Teacher" : "Admin"})
+            </span>
           </div>
-        </Dialog>
-      </Transition>
+        )}
+        <p className="text-ink leading-relaxed whitespace-pre-wrap">{selectedAnnouncement?.message}</p>
+      </Modal>
 
       {/* File Preview Modal */}
-      <Transition appear show={!!selectedFile} as={Fragment}>
-        <Dialog
-          as="div"
-          className="relative z-50"
-          onClose={() => {
-            setSelectedFile(null);
-            setFileContent(null);
-          }}
-        >
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black bg-opacity-25" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="w-full max-w-2xl transform rounded-2xl bg-white p-6 shadow-xl transition-all">
-                  <div className="flex justify-between items-center mb-4">
-                    <Dialog.Title className="text-lg font-medium text-gray-900">
-                      {selectedFile?.fileName}
-                    </Dialog.Title>
-                    <button
-                      onClick={() => {
-                        setSelectedFile(null);
-                        setFileContent(null);
-                      }}
-                      className="text-gray-400 hover:text-gray-500"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <div className="mt-4">
-                    {fileContent?.type === "image" && (
-                      <img
-                        src={fileContent.content}
-                        alt="Preview"
-                        className="max-w-full h-auto rounded-lg"
-                      />
-                    )}
-                    {fileContent?.type === "pdf" && (
-                      <iframe
-                        src={fileContent.content}
-                        title="PDF Viewer"
-                        className="w-full h-96 rounded-lg"
-                      />
-                    )}
-                    {fileContent?.type === "download" && (
-                      <div className="text-center py-8">
-                        <p className="text-gray-600 mb-4">
-                          This file type cannot be previewed
-                        </p>
-                        <a
-                          href={fileContent.content}
-                          download={fileContent.fileName}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download File
-                        </a>
-                      </div>
-                    )}
-                    {fileContent?.type === "error" && (
-                      <p className="text-red-500 text-center py-4">
-                        {fileContent.content}
-                      </p>
-                    )}
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
+      <Modal
+        isOpen={!!selectedFile}
+        onClose={() => { setSelectedFile(null); setFileContent(null); }}
+        title={selectedFile?.fileName ?? "File Preview"}
+        size="lg"
+      >
+        {fileContent?.type === "image" && (
+          <img src={fileContent.content} alt="Preview" className="max-w-full h-auto rounded-lg" />
+        )}
+        {fileContent?.type === "pdf" && (
+          <iframe src={fileContent.content} title="PDF Viewer" className="w-full h-96 rounded-lg" />
+        )}
+        {fileContent?.type === "download" && (
+          <div className="text-center py-8">
+            <p className="text-ink-soft mb-4">This file type cannot be previewed</p>
+            <a
+              href={fileContent.content}
+              download={fileContent.fileName}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Download File
+            </a>
           </div>
-        </Dialog>
-      </Transition>
+        )}
+        {fileContent?.type === "error" && (
+          <p className="text-red-500 text-center py-4">{fileContent.content}</p>
+        )}
+      </Modal>
+
+      {/* Global styles for utility classes that read CSS variables */}
+      <style>{`
+        .theme-text  { color: var(--theme-primary); }
+        .theme-bg    { background-color: var(--theme-primary); }
+        .theme-border-l { border-left: 4px solid var(--theme-primary); }
+      `}</style>
     </div>
   );
 }
 
-// Stat Card Component
-const StatCard = ({ title, value, icon, color }) => {
-  const colorClasses = {
-    purple: "bg-purple-50 text-purple-600",
-    green: "bg-green-50 text-green-600",
-    red: "bg-red-50 text-red-600",
-    orange: "bg-orange-50 text-orange-600",
+// ─── sub-components ──────────────────────────────────────────────────────────
+
+function TicketCard({ ticket, primary, onPreview }) {
+  const statusTone = {
+    approved: "success",
+    rejected: "danger",
   };
+  const tone = statusTone[ticket.status] ?? "warning";
 
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-3 rounded-xl ${colorClasses[color]}`}>{icon}</div>
-        <TrendingUp
-          className={`w-5 h-5 ${
-            value > 75
-              ? "text-green-500"
-              : value > 60
-              ? "text-yellow-500"
-              : "text-red-500"
-          }`}
-        />
+    <Card padding="md">
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <p className="text-xs text-ink-faint mb-1">Ticket #{ticket._id?.slice(-8)}</p>
+          <p className="font-medium text-ink">{ticket.section || "General Inquiry"}</p>
+        </div>
+        <Badge tone={tone}>{ticket.status || "pending"}</Badge>
       </div>
-      <p className="text-gray-500 text-sm mb-1">{title}</p>
-      <p className="text-2xl font-bold text-gray-800">{value}</p>
-    </div>
+
+      <p className="text-ink-soft mb-3">{ticket.document}</p>
+
+      {ticket.response && (
+        <div className="bg-primary-soft border border-primary-surface rounded-lg p-3 mb-3">
+          <p className="text-xs font-medium text-primary-dark mb-1">Response:</p>
+          <p className="text-sm text-ink">{ticket.response}</p>
+        </div>
+      )}
+
+      {ticket.file && (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={Eye}
+          onClick={() => onPreview(ticket._id, ticket.file)}
+        >
+          View Attachment
+        </Button>
+      )}
+    </Card>
   );
-};
+}

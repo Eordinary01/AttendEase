@@ -5,61 +5,83 @@ const subjectSchema = mongoose.Schema(
     subjectCode: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
       uppercase: true,
-      trim: true
+      trim: true,
     },
     subjectName: {
       type: String,
       required: true,
       trim: true,
-      unique: true
+      // unique: true ,
     },
     description: {
       type: String,
-      default: ""
+      default: "",
     },
     credits: {
       type: Number,
-      default: 0
+      default: 0,
     },
     // Semester/Year info
     semester: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
-    // Course code or program name
+    // Optional linkage to academic structure (Course model)
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },
+    branch: { type: String, trim: true, default: "" },
+    // Course code or program name (legacy free-text)
     courseCode: {
       type: String,
-      trim: true
+      trim: true,
     },
     // Track which admin created this
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: "User",
+      required: true,
     },
     isActive: {
       type: Boolean,
-      default: true
+      default: true,
     },
     createdAt: {
       type: Date,
-      default: Date.now
+      default: Date.now,
     },
     updatedAt: {
       type: Date,
-      default: Date.now
-    }
+      default: Date.now,
+    },
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant",
+      required: true,
+      index: true,
+    },
+
+    department: String, // CSE, ECE, ME, etc.
+    year: Number, // 1, 2, 3, 4
+
+    //  Subject metadata
+    isElective: { type: Boolean, default: false },
+    prerequisites: [{ type: mongoose.Schema.Types.ObjectId, ref: "Subject" }],
+    syllabus: String,
+    outcomes: [String],
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Index for faster queries
 subjectSchema.index({ subjectCode: 1 });
 subjectSchema.index({ semester: 1 });
-subjectSchema.index({ subjectName: 1 });
+
 subjectSchema.index({ courseCode: 1 });
 
-module.exports = mongoose.model('Subject', subjectSchema);
+subjectSchema.index({ tenantId: 1, subjectCode: 1 }, { unique: true });
+
+module.exports = mongoose.model("Subject", subjectSchema);

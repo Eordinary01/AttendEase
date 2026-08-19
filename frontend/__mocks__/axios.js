@@ -1,0 +1,17 @@
+// Auto-mock axios to avoid ESM transform issues in CRA
+const mockAxios = {
+  create: jest.fn(() => mockAxios),
+  get: jest.fn(() => Promise.resolve({ data: {} })),
+  post: jest.fn(() => Promise.resolve({ data: {} })),
+  put: jest.fn(() => Promise.resolve({ data: {} })),
+  delete: jest.fn(() => Promise.resolve({ data: {} })),
+  patch: jest.fn(() => Promise.resolve({ data: {} })),
+  interceptors: {
+    request: { use: jest.fn(), handlers: [] },
+    response: { use: jest.fn(), handlers: [] },
+  },
+  defaults: { headers: { common: {} } },
+};
+
+module.exports = mockAxios;
+module.exports.default = mockAxios;

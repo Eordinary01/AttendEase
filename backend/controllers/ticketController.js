@@ -5,6 +5,8 @@ const Subject = require("../models/Subject");
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
+const logger = require("../utils/logger");
 require('dotenv').config();
 
 /**
@@ -14,16 +16,19 @@ require('dotenv').config();
 const createAbsenceProofTicket = async (req, res) => {
   const studentId = req.user._id;
   const { subjectId, absentDate, reason, reasonDescription } = req.body;
+  const tenantId = req.user.tenantId;
 
   // Validation
   if (!subjectId || !absentDate || !reason || !reasonDescription) {
     return res.status(400).json({
+      success: false,
       message: 'subjectId, absentDate, reason, and reasonDescription are required'
     });
   }
 
   if (reasonDescription.length < 10 || reasonDescription.length > 500) {
     return res.status(400).json({
+      success: false,
       message: 'Reason description must be between 10 and 500 characters'
     });
   }
@@ -31,23 +36,37 @@ const createAbsenceProofTicket = async (req, res) => {
   const validReasons = ['medical', 'family-emergency', 'institutional-work', 'other'];
   if (!validReasons.includes(reason)) {
     return res.status(400).json({
+      success: false,
       message: `Reason must be one of: ${validReasons.join(', ')}`
     });
   }
 
   try {
-    // Verify student
-    const student = await User.findById(studentId);
-    if (!student || student.role !== 'student') {
+    // Verify student with tenant
+    const student = await User.findOne({ 
+      _id: studentId, 
+      tenantId: tenantId,
+      role: 'student',
+      isActive: true 
+    });
+    
+    if (!student) {
       return res.status(403).json({
-        message: 'Only students can create absence proof tickets'
+        success: false,
+        message: 'Invalid student account'
       });
     }
 
-    // Verify subject exists
-    const subject = await Subject.findById(subjectId);
+    // Verify subject exists within tenant
+    const subject = await Subject.findOne({ 
+      _id: subjectId, 
+      tenantId: tenantId,
+      isActive: true 
+    });
+    
     if (!subject) {
       return res.status(404).json({
+        success: false,
         message: 'Subject not found'
       });
     }
@@ -56,6 +75,7 @@ const createAbsenceProofTicket = async (req, res) => {
     const dateObj = new Date(absentDate);
     if (dateObj > new Date()) {
       return res.status(400).json({
+        success: false,
         message: 'Cannot create proof ticket for future dates'
       });
     }
@@ -65,13 +85,13 @@ const createAbsenceProofTicket = async (req, res) => {
     if (req.files && req.files.length > 0) {
       if (req.files.length > 5) {
         return res.status(400).json({
+          success: false,
           message: 'Maximum 5 documents allowed'
         });
       }
 
       req.files.forEach(file => {
-        // Generate unique file ID
-        const fileId = new require('mongoose').Types.ObjectId();
+        const fileId = new mongoose.Types.ObjectId();
         proofDocuments.push({
           _id: fileId,
           filename: file.filename,
@@ -84,12 +104,14 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     } else {
       return res.status(400).json({
+        success: false,
         message: 'At least one proof document is required'
       });
     }
 
-    // Create ticket
+    // Create ticket with tenantId
     const newTicket = new Ticket({
+      tenantId: tenantId,
       studentId: studentId,
       student: {
         name: student.name,
@@ -113,6 +135,7 @@ const createAbsenceProofTicket = async (req, res) => {
     await newTicket.save();
 
     return res.status(201).json({
+      success: true,
       message: 'Absence proof ticket created successfully',
       ticket: {
         id: newTicket._id,
@@ -128,8 +151,9 @@ const createAbsenceProofTicket = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error creating absence proof ticket:', error);
+    logger.error('Error creating absence proof ticket', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error creating ticket',
       error: error.message
     });
@@ -142,13 +166,21 @@ const createAbsenceProofTicket = async (req, res) => {
  */
 const getPendingAbsenceTickets = async (req, res) => {
   const teacherId = req.user._id;
+  const tenantId = req.user.tenantId;
   const { status, subjectId } = req.query;
 
   try {
     // Verify user is teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== 'teacher') {
+    const teacher = await User.findOne({ 
+      _id: teacherId, 
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true 
+    });
+    
+    if (!teacher) {
       return res.status(403).json({
+        success: false,
         message: 'Only teachers can view absence proof tickets'
       });
     }
@@ -157,6 +189,7 @@ const getPendingAbsenceTickets = async (req, res) => {
     const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
 
     let query = {
+      tenantId: tenantId,
       subjectId: { $in: teacherSubjects },
       verificationStatus: { $in: ['pending', 'needs-more-info'] }
     };
@@ -165,6 +198,7 @@ const getPendingAbsenceTickets = async (req, res) => {
     if (subjectId) {
       if (!teacherSubjects.includes(subjectId)) {
         return res.status(403).json({
+          success: false,
           message: 'You are not assigned to teach this subject'
         });
       }
@@ -183,6 +217,7 @@ const getPendingAbsenceTickets = async (req, res) => {
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
+      success: true,
       message: 'Pending absence proof tickets retrieved',
       count: tickets.length,
       tickets: tickets.map(ticket => ({
@@ -200,8 +235,9 @@ const getPendingAbsenceTickets = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching tickets:', error);
+    logger.error('Error fetching tickets', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error fetching tickets',
       error: error.message
     });
@@ -216,28 +252,42 @@ const verifyAbsenceProof = async (req, res) => {
   const { ticketId } = req.params;
   const { verificationStatus, verificationRemarks } = req.body;
   const teacherId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   // Validation
   const validStatuses = ['verified', 'rejected', 'needs-more-info'];
   if (!validStatuses.includes(verificationStatus)) {
     return res.status(400).json({
+      success: false,
       message: `Verification status must be one of: ${validStatuses.join(', ')}`
     });
   }
 
   try {
     // Verify user is teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== 'teacher') {
+    const teacher = await User.findOne({ 
+      _id: teacherId, 
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true 
+    });
+    
+    if (!teacher) {
       return res.status(403).json({
+        success: false,
         message: 'Only teachers can verify absence proofs'
       });
     }
 
-    // Find ticket
-    const ticket = await Ticket.findById(ticketId);
+    // Find ticket within tenant
+    const ticket = await Ticket.findOne({ 
+      _id: ticketId, 
+      tenantId: tenantId 
+    });
+    
     if (!ticket) {
       return res.status(404).json({
+        success: false,
         message: 'Ticket not found'
       });
     }
@@ -249,6 +299,7 @@ const verifyAbsenceProof = async (req, res) => {
 
     if (!isAssigned) {
       return res.status(403).json({
+        success: false,
         message: 'You are not assigned to teach this subject'
       });
     }
@@ -275,6 +326,7 @@ const verifyAbsenceProof = async (req, res) => {
     await ticket.save();
 
     return res.status(200).json({
+      success: true,
       message: 'Absence proof verified successfully',
       ticket: {
         id: ticket._id,
@@ -286,8 +338,9 @@ const verifyAbsenceProof = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error verifying proof:', error);
+    logger.error('Error verifying proof', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error verifying proof',
       error: error.message
     });
@@ -301,20 +354,33 @@ const verifyAbsenceProof = async (req, res) => {
 const markAttendanceAfterVerification = async (req, res) => {
   const { ticketId } = req.params;
   const teacherId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   try {
     // Verify user is teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== 'teacher') {
+    const teacher = await User.findOne({ 
+      _id: teacherId, 
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true 
+    });
+    
+    if (!teacher) {
       return res.status(403).json({
+        success: false,
         message: 'Only teachers can mark attendance'
       });
     }
 
-    // Find ticket
-    const ticket = await Ticket.findById(ticketId);
+    // Find ticket within tenant
+    const ticket = await Ticket.findOne({ 
+      _id: ticketId, 
+      tenantId: tenantId 
+    });
+    
     if (!ticket) {
       return res.status(404).json({
+        success: false,
         message: 'Ticket not found'
       });
     }
@@ -322,6 +388,7 @@ const markAttendanceAfterVerification = async (req, res) => {
     // Can only mark after verification
     if (ticket.verificationStatus !== 'verified') {
       return res.status(400).json({
+        success: false,
         message: 'Can only mark attendance for verified proofs'
       });
     }
@@ -333,25 +400,33 @@ const markAttendanceAfterVerification = async (req, res) => {
 
     if (!isAssigned) {
       return res.status(403).json({
+        success: false,
         message: 'You are not assigned to teach this subject'
       });
     }
 
-    // Find or create attendance record
+    // Find or create attendance record with tenant
     let attendance = await Attendance.findOne({
       studentId: ticket.studentId,
       subjectId: ticket.subjectId,
-      date: ticket.absentDate
+      date: ticket.absentDate,
+      tenantId: tenantId
     });
 
     if (attendance) {
       // Update existing record
       attendance.status = 'present';
       attendance.remarks = `Marked present based on absence proof verification (Ticket: ${ticket._id})`;
+      attendance.updatedAt = Date.now();
     } else {
       // Create new attendance record
-      const subject = await Subject.findById(ticket.subjectId);
+      const subject = await Subject.findOne({ 
+        _id: ticket.subjectId, 
+        tenantId: tenantId 
+      });
+      
       attendance = new Attendance({
+        tenantId: tenantId,
         studentId: ticket.studentId,
         subjectId: ticket.subjectId,
         subject: {
@@ -364,7 +439,8 @@ const markAttendanceAfterVerification = async (req, res) => {
         status: 'present',
         remarks: `Marked present based on absence proof verification (Ticket: ${ticket._id})`,
         semester: subject.semester,
-        createdBy: teacherId
+        createdBy: teacherId,
+        classSessionId: `${ticket.subjectId}_${ticket.student.section}_${ticket.absentDate.toISOString().split('T')[0]}`
       });
     }
 
@@ -378,6 +454,7 @@ const markAttendanceAfterVerification = async (req, res) => {
     await ticket.save();
 
     return res.status(200).json({
+      success: true,
       message: 'Attendance marked successfully based on verified proof',
       ticket: {
         id: ticket._id,
@@ -391,8 +468,9 @@ const markAttendanceAfterVerification = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error marking attendance:', error);
+    logger.error('Error marking attendance', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error marking attendance',
       error: error.message
     });
@@ -405,23 +483,35 @@ const markAttendanceAfterVerification = async (req, res) => {
  */
 const getStudentAbsenceTickets = async (req, res) => {
   const studentId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   try {
     // Verify user is student
-    const student = await User.findById(studentId);
-    if (!student || student.role !== 'student') {
+    const student = await User.findOne({ 
+      _id: studentId, 
+      tenantId: tenantId,
+      role: 'student',
+      isActive: true 
+    });
+    
+    if (!student) {
       return res.status(403).json({
+        success: false,
         message: 'Only students can view their tickets'
       });
     }
 
-    // Fetch student's tickets
-    const tickets = await Ticket.find({ studentId: studentId })
+    // Fetch student's tickets within tenant
+    const tickets = await Ticket.find({ 
+      studentId: studentId, 
+      tenantId: tenantId 
+    })
       .populate('subjectId', 'subjectCode subjectName')
       .populate('verifiedByTeacherId', 'name email')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
+      success: true,
       message: 'Student absence proof tickets retrieved',
       count: tickets.length,
       tickets: tickets.map(ticket => ({
@@ -446,8 +536,9 @@ const getStudentAbsenceTickets = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching student tickets:', error);
+    logger.error('Error fetching student tickets', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error fetching tickets',
       error: error.message
     });
@@ -462,25 +553,34 @@ const addVerificationNote = async (req, res) => {
   const { ticketId } = req.params;
   const { content } = req.body;
   const teacherId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   if (!content || content.trim().length === 0) {
     return res.status(400).json({
+      success: false,
       message: 'Note content cannot be empty'
     });
   }
 
   try {
     // Verify user is teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== 'teacher') {
+    const teacher = await User.findOne({ 
+      _id: teacherId, 
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true 
+    });
+    
+    if (!teacher) {
       return res.status(403).json({
+        success: false,
         message: 'Only teachers can add notes'
       });
     }
 
-    // Find and update ticket
-    const ticket = await Ticket.findByIdAndUpdate(
-      ticketId,
+    // Find and update ticket within tenant
+    const ticket = await Ticket.findOneAndUpdate(
+      { _id: ticketId, tenantId: tenantId },
       {
         $push: {
           internalNotes: {
@@ -497,18 +597,21 @@ const addVerificationNote = async (req, res) => {
 
     if (!ticket) {
       return res.status(404).json({
+        success: false,
         message: 'Ticket not found'
       });
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Note added successfully',
       note: ticket.internalNotes[ticket.internalNotes.length - 1]
     });
 
   } catch (error) {
-    console.error('Error adding note:', error);
+    logger.error('Error adding note', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error adding note',
       error: error.message
     });
@@ -521,12 +624,20 @@ const addVerificationNote = async (req, res) => {
  */
 const getVerificationStats = async (req, res) => {
   const teacherId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   try {
     // Verify user is teacher
-    const teacher = await User.findById(teacherId);
-    if (!teacher || teacher.role !== 'teacher') {
+    const teacher = await User.findOne({ 
+      _id: teacherId, 
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true 
+    });
+    
+    if (!teacher) {
       return res.status(403).json({
+        success: false,
         message: 'Only teachers can view statistics'
       });
     }
@@ -534,12 +645,13 @@ const getVerificationStats = async (req, res) => {
     // Get teacher's assigned subjects
     const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
 
-    // Get statistics for teacher's subjects
+    // Get statistics for teacher's subjects within tenant
     const stats = await Ticket.aggregate([
       { 
         $match: { 
+          tenantId: new mongoose.Types.ObjectId(tenantId),
           subjectId: { $in: teacherSubjects },
-          verifiedByTeacherId: new (require('mongoose').Types.ObjectId)(teacherId)
+          verifiedByTeacherId: new mongoose.Types.ObjectId(teacherId)
         } 
       },
       {
@@ -566,6 +678,7 @@ const getVerificationStats = async (req, res) => {
     ]);
 
     return res.status(200).json({
+      success: true,
       message: 'Verification statistics retrieved',
       stats: stats.length > 0 ? stats[0] : {
         totalTickets: 0,
@@ -578,8 +691,9 @@ const getVerificationStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    logger.error('Error fetching stats', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error fetching statistics',
       error: error.message
     });
@@ -593,12 +707,18 @@ const getVerificationStats = async (req, res) => {
 const getUploadedFile = async (req, res) => {
   const { ticketId, fileId } = req.params;
   const userId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   try {
-    // Find ticket
-    const ticket = await Ticket.findById(ticketId);
+    // Find ticket within tenant
+    const ticket = await Ticket.findOne({ 
+      _id: ticketId, 
+      tenantId: tenantId 
+    });
+    
     if (!ticket) {
       return res.status(404).json({
+        success: false,
         message: 'Ticket not found'
       });
     }
@@ -607,12 +727,24 @@ const getUploadedFile = async (req, res) => {
     const file = ticket.proofDocuments.id(fileId);
     if (!file) {
       return res.status(404).json({
+        success: false,
         message: 'File not found'
       });
     }
 
     // Verify user permissions
-    const user = await User.findById(userId);
+    const user = await User.findOne({ 
+      _id: userId, 
+      tenantId: tenantId 
+    });
+    
+    if (!user) {
+      return res.status(403).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     let hasPermission = false;
 
     // Student can access their own files
@@ -631,12 +763,13 @@ const getUploadedFile = async (req, res) => {
     }
 
     // Admin can access all
-    if (user.role === 'admin') {
+    if (user.role === 'admin' || user.role === 'super_admin') {
       hasPermission = true;
     }
 
     if (!hasPermission) {
       return res.status(403).json({
+        success: false,
         message: 'Access denied to this file'
       });
     }
@@ -647,6 +780,7 @@ const getUploadedFile = async (req, res) => {
       await fs.access(filePath);
     } catch (err) {
       return res.status(404).json({
+        success: false,
         message: 'File not found on server'
       });
     }
@@ -674,8 +808,9 @@ const getUploadedFile = async (req, res) => {
     fileStream.pipe(res);
 
   } catch (error) {
-    console.error('Error accessing file:', error);
+    logger.error('Error accessing file', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error accessing file',
       error: error.message
     });
@@ -689,22 +824,38 @@ const getUploadedFile = async (req, res) => {
 const getTicketDetails = async (req, res) => {
   const { ticketId } = req.params;
   const userId = req.user._id;
+  const tenantId = req.user.tenantId;
 
   try {
-    // Find ticket
-    const ticket = await Ticket.findById(ticketId)
+    // Find ticket within tenant
+    const ticket = await Ticket.findOne({ 
+      _id: ticketId, 
+      tenantId: tenantId 
+    })
       .populate('subjectId', 'subjectCode subjectName')
       .populate('verifiedByTeacherId', 'name email')
       .populate('studentId', 'name rollNo section email');
 
     if (!ticket) {
       return res.status(404).json({
+        success: false,
         message: 'Ticket not found'
       });
     }
 
     // Verify user permissions
-    const user = await User.findById(userId);
+    const user = await User.findOne({ 
+      _id: userId, 
+      tenantId: tenantId 
+    });
+    
+    if (!user) {
+      return res.status(403).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     let hasPermission = false;
 
     // Student can view their own tickets
@@ -723,17 +874,19 @@ const getTicketDetails = async (req, res) => {
     }
 
     // Admin can view all tickets
-    if (user.role === 'admin') {
+    if (user.role === 'admin' || user.role === 'super_admin') {
       hasPermission = true;
     }
 
     if (!hasPermission) {
       return res.status(403).json({
+        success: false,
         message: 'Access denied to view this ticket'
       });
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Ticket details retrieved',
       ticket: {
         id: ticket._id,
@@ -763,13 +916,15 @@ const getTicketDetails = async (req, res) => {
         attendanceMarkedAt: ticket.attendanceMarkedAt,
         internalNotes: ticket.internalNotes,
         createdAt: ticket.createdAt,
-        updatedAt: ticket.updatedAt
+        updatedAt: ticket.updatedAt,
+        tenantId: ticket.tenantId
       }
     });
 
   } catch (error) {
-    console.error('Error fetching ticket details:', error);
+    logger.error('Error fetching ticket details', { error: error.message });
     return res.status(500).json({
+      success: false,
       message: 'Error fetching ticket details',
       error: error.message
     });

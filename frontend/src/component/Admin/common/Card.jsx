@@ -1,9 +1,10 @@
 // src/components/Admin/common/Card.jsx
 import React from 'react';
+import { motion } from 'framer-motion';
 
-const Card = ({ 
-  children, 
-  className = '', 
+const Card = ({
+  children,
+  className = '',
   onClick,
   hoverable = false,
   padding = 'lg',
@@ -18,18 +19,19 @@ const Card = ({
   };
 
   return (
-    <div
+    <motion.div
       onClick={onClick}
+      whileHover={hoverable ? { y: -4, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01)" } : {}}
       className={`
-        bg-white rounded-xl shadow-sm
+        bg-white rounded-2xl shadow-sm
         ${paddingClasses[padding]}
-        ${bordered ? 'border border-gray-200' : ''}
-        ${hoverable ? 'hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer' : ''}
+        ${bordered ? 'border border-gray-100' : ''}
+        ${hoverable ? 'transition-colors cursor-pointer' : ''}
         ${className}
       `}
     >
       {children}
-    </div>
+    </motion.div>
   );
 };
 

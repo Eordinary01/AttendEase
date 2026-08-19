@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Send, 
-  Clock, 
-  CheckCircle, 
+import {
+  Send,
+  Clock,
+  CheckCircle,
   AlertCircle,
   User,
   BookOpen,
@@ -13,18 +13,23 @@ import {
   Upload,
   FileText,
   X,
-  Calendar,
   Info,
   Loader2
 } from "lucide-react";
-import axios from "axios";
+import api from "../../utils/api";
+import { logError } from "../../utils/logger";
+import Button from "../common/ui/Button";
+import Card from "../common/ui/Card";
+import Badge from "../common/ui/Badge";
+import PageHeader from "../common/ui/PageHeader";
+import { Textarea } from "../common/ui/Input";
 
 const API_URL = process.env.REACT_APP_API_URL;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = [
-  'image/jpeg', 
-  'image/jpg', 
-  'image/png', 
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -32,21 +37,21 @@ const ALLOWED_FILE_TYPES = [
 
 const InputField = ({ id, icon: Icon, label, value, onChange, disabled, required = false }) => (
   <div className="flex-1">
-    <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-1">
-      {label} {required && <span className="text-red-400">*</span>}
+    <label htmlFor={id} className="block text-sm font-medium text-ink-soft mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
     </label>
     <div className="relative">
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-        <Icon className="h-5 w-5 text-gray-400" />
+        <Icon className="h-5 w-5 text-ink-faint" />
       </div>
       <input
         id={id}
         type="text"
         className={`
-          w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg
-          text-gray-100 transition-all duration-200
-          focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
-          disabled:opacity-50 disabled:bg-gray-700
+          w-full pl-10 pr-4 py-2.5 bg-surface border border-line rounded-lg
+          text-ink transition-all duration-200
+          focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+          disabled:opacity-50 disabled:bg-background
         `}
         value={value}
         onChange={onChange}
@@ -63,17 +68,17 @@ const FileUploadArea = ({ file, setFile, error, setError }) => {
 
   const validateFile = (selectedFile) => {
     if (!selectedFile) return false;
-    
+
     if (!ALLOWED_FILE_TYPES.includes(selectedFile.type)) {
       setError("Invalid file type. Please upload PDF, DOC, DOCX, or images (JPG, PNG)");
       return false;
     }
-    
+
     if (selectedFile.size > MAX_FILE_SIZE) {
       setError("File size exceeds 5MB limit");
       return false;
     }
-    
+
     setError(null);
     return true;
   };
@@ -103,9 +108,9 @@ const FileUploadArea = ({ file, setFile, error, setError }) => {
   return (
     <div
       className={`
-        relative h-full min-h-[200px] rounded-lg border-2 border-dashed
+        relative h-full min-h-[200px] rounded-lg border-2 border-dashed bg-surface
         transition-all duration-200 cursor-pointer
-        ${dragActive ? 'border-violet-500 bg-violet-500/10' : 'border-gray-600 hover:border-violet-400'}
+        ${dragActive ? 'border-primary bg-primary/10' : 'border-line hover:border-primary'}
         ${error ? 'border-red-500' : ''}
       `}
       onDragEnter={handleDrag}
@@ -124,9 +129,9 @@ const FileUploadArea = ({ file, setFile, error, setError }) => {
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         {file ? (
           <div className="flex flex-col items-center gap-2">
-            <FileText className="h-10 w-10 text-violet-500" />
-            <p className="text-sm text-gray-300 break-all max-w-[200px]">{file.name}</p>
-            <p className="text-xs text-gray-500">
+            <FileText className="h-10 w-10 text-primary" />
+            <p className="text-sm text-ink-soft break-all max-w-[200px]">{file.name}</p>
+            <p className="text-xs text-ink-faint">
               {(file.size / 1024 / 1024).toFixed(2)} MB
             </p>
             <button
@@ -136,7 +141,7 @@ const FileUploadArea = ({ file, setFile, error, setError }) => {
                 if (inputRef.current) inputRef.current.value = '';
                 setError(null);
               }}
-              className="flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
+              className="flex items-center gap-1 text-red-600 hover:text-red-700 transition-colors"
             >
               <X className="h-4 w-4" />
               Remove
@@ -144,10 +149,10 @@ const FileUploadArea = ({ file, setFile, error, setError }) => {
           </div>
         ) : (
           <>
-            <Upload className="h-10 w-10 text-violet-500 mb-2" />
-            <p className="text-sm text-gray-300 mb-2">Drag and drop your file here, or</p>
-            <p className="text-xs text-gray-500">Click to browse</p>
-            <p className="text-xs text-gray-500 mt-2">
+            <Upload className="h-10 w-10 text-primary mb-2" />
+            <p className="text-sm text-ink-soft mb-2">Drag and drop your file here, or</p>
+            <p className="text-xs text-ink-faint">Click to browse</p>
+            <p className="text-xs text-ink-faint mt-2">
               Supported: PDF, DOC, DOCX, JPG, PNG (Max 5MB)
             </p>
           </>
@@ -182,7 +187,6 @@ export default function Ticket() {
 
   const token = localStorage.getItem("token");
 
-  // Fetch user data from API
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -191,9 +195,7 @@ export default function Ticket() {
           throw new Error("User ID not found");
         }
 
-        const response = await axios.get(`${API_URL}/users/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.get(`/users/public/users/${userId}`);
 
         const user = response.data;
         setUserData({
@@ -204,14 +206,12 @@ export default function Ticket() {
           userId: user._id || userId
         });
 
-        // Also store in localStorage for backup
         localStorage.setItem("name", user.name || "");
         localStorage.setItem("section", user.section || "");
         localStorage.setItem("rollNo", user.rollNo || "");
-        
+
       } catch (error) {
-        console.error("Error fetching user data:", error);
-        // Fallback to localStorage
+        logError("Fetch User Data", error);
         setUserData({
           name: localStorage.getItem("name") || "",
           email: localStorage.getItem("userEmail") || "",
@@ -227,11 +227,10 @@ export default function Ticket() {
     fetchUserData();
   }, [token]);
 
-  // Check cooldown period
   useEffect(() => {
     if (lastSubmitTime) {
       const elapsed = Date.now() - parseInt(lastSubmitTime);
-      const cooldownPeriod = 100000; // 100 seconds
+      const cooldownPeriod = 100000;
       if (elapsed < cooldownPeriod) {
         setDisableSubmit(true);
         const timeout = setTimeout(() => {
@@ -248,7 +247,7 @@ export default function Ticket() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.document.trim()) {
       setErrorMessage("Please provide document details");
       return;
@@ -261,7 +260,7 @@ export default function Ticket() {
     try {
       const formDataToSend = new FormData();
       formDataToSend.append("document", formData.document);
-      
+
       if (file) {
         formDataToSend.append("files", file);
       }
@@ -283,7 +282,6 @@ export default function Ticket() {
         localStorage.setItem("lastTicketSubmitTime", currentTime);
         setResponseStatus("success");
 
-        // Reset form
         setFormData({ document: "" });
         setFile(null);
         setFileError(null);
@@ -296,7 +294,7 @@ export default function Ticket() {
         setErrorMessage(data.message || "An error occurred while creating the ticket.");
       }
     } catch (error) {
-      console.error("Error creating ticket:", error);
+      logError("Create Ticket", error);
       setResponseStatus("error");
       setErrorMessage(error.message || "An error occurred. Please try again.");
     } finally {
@@ -306,230 +304,181 @@ export default function Ticket() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-violet-900 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 text-violet-500 animate-spin" />
-          <p className="text-gray-300">Loading your information...</p>
+          <Loader2 className="h-12 w-12 text-primary animate-spin" />
+          <p className="text-ink-soft">Loading your information...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-violet-900 p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header Card */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold mb-2">Create Support Ticket</h1>
-                <p className="text-violet-100">
-                  Submit a request for absence proof or document verification
-                </p>
+    <div className="space-y-6">
+      <PageHeader
+        icon={Send}
+        title="Create Support Ticket"
+        subtitle="Submit a request for absence proof or document verification"
+        actions={lastSubmitTime && (
+          <Badge tone="neutral">
+            <Clock className="h-3.5 w-3.5" />
+            Last: {new Date(parseInt(lastSubmitTime)).toLocaleTimeString()}
+          </Badge>
+        )}
+      />
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <Card padding="lg">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-primary flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Student Information
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <InputField
+                  id="name"
+                  icon={User}
+                  label="Full Name"
+                  value={userData.name}
+                  onChange={() => { }}
+                  disabled
+                />
+                <InputField
+                  id="email"
+                  icon={User}
+                  label="Email"
+                  value={userData.email}
+                  onChange={() => { }}
+                  disabled
+                />
+                <InputField
+                  id="section"
+                  icon={BookOpen}
+                  label="Section"
+                  value={userData.section}
+                  onChange={() => { }}
+                  disabled
+                />
+                <InputField
+                  id="rollNo"
+                  icon={IdCard}
+                  label="Roll Number"
+                  value={userData.rollNo}
+                  onChange={() => { }}
+                  disabled
+                />
               </div>
-              {lastSubmitTime && (
-                <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
-                  <Clock className="h-4 w-4" />
-                  <span className="text-sm">Last: {new Date(parseInt(lastSubmitTime)).toLocaleTimeString()}</span>
-                </div>
-              )}
             </div>
-          </div>
-        </motion.div>
 
-        {/* Main Form Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden"
-        >
-          <div className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* User Information Section */}
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-violet-300 flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Student Information
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <InputField
-                    id="name"
-                    icon={User}
-                    label="Full Name"
-                    value={userData.name}
-                    onChange={() => {}}
-                    disabled
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-primary flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Ticket Details
+              </h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <Textarea
+                    id="document"
+                    label={<span>Document Details <span className="text-red-500">*</span></span>}
+                    className="h-[200px]"
+                    value={formData.document}
+                    onChange={handleChange}
+                    disabled={disableSubmit}
+                    placeholder="Describe your issue or reason for absence in detail..."
+                    required
                   />
-                  <InputField
-                    id="email"
-                    icon={User}
-                    label="Email"
-                    value={userData.email}
-                    onChange={() => {}}
-                    disabled
-                  />
-                  <InputField
-                    id="section"
-                    icon={BookOpen}
-                    label="Section"
-                    value={userData.section}
-                    onChange={() => {}}
-                    disabled
-                  />
-                  <InputField
-                    id="rollNo"
-                    icon={IdCard}
-                    label="Roll Number"
-                    value={userData.rollNo}
-                    onChange={() => {}}
-                    disabled
+                  <p className="text-xs text-ink-faint mt-2">
+                    <Info className="h-3 w-3 inline mr-1" />
+                    Please provide all necessary details for verification
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-ink-soft mb-1">
+                    Supporting Documents
+                  </label>
+                  <FileUploadArea
+                    file={file}
+                    setFile={setFile}
+                    error={fileError}
+                    setError={setFileError}
                   />
                 </div>
               </div>
+            </div>
 
-              {/* Ticket Details Section */}
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-violet-300 flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Ticket Details
-                </h2>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Document Details */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Document Details <span className="text-red-400">*</span>
-                    </label>
-                    <textarea
-                      id="document"
-                      className={`
-                        w-full h-[200px] px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg
-                        text-gray-100 resize-none transition-all duration-200
-                        focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
-                        disabled:opacity-50 disabled:bg-gray-700
-                      `}
-                      value={formData.document}
-                      onChange={handleChange}
-                      disabled={disableSubmit}
-                      placeholder="Describe your issue or reason for absence in detail..."
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      <Info className="h-3 w-3 inline mr-1" />
-                      Please provide all necessary details for verification
-                    </p>
-                  </div>
-                  
-                  {/* File Upload */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Supporting Documents
-                    </label>
-                    <FileUploadArea 
-                      file={file} 
-                      setFile={setFile} 
-                      error={fileError}
-                      setError={setFileError}
-                    />
-                  </div>
-                </div>
+            <div className="flex flex-col sm:flex-row justify-end items-center gap-4 pt-4 border-t border-line">
+
+
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  leftIcon={Send}
+                  disabled={disableSubmit || isSubmitting}
+                  loading={isSubmitting}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Ticket'}
+                </Button>
               </div>
+            </div>
 
-              {/* Form Actions */}
-              <div className="flex flex-col sm:flex-row justify-end items-center gap-4 pt-4 border-t border-gray-700">
-                {errorMessage && (
-                  <div className="flex items-center text-red-400 text-sm bg-red-500/10 px-3 py-2 rounded-lg">
-                    <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>{errorMessage}</span>
-                  </div>
-                )}
-                
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/dashboard")}
-                    className="px-6 py-2 bg-gray-700 rounded-lg font-medium transition-all duration-200 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                  >
-                    Cancel
-                  </button>
-                  
-                  <button
-                    type="submit"
-                    disabled={disableSubmit || isSubmitting}
-                    className={`
-                      px-6 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg font-medium flex items-center gap-2
-                      transition-all duration-200 hover:from-violet-700 hover:to-indigo-700
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900
-                    `}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        Submit Ticket
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Response Status */}
-              <AnimatePresence>
-                {responseStatus && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className={`flex items-center gap-2 p-3 rounded-lg ${
-                      responseStatus === "error" 
-                        ? "bg-red-500/10 text-red-400 border border-red-500/20" 
-                        : "bg-green-500/10 text-green-400 border border-green-500/20"
+            <AnimatePresence>
+              {responseStatus && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className={`flex items-center gap-2 p-3 rounded-lg ${responseStatus === "error"
+                    ? "bg-red-50 text-red-700 border border-red-200"
+                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                     }`}
-                  >
-                    {responseStatus === "error" ? 
-                      <AlertCircle className="h-4 w-4" /> : 
-                      <CheckCircle className="h-4 w-4" />
+                >
+                  {responseStatus === "error" ?
+                    <AlertCircle className="h-4 w-4" /> :
+                    <CheckCircle className="h-4 w-4" />
+                  }
+                  <span>
+                    {responseStatus === "error"
+                      ? "Failed to create ticket. Please try again."
+                      : "Ticket created successfully! Redirecting..."
                     }
-                    <span>
-                      {responseStatus === "error" 
-                        ? "Failed to create ticket. Please try again." 
-                        : "Ticket created successfully! Redirecting..."
-                      }
-                    </span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </form>
-          </div>
-        </motion.div>
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </form>
+        </Card>
+      </motion.div>
 
-        {/* Info Card */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="mt-6 p-4 bg-gray-800/30 rounded-lg border border-gray-700"
-        >
-          <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-violet-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-gray-400">
-              <p className="mb-1"><strong className="text-gray-300">Note:</strong> Your ticket will be reviewed by your teacher.</p>
-              <p>You can track the status of your tickets from your dashboard.</p>
-            </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="p-4 bg-background rounded-lg border border-line"
+      >
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-ink-soft">
+            <p className="mb-1"><strong className="text-ink">Note:</strong> Your ticket will be reviewed by your teacher.</p>
+            <p>You can track the status of your tickets from your dashboard.</p>
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

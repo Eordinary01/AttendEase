@@ -1,6 +1,6 @@
 // src/components/MarkAttendance.jsx
-import React, { useEffect, useState, Fragment, useRef } from "react";
-import { Dialog, Transition, Listbox } from "@headlessui/react";
+import React, { useEffect, useState, Fragment, useRef, useMemo } from "react";
+import { Listbox, Transition } from "@headlessui/react";
 import {
   Calendar,
   Book,
@@ -15,38 +15,124 @@ import {
   Loader2,
   UserCheck,
   UserX,
+  BookOpen,
+  CheckCircle,
+  XCircle,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
-import axios from "axios";
+import api from "../../utils/api";
 import { format } from "date-fns";
+import { useTheme } from "../../contexts/ThemeContexts";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  getOfflineQueue,
+  saveToOfflineQueue,
+  getPendingSyncCount,
+  syncOfflineAttendance,
+} from "../../utils/offlineSync";
+import PageHeader from "../common/ui/PageHeader";
+import Card from "../common/ui/Card";
+import StatCard from "../common/ui/StatCard";
+import Button from "../common/ui/Button";
+import EmptyState from "../common/ui/EmptyState";
+
+function hexToRgbStr(hex = "#6366f1") {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// Mirrors backend: new Date("yyyy-mm-dd") is parsed as UTC midnight, then getUTCDay().
+const getDayOfWeek = (dateStr) => WEEKDAYS[new Date(dateStr).getUTCDay()];
 
 export default function MarkAttendance() {
+  const { colors } = useTheme();
+  const primary = colors?.primary || "#7c3aed";
+  const secondary = colors?.secondary || primary;
+
+  const cssVars = {
+    "--theme-primary": primary,
+    "--theme-secondary": secondary,
+    "--theme-primary-rgb": hexToRgbStr(primary),
+  };
+
   const [teacherSubjects, setTeacherSubjects] = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
   const [selectedDate, setSelectedDate] = useState(
-    format(new Date(), "yyyy-MM-dd"),
+    format(new Date(), "yyyy-MM-dd")
   );
   const [students, setStudents] = useState([]);
   const [attendanceData, setAttendanceData] = useState({});
   const [filterRollNo, setFilterRollNo] = useState("");
   const [responseMessage, setResponseMessage] = useState("");
+  const [isSuccessToast, setIsSuccessToast] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchingStudents, setFetchingStudents] = useState(false);
   const [existingAttendance, setExistingAttendance] = useState(false);
   const [classSessionInfo, setClassSessionInfo] = useState(null);
+  const [sectionEntries, setSectionEntries] = useState([]);
+  const [classSlots, setClassSlots] = useState([]);
+  const [selectedSlotId, setSelectedSlotId] = useState("");
+  const [slotLoading, setSlotLoading] = useState(false);
   const [stats, setStats] = useState({
     totalStudents: 0,
     presentCount: 0,
     absentCount: 0,
   });
 
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingSyncCount());
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const hasFetchedSubjects = useRef(false);
   const abortControllerRef = useRef(null);
 
-  const API_URL = process.env.REACT_APP_API_URL;
   const token = localStorage.getItem("token");
   const teacherId = localStorage.getItem("userId");
+
+  const triggerOfflineSync = async () => {
+    if (getPendingSyncCount() === 0) return;
+    setIsSyncing(true);
+    try {
+      const res = await syncOfflineAttendance(api);
+      setPendingSyncCount(res.remainingCount);
+      if (res.syncedCount > 0) {
+        showToast(`✅ Synced ${res.syncedCount} offline attendance payload(s) successfully!`, true);
+      }
+    } catch (err) {
+      showToast("⚠️ Offline sync encountered errors. Will retry when online.", false);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      showToast("🌐 Network connection restored. Auto-syncing pending attendance...", true);
+      await triggerOfflineSync();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast("📶 Offline mode active. Attendance will be saved locally.", false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    setPendingSyncCount(getPendingSyncCount());
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Fetch teacher subjects - only once on mount
   useEffect(() => {
@@ -68,7 +154,6 @@ export default function MarkAttendance() {
       setSelectedSubject(selectedAssignment.subjectId);
       setSelectedSection(selectedAssignment.section);
       setResponseMessage("");
-      // Reset attendance state when assignment changes
       setExistingAttendance(false);
       setClassSessionInfo(null);
       setAttendanceData({});
@@ -81,23 +166,41 @@ export default function MarkAttendance() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      
+
       abortControllerRef.current = new AbortController();
       fetchStudents(abortControllerRef.current.signal);
-      
-      // Reset attendance state when section changes
+      fetchSectionTimetable();
+
       setExistingAttendance(false);
       setClassSessionInfo(null);
+      setClassSlots([]);
+      setSelectedSlotId("");
       setAttendanceData({});
     }
   }, [selectedSection, selectedSubject]);
+
+  // Compute the scheduled slots for the selected subject on the selected date's weekday
+  useEffect(() => {
+    if (!selectedDate || !selectedSubject) {
+      setClassSlots([]);
+      return;
+    }
+    const day = getDayOfWeek(selectedDate);
+    const slots = sectionEntries.filter(
+      (e) => e.day === day && String(e.subjectId) === String(selectedSubject) && !e.isNoClass && e.subjectName !== "No Class"
+    );
+    setClassSlots(slots);
+    setSelectedSlotId((prev) =>
+      slots.some((s) => s._id === prev) ? prev : slots[0]?._id || ""
+    );
+  }, [selectedDate, selectedSubject, sectionEntries]);
 
   // Check existing attendance when date, subject, section changes
   useEffect(() => {
     if (students.length > 0 && selectedDate && selectedSubject && selectedSection) {
       checkExistingAttendance();
     }
-  }, [selectedDate, selectedSubject, selectedSection]);
+  }, [selectedDate, selectedSubject, selectedSection, students.length]);
 
   // Calculate stats
   useEffect(() => {
@@ -110,7 +213,7 @@ export default function MarkAttendance() {
 
     const total = filtered.length;
     const present = Object.values(attendanceData).filter(
-      (value) => value === true,
+      (value) => value === true
     ).length;
 
     setStats({
@@ -123,19 +226,16 @@ export default function MarkAttendance() {
   const fetchTeacherSubjects = async () => {
     try {
       if (!teacherId) {
-        setResponseMessage("Teacher ID not found. Please log in again.");
+        showToast("Teacher ID not found. Please log in again.", false);
         return;
       }
 
-      const response = await axios.get(
-        `${API_URL}/subjects/teacher/${teacherId}/assignments`,
-        { 
-          headers: { Authorization: `Bearer ${token}` },
-          signal: abortControllerRef.current?.signal 
-        },
+      const response = await api.get(
+        `/subjects/teacher/${teacherId}/assignments`,
+        {
+          signal: abortControllerRef.current?.signal
+        }
       );
-
-      console.log("Teacher subjects response:", response.data);
 
       const subjectsData = response.data.subjects || [];
 
@@ -155,17 +255,13 @@ export default function MarkAttendance() {
       setTeacherSubjects(transformed);
 
       if (transformed.length === 0) {
-        setResponseMessage("No subjects assigned to you yet.");
+        showToast("No subjects assigned to you yet.", false);
       } else {
-        // Set the first assignment as default
         setSelectedAssignment(transformed[0]);
       }
     } catch (error) {
       if (error.name !== 'CanceledError' && error.name !== 'AbortError') {
-        console.error("Error fetching teacher subjects:", error);
-        setResponseMessage(
-          error.response?.data?.message || "Failed to load your subjects.",
-        );
+        showToast(error.response?.data?.message || "Failed to load your subjects.", false);
       }
     }
   };
@@ -173,119 +269,115 @@ export default function MarkAttendance() {
   const fetchStudents = async (signal) => {
     setFetchingStudents(true);
     try {
-      console.log("Fetching students for section:", selectedSection);
-      const response = await axios.get(`${API_URL}/users/users`, {
-        params: { section: selectedSection },
-        headers: { Authorization: `Bearer ${token}` },
+      const params = {
+        section: selectedSection,
+        subjectId: selectedSubject,
+      };
+      if (selectedAssignment?.subject?.courseId) {
+        params.courseId = selectedAssignment.subject.courseId;
+      }
+      if (selectedAssignment?.subject?.branch) {
+        params.branch = selectedAssignment.subject.branch;
+      }
+
+      const response = await api.get('/users/public/users', {
+        params,
         signal,
       });
 
-      console.log("Response data:", response.data);
-      
       const studentsData = response.data || [];
       setStudents(studentsData);
 
       if (studentsData.length === 0) {
-        setResponseMessage(`No students found in section ${selectedSection}`);
+        showToast(`No students found in section ${selectedSection}`, false);
         setAttendanceData({});
       } else {
-        // 🔥 FIX: Always initialize fresh attendance data for the current section only
         const initialAttendance = {};
         studentsData.forEach((student) => {
           initialAttendance[student._id] = false;
         });
         setAttendanceData(initialAttendance);
-        
         setExistingAttendance(false);
         setClassSessionInfo(null);
-        setResponseMessage(""); // Clear any previous messages
       }
     } catch (error) {
       if (error.name !== 'CanceledError' && error.name !== 'AbortError') {
-        console.error("Error fetching students:", error);
-        setResponseMessage("Failed to load students.");
+        showToast("Failed to load students.", false);
       }
     } finally {
       setFetchingStudents(false);
     }
   };
 
-  const checkExistingAttendance = async () => {
-    // Don't check if we don't have students yet
-    if (students.length === 0) return;
-    
+  const fetchSectionTimetable = async () => {
     try {
-      console.log("Checking attendance for:", {
-        date: selectedDate,
-        subjectId: selectedSubject,
-        section: selectedSection,
-      });
+      setSlotLoading(true);
+      const res = await api.get(`/timetable/section/${selectedSection}`);
+      const data = res.data.data;
+      setSectionEntries(Array.isArray(data) ? data : data ? Object.values(data).flat() : []);
+    } catch (err) {
+      if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+        setSectionEntries([]);
+      }
+    } finally {
+      setSlotLoading(false);
+    }
+  };
 
-      const response = await axios.get(`${API_URL}/attendance/by-date`, {
+  const checkExistingAttendance = async () => {
+    if (students.length === 0) return;
+
+    try {
+      const response = await api.get('/attendance/by-date', {
         params: {
           date: selectedDate,
           subjectId: selectedSubject,
           section: selectedSection,
         },
-        headers: { Authorization: `Bearer ${token}` },
         signal: abortControllerRef.current?.signal,
       });
 
       if (response.data.attendance && response.data.attendance.length > 0) {
-        // 🔥 FIX: Only include attendance for students that exist in current section
         const existingAttendanceMap = {};
         const validStudentIds = new Set(students.map(s => s._id));
-        
+
         response.data.attendance.forEach((record) => {
           if (validStudentIds.has(record.studentId._id)) {
             existingAttendanceMap[record.studentId._id] = record.status === "present";
           }
         });
-        
-        // If we have valid attendance records
+
         if (Object.keys(existingAttendanceMap).length > 0) {
           setAttendanceData(existingAttendanceMap);
           setExistingAttendance(true);
-          
+
           setClassSessionInfo({
             totalRecords: response.data.totalRecords,
             classSlots: response.data.classSlots || []
           });
-          
-          setResponseMessage(`📋 Existing attendance loaded for ${format(new Date(selectedDate), "MMMM d, yyyy")}`);
+
+          showToast(`📋 Existing attendance loaded for ${format(new Date(selectedDate.replace(/-/g, '/')), "MMMM d, yyyy")}`);
         } else {
-          // No valid records, reset to default
-          const defaultAttendance = {};
-          students.forEach((student) => {
-            defaultAttendance[student._id] = false;
-          });
-          setAttendanceData(defaultAttendance);
-          setExistingAttendance(false);
-          setClassSessionInfo(null);
+          resetAttendanceDefault();
         }
       } else {
-        // No existing attendance, reset to all absent
-        const defaultAttendance = {};
-        students.forEach((student) => {
-          defaultAttendance[student._id] = false;
-        });
-        setAttendanceData(defaultAttendance);
-        setExistingAttendance(false);
-        setClassSessionInfo(null);
+        resetAttendanceDefault();
       }
     } catch (error) {
       if (error.name !== 'CanceledError' && error.name !== 'AbortError') {
-        console.log("No existing attendance for this date");
-        // Reset to all absent
-        const defaultAttendance = {};
-        students.forEach((student) => {
-          defaultAttendance[student._id] = false;
-        });
-        setAttendanceData(defaultAttendance);
-        setExistingAttendance(false);
-        setClassSessionInfo(null);
+        resetAttendanceDefault();
       }
     }
+  };
+
+  const resetAttendanceDefault = () => {
+    const defaultAttendance = {};
+    students.forEach((student) => {
+      defaultAttendance[student._id] = false;
+    });
+    setAttendanceData(defaultAttendance);
+    setExistingAttendance(false);
+    setClassSessionInfo(null);
   };
 
   const handleAttendanceChange = (studentId, isPresent) => {
@@ -301,6 +393,7 @@ export default function MarkAttendance() {
       allPresent[student._id] = true;
     });
     setAttendanceData(allPresent);
+    showToast("All students marked present.");
   };
 
   const markAllAbsent = () => {
@@ -309,485 +402,483 @@ export default function MarkAttendance() {
       allAbsent[student._id] = false;
     });
     setAttendanceData(allAbsent);
+    showToast("All students marked absent.");
+  };
+
+  const showToast = (msg, success = true) => {
+    setResponseMessage(msg);
+    setIsSuccessToast(success);
+    setTimeout(() => setResponseMessage(""), 5000);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!selectedDate || !selectedSubject || !selectedSection) {
-      setResponseMessage("Please select date, subject, and section.");
+      showToast("Please select date, subject, and section.", false);
       return;
     }
 
-    // 🔥 FIX: Validate that all student IDs in attendanceData exist in current section
+    if (classSlots.length === 0) {
+      showToast(`No class is scheduled for this subject on ${getDayOfWeek(selectedDate)}. Please add a timetable slot first.`, false);
+      return;
+    }
+
+    if (!selectedSlotId) {
+      showToast("Please select the class time slot.", false);
+      return;
+    }
+
     const validStudentIds = new Set(students.map(s => s._id));
     const attendanceEntries = Object.entries(attendanceData);
-    
-    // Filter out any students not in current section
-    const validEntries = attendanceEntries.filter(([studentId]) => 
+    const validEntries = attendanceEntries.filter(([studentId]) =>
       validStudentIds.has(studentId)
     );
 
     if (validEntries.length === 0) {
-      setResponseMessage("No valid students to mark attendance for.");
-      setIsLoading(false);
+      showToast("No valid students to mark attendance for.", false);
       return;
     }
 
     setIsLoading(true);
+    const formattedAttendance = {};
+    validEntries.forEach(([studentId, isPresent]) => {
+      formattedAttendance[studentId] = isPresent ? "present" : "absent";
+    });
+
+    const payload = {
+      date: selectedDate,
+      subjectId: selectedSubject,
+      section: selectedSection,
+      timetableId: selectedSlotId,
+      attendanceData: formattedAttendance,
+    };
+
+    if (!navigator.onLine) {
+      saveToOfflineQueue(payload);
+      setPendingSyncCount(getPendingSyncCount());
+      showToast("📶 Saved offline! Attendance queued for auto-sync when online.", true);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // Format attendance data - only include valid students
-      const formattedAttendance = {};
-      
-      validEntries.forEach(([studentId, isPresent]) => {
-        formattedAttendance[studentId] = isPresent ? "present" : "absent";
-      });
-
-      console.log("📤 Sending payload:", {
-        date: selectedDate,
-        subjectId: selectedSubject,
-        section: selectedSection,
-        attendanceData: formattedAttendance
-      });
-
-      const response = await axios.post(
-        `${API_URL}/attendance/mark`,
-        {
-          date: selectedDate,
-          subjectId: selectedSubject,
-          section: selectedSection,
-          attendanceData: formattedAttendance,
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const response = await api.post('/attendance/mark', payload);
 
       if (response.status === 200 || response.status === 201) {
-        setResponseMessage(
-          `✅ Attendance marked successfully! ` +
-          `(${response.data.recordsCreated || 0} records created)`
+        showToast(
+          `✅ Attendance marked successfully! (${response.data.recordsCreated || 0} records created)`
         );
-        
-        // Refresh the attendance data to show updated status
         await checkExistingAttendance();
       }
     } catch (error) {
-      console.error("Error marking attendance:", error);
-      
-      // Check if attendance already exists error
-      if (error.response?.data?.message?.includes("already exists")) {
-        setResponseMessage("⚠️ Attendance for this class session already exists. Please update if needed.");
+      if (!error.response || error.code === 'ERR_NETWORK') {
+        saveToOfflineQueue(payload);
+        setPendingSyncCount(getPendingSyncCount());
+        showToast("📶 Network error. Attendance saved offline and queued for auto-sync.", true);
+      } else if (error.response?.data?.message?.includes("already exists")) {
+        showToast("⚠️ Attendance for this class session already exists.", false);
         setExistingAttendance(true);
       } else {
-        setResponseMessage(
-          error.response?.data?.message || "Failed to mark attendance.",
-        );
+        showToast(error.response?.data?.message || "Failed to mark attendance.", false);
       }
     } finally {
       setIsLoading(false);
-      setTimeout(() => setResponseMessage(""), 5000);
     }
   };
 
-  // Calculate filtered students for display
-  const filteredStudents = students.filter((student) => {
-    const fullName = student.name || "";
-    const rollNo = student.rollNo || "";
-    const term = filterRollNo.toLowerCase();
-    return (
-      fullName.toLowerCase().includes(term) ||
-      rollNo.toLowerCase().includes(term)
-    );
-  });
-
-  // Add a section info display
-  const SectionInfo = () => (
-    <div className="mb-4 p-3 bg-slate-100 rounded-lg flex items-center gap-2">
-      <Users className="h-5 w-5 text-slate-600" />
-      <p className="text-slate-700">
-        Currently viewing <strong>Section {selectedSection}</strong> - {students.length} student{students.length !== 1 ? 's' : ''}
-      </p>
-    </div>
-  );
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      const fullName = student.name || "";
+      const rollNo = student.rollNo || "";
+      const term = filterRollNo.toLowerCase();
+      return fullName.toLowerCase().includes(term) || rollNo.toLowerCase().includes(term);
+    });
+  }, [students, filterRollNo]);
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
-        <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-12 text-center">
-          <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">
-            Authentication Required
-          </h2>
-          <p className="text-slate-600">
-            Please log in to access attendance management.
-          </p>
-        </div>
+      <div className="flex items-center justify-center p-6">
+        <Card padding="lg" className="max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-ink mb-2">Authentication Required</h2>
+          <p className="text-ink-faint">Please log in to access attendance lists.</p>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
-        <div className="bg-white rounded-2xl shadow-xl mb-8 p-6">
-          <div className="flex items-center justify-between">
+    <div className="space-y-6" style={cssVars}>
+      <PageHeader
+        icon={BookOpen}
+        title="Mark Attendance"
+        subtitle="Select your subject assignment, adjust the date, and record roll list states."
+        actions={
+          <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-xl border border-line shadow-sm text-sm font-semibold text-ink-soft">
+            <Calendar className="w-4 h-4 text-ink-faint" />
+            {format(new Date(), "EEEE, MMM d, yyyy")}
+          </div>
+        }
+      />
+
+      {/* Offline & Sync Status Banner */}
+      {(!isOnline || pendingSyncCount > 0) && (
+        <div className={`p-4 rounded-2xl border flex items-center justify-between shadow-card transition-all ${
+          !isOnline 
+            ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200' 
+            : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-900 dark:text-indigo-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            {!isOnline ? (
+              <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 animate-pulse" />
+            ) : (
+              <Wifi className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+            )}
             <div>
-              <h1 className="text-3xl font-bold text-slate-800">
-                Mark Attendance
-              </h1>
-              <p className="text-slate-500 mt-2">
-                {selectedAssignment
-                  ? `Teaching ${selectedAssignment.subjectName} (${selectedAssignment.subjectCode}) - Section ${selectedAssignment.section}`
-                  : "Select a subject to begin"}
+              <p className="text-sm font-bold">
+                {!isOnline ? "Offline Mode Active" : "Pending Attendance Sync"}
+              </p>
+              <p className="text-xs opacity-90">
+                {!isOnline 
+                  ? `Internet connection unavailable. ${pendingSyncCount} attendance payload(s) queued locally.`
+                  : `${pendingSyncCount} offline attendance payload(s) waiting to be synced to server.`}
               </p>
             </div>
-            <div className="flex items-center space-x-4 text-sm text-slate-600">
-              <Clock className="h-4 w-4" />
-              <span>{format(new Date(), "EEEE, MMMM d, yyyy")}</span>
-            </div>
           </div>
+          {isOnline && pendingSyncCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={triggerOfflineSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5"
+            >
+              {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              {isSyncing ? "Syncing..." : "Sync Now"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Scheduled Class Slot */}
+      <div className="bg-surface p-6 rounded-2xl border border-line shadow-card">
+        <div className="flex items-center justify-between mb-4">
+          <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-ink-faint" />
+            Scheduled Class Slot {selectedDate ? `(${getDayOfWeek(selectedDate)})` : ""}
+          </label>
+          {slotLoading && <Loader2 className="w-4 h-4 animate-spin text-ink-faint" />}
         </div>
 
-        {/* Main Content */}
-        <div className="bg-white rounded-2xl shadow-xl">
-          <div className="p-6">
-            {/* Response Message */}
-            <Transition
-              show={!!responseMessage}
-              enter="transition-opacity duration-300"
-              enterFrom="opacity-0"
-              enterTo="opacity-100"
-              leave="transition-opacity duration-300"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <div
-                className={`border-l-4 p-4 mb-6 rounded-md flex items-center ${
-                  responseMessage.includes("✅") ||
-                  responseMessage.includes("📋")
-                    ? "bg-green-50 border-green-500 text-green-700"
-                    : responseMessage.includes("⚠️")
-                    ? "bg-yellow-50 border-yellow-500 text-yellow-700"
-                    : "bg-amber-50 border-amber-500 text-amber-700"
-                }`}
-              >
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                <p>{responseMessage}</p>
-              </div>
-            </Transition>
-
-            {/* Existing Attendance Indicator */}
-            {existingAttendance && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Check className="h-5 w-5 text-blue-600" />
-                  <p className="text-blue-700 font-medium">
-                    Attendance already marked for this date
-                  </p>
-                </div>
-                {classSessionInfo && (
-                  <div className="text-sm text-blue-600 ml-7">
-                    <p>• Total records: {classSessionInfo.totalRecords}</p>
-                    {classSessionInfo.classSlots && classSessionInfo.classSlots.length > 0 && (
-                      <p>• Class sessions: {classSessionInfo.classSlots.map(s => `Period ${s.slot}`).join(', ')}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Selection Section */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Date Selection */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  max={format(new Date(), "yyyy-MM-dd")}
-                  className="w-full rounded-lg border-slate-200 shadow-sm focus:border-slate-500 focus:ring-slate-500"
-                  required
-                />
-              </div>
-
-              {/* Subject Selection */}
-              <div className="md:col-span-2">
-                <Listbox value={selectedAssignment} onChange={setSelectedAssignment}>
-                  <div className="relative">
-                    <Listbox.Label className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                      <Book className="h-4 w-4 mr-2" />
-                      Subject & Section
-                    </Listbox.Label>
-                    <Listbox.Button className="w-full rounded-lg bg-white py-2 pl-3 pr-10 text-left border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500">
-                      <span className="block truncate">
-                        {selectedAssignment?.displayName || "Select subject and section"}
-                      </span>
-                      <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                        <ChevronDown className="h-4 w-4 text-slate-400" />
-                      </span>
-                    </Listbox.Button>
-                    <Transition
-                      as={Fragment}
-                      leave="transition ease-in duration-100"
-                      leaveFrom="opacity-100"
-                      leaveTo="opacity-0"
-                    >
-                      <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                        {teacherSubjects.map((item) => (
-                          <Listbox.Option
-                            key={item.assignmentId}
-                            value={item}
-                            className={({ active }) =>
-                              `relative cursor-pointer select-none py-2 pl-10 pr-4 ${
-                                active
-                                  ? "bg-slate-100 text-slate-900"
-                                  : "text-slate-700"
-                              }`
-                            }
-                          >
-                            {({ selected }) => (
-                              <>
-                                <span
-                                  className={`block truncate ${selected ? "font-medium" : "font-normal"}`}
-                                >
-                                  {item.displayName}
-                                </span>
-                                {selected && (
-                                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-600">
-                                    <Check className="h-4 w-4" />
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </Listbox.Option>
-                        ))}
-                      </Listbox.Options>
-                    </Transition>
-                  </div>
-                </Listbox>
-              </div>
-            </div>
-
-            {/* Section Info */}
-            {selectedSection && <SectionInfo />}
-
-            {/* Search and Quick Actions */}
-            {selectedSection && students.length > 0 && (
-              <div className="mb-8">
-                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                  <div className="relative flex-1">
-                    <label className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                      <Search className="h-4 w-4 mr-2" />
-                      Search Student
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Search by name or roll number..."
-                      value={filterRollNo}
-                      onChange={(e) => setFilterRollNo(e.target.value)}
-                      className="w-full rounded-lg border-slate-200 shadow-sm focus:border-slate-500 focus:ring-slate-500 p-2"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={markAllPresent}
-                      className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition flex items-center gap-2"
-                    >
-                      <UserCheck className="h-4 w-4" />
-                      Mark All Present
-                    </button>
-                    <button
-                      onClick={markAllAbsent}
-                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition flex items-center gap-2"
-                    >
-                      <UserX className="h-4 w-4" />
-                      Mark All Absent
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Stats Summary */}
-            {selectedSection && students.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-md p-6 border border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">
-                        Total Students
-                      </p>
-                      <p className="text-2xl font-bold text-slate-800">
-                        {stats.totalStudents}
-                      </p>
-                    </div>
-                    <Users className="h-8 w-8 text-slate-400" />
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-md p-6 border border-green-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">
-                        Present
-                      </p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {stats.presentCount}
-                      </p>
-                    </div>
-                    <Check className="h-8 w-8 text-green-400" />
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-md p-6 border border-red-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">
-                        Absent
-                      </p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {stats.absentCount}
-                      </p>
-                    </div>
-                    <X className="h-8 w-8 text-red-400" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Students Table */}
-            {selectedSection && (
-              <>
-                {fetchingStudents ? (
-                  <div className="text-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-400 mx-auto mb-4" />
-                    <p className="text-slate-500">Loading students...</p>
-                  </div>
-                ) : students.length === 0 ? (
-                  <div className="text-center py-12 bg-slate-50 rounded-lg">
-                    <Users className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-slate-600 mb-2">
-                      No students found
-                    </h3>
-                    <p className="text-slate-500">
-                      No students are enrolled in section {selectedSection}.
-                    </p>
-                  </div>
-                ) : filteredStudents.length > 0 ? (
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                            Student Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                            Roll Number
-                          </th>
-                          <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-slate-200">
-                        {filteredStudents.map((student) => (
-                          <tr
-                            key={student._id}
-                            className="hover:bg-slate-50 transition-colors"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center">
-                                  <span className="text-sm font-medium text-slate-600">
-                                    {student.name?.charAt(0) || "?"}
-                                  </span>
-                                </div>
-                                <div className="ml-4">
-                                  <div className="text-sm font-medium text-slate-900">
-                                    {student.name || "Unknown"}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                              {student.rollNo || "N/A"}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                              <div className="flex justify-center space-x-4">
-                                <button
-                                  onClick={() =>
-                                    handleAttendanceChange(student._id, true)
-                                  }
-                                  className={`p-2 rounded-lg transition-colors ${
-                                    attendanceData[student._id] === true
-                                      ? "bg-green-100 text-green-600"
-                                      : "hover:bg-green-50 text-green-400"
-                                  }`}
-                                >
-                                  <Check className="h-5 w-5" />
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleAttendanceChange(student._id, false)
-                                  }
-                                  className={`p-2 rounded-lg transition-colors ${
-                                    attendanceData[student._id] === false
-                                      ? "bg-red-100 text-red-600"
-                                      : "hover:bg-red-50 text-red-400"
-                                  }`}
-                                >
-                                  <X className="h-5 w-5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-12 bg-slate-50 rounded-lg">
-                    <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-slate-600 mb-2">
-                      No matching students
-                    </h3>
-                    <p className="text-slate-500">
-                      No students match your search criteria.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Submit Button */}
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={
-                  isLoading || !selectedSection || students.length === 0
-                }
-                className={`w-full flex justify-center items-center py-3 px-4 rounded-lg shadow-sm text-sm font-medium text-white 
-                  ${
-                    selectedSection && students.length > 0
-                      ? "bg-slate-800 hover:bg-slate-700"
-                      : "bg-slate-400 cursor-not-allowed"
-                  } 
-                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors duration-200`}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-5 w-5 mr-2" />
-                )}
-                {isLoading ? "Submitting..." : existingAttendance ? "Update Attendance" : "Submit Attendance"}
-              </button>
+        {!selectedSubject || !selectedSection ? (
+          <p className="text-sm text-ink-faint">Select a subject & section to see its scheduled slots.</p>
+        ) : slotLoading ? null : classSlots.length === 0 ? (
+          <div className="flex gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-amber-800 text-sm">No class scheduled on {selectedDate ? getDayOfWeek(selectedDate) : ""}</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Attendance can only be marked against a scheduled class. Add a timetable slot for this subject in the Timetable Manager first.
+              </p>
             </div>
           </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {classSlots.map((slot) => {
+              const active = slot._id === selectedSlotId;
+              return (
+                <button
+                  key={slot._id}
+                  type="button"
+                  onClick={() => setSelectedSlotId(slot._id)}
+                  className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-2 ${active
+                      ? "bg-primary text-white border-primary shadow-sm"
+                      : "bg-surface border-line text-ink-soft hover:border-primary/40"
+                    }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  {slot.startTime}-{slot.endTime}
+                  {slot.room ? ` · ${slot.room}` : ""}
+                  {active && <Check className="w-3.5 h-3.5" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Existing Session Warning */}
+      {existingAttendance && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+          <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-amber-800 text-sm">Attendance already logged for this date</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Modifying checkmarks and clicking update below will dynamically adjust existing record registers.
+            </p>
+            {classSessionInfo && (
+              <div className="flex flex-wrap gap-4 mt-2 text-xs font-semibold text-amber-700 bg-surface/60 py-1.5 px-3 rounded-lg border border-line">
+                <span>Synced Records: {classSessionInfo.totalRecords}</span>
+                {classSessionInfo.classSlots?.length > 0 && (
+                  <span>Sessions: {classSessionInfo.classSlots.map(s => `Period ${s.slot}`).join(', ')}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Configuration select grid */}
+      <div className="bg-surface p-6 rounded-2xl border border-line shadow-card grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Date Picker */}
+        <div>
+          <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-ink-faint" />
+            Attendance Date
+          </label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            max={format(new Date(), "yyyy-MM-dd")}
+            className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition bg-surface text-ink"
+            required
+          />
+        </div>
+
+        {/* Subject Assignment Listbox */}
+        <div className="md:col-span-2">
+          <label className="block text-xs font-bold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Book className="w-4 h-4 text-ink-faint" />
+            Subject & Section Assignment
+          </label>
+          <Listbox value={selectedAssignment} onChange={setSelectedAssignment}>
+            <div className="relative">
+              <Listbox.Button className="w-full rounded-xl bg-surface py-2 pl-3.5 pr-10 text-left border border-line text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 flex items-center justify-between min-h-[38px] transition-all">
+                <span className="block truncate font-semibold text-ink">
+                  {selectedAssignment?.displayName || "Select subject and section"}
+                </span>
+                <ChevronDown className="h-4 w-4 text-ink-faint" />
+              </Listbox.Button>
+              <Transition
+                as={Fragment}
+                leave="transition ease-in duration-100"
+                leaveFrom="opacity-100"
+                leaveTo="opacity-0"
+              >
+                <Listbox.Options className="absolute z-10 mt-1.5 max-h-60 w-full overflow-auto rounded-xl bg-surface py-1 shadow-pop focus:outline-none text-sm border border-line">
+                  {teacherSubjects.map((item) => (
+                    <Listbox.Option
+                      key={item.assignmentId}
+                      value={item}
+                      className={({ active }) =>
+                        `relative cursor-pointer select-none py-2 pl-10 pr-4 transition ${active ? "bg-background text-ink" : "text-ink-soft"
+                        }`
+                      }
+                    >
+                      {({ selected }) => (
+                        <>
+                          <span className={`block truncate ${selected ? "font-bold text-primary" : "font-normal"}`}>
+                            {item.displayName}
+                          </span>
+                          {selected && (
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-primary">
+                              <Check className="h-4 w-4" />
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </Listbox.Option>
+                  ))}
+                </Listbox.Options>
+              </Transition>
+            </div>
+          </Listbox>
         </div>
       </div>
+
+      {/* Selected Section Indicator & Stats Row */}
+      {selectedSection && students.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatCard
+            label="Active Target"
+            value={`Section ${selectedSection}`}
+            subtitle={`${students.length} students enrolled`}
+            tone="primary"
+            icon={Book}
+          />
+          <StatCard
+            label="Filtered list"
+            value={stats.totalStudents}
+            tone="neutral"
+            icon={Users}
+          />
+          <StatCard
+            label="Present Count"
+            value={stats.presentCount}
+            tone="success"
+            icon={CheckCircle}
+          />
+          <StatCard
+            label="Absent Count"
+            value={stats.absentCount}
+            tone="danger"
+            icon={XCircle}
+          />
+        </div>
+      )}
+
+      {/* Roll List Container */}
+      {selectedSection && (
+        <Card padding="none" className="overflow-hidden">
+          {/* Toolbar */}
+          {students.length > 0 && (
+            <div className="p-4 border-b border-line bg-background/50 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              {/* Search */}
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  placeholder="Search by student name or roll..."
+                  value={filterRollNo}
+                  onChange={(e) => setFilterRollNo(e.target.value)}
+                  className="w-full pl-9 pr-4 py-1.5 border border-line rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary/20 bg-surface transition text-ink placeholder:text-ink-faint"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              </div>
+
+              {/* Bulk tools */}
+              <div className="flex gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  onClick={markAllPresent}
+                  variant="subtle"
+                  size="sm"
+                  leftIcon={UserCheck}
+                >
+                  Mark All Present
+                </Button>
+                <Button
+                  onClick={markAllAbsent}
+                  variant="dangerSubtle"
+                  size="sm"
+                  leftIcon={UserX}
+                >
+                  Mark All Absent
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* List Panels */}
+          {fetchingStudents ? (
+            <div className="text-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-ink-faint mx-auto mb-3" />
+              <p className="text-ink-faint text-sm font-semibold">Loading student roster...</p>
+            </div>
+          ) : students.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No students enrolled"
+              description={`There are no student registries for section ${selectedSection}.`}
+            />
+          ) : filteredStudents.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No matches found"
+              description="Adjust your search keywords."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-line text-xs font-bold text-ink-faint uppercase tracking-wider bg-background/50">
+                    <th className="py-3 pl-6">Student Name</th>
+                    <th className="py-3">Roll Number</th>
+                    <th className="py-3 pr-6 text-center w-40">Status Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line text-sm">
+                  {filteredStudents.map((student) => {
+                    const isChecked = attendanceData[student._id] === true;
+
+                    return (
+                      <motion.tr
+                        key={student._id}
+                        layout
+                        className="hover:bg-background/70 transition-colors"
+                      >
+                        <td className="py-3.5 pl-6 font-semibold text-ink flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-xl bg-background flex items-center justify-center text-xs font-bold text-ink-faint border border-line flex-shrink-0">
+                            {student.name?.charAt(0) || "?"}
+                          </div>
+                          <span className="truncate">{student.name}</span>
+                        </td>
+                        <td className="py-3.5 text-ink-soft font-mono text-xs">{student.rollNo || "N/A"}</td>
+                        <td className="py-3.5 pr-6 text-center">
+                          <div className="inline-flex rounded-xl p-0.5 bg-background border border-line shadow-inner">
+                            <button
+                              onClick={() => handleAttendanceChange(student._id, true)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${isChecked
+                                  ? "bg-primary text-white shadow-sm"
+                                  : "text-ink-soft hover:text-ink"
+                                }`}
+                            >
+                              Present
+                            </button>
+                            <button
+                              onClick={() => handleAttendanceChange(student._id, false)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${!isChecked
+                                  ? "bg-red-600 text-white shadow-sm"
+                                  : "text-ink-soft hover:text-ink"
+                                }`}
+                            >
+                              Absent
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Footer submit action */}
+          {students.length > 0 && (
+            <div className="p-4 bg-background border-t border-line flex justify-end">
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || !selectedSection || classSlots.length === 0}
+                loading={isLoading}
+                leftIcon={RefreshCw}
+                style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+              >
+                {isLoading ? "Submitting..." : existingAttendance ? "Update Attendance" : "Submit Attendance"}
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Success Toast banner */}
+      <AnimatePresence>
+        {responseMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className={`fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-pop border-l-4 max-w-sm z-50 flex items-center gap-3 bg-surface ${isSuccessToast ? "border-emerald-500 text-emerald-700" : "border-amber-500 text-amber-700"
+              }`}
+          >
+            {isSuccessToast ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <AlertCircle className="w-5 h-5 text-amber-500" />}
+            <p className="text-xs font-semibold">{responseMessage}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -23,6 +23,7 @@
   font-size: calc(10px + 2vmin);
   color: white;
 }
+
 /* Add this to your CSS file */
 .blur-background {
   position: fixed;
@@ -41,10 +42,12 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
+
 .admin-dashboard-container {
   max-width: 1200px;
   margin: 0 auto;

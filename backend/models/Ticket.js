@@ -103,7 +103,13 @@ const ticketSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    required: true,
+    index: true
+  }
 }, {
   timestamps: true
 });
@@ -113,5 +119,8 @@ ticketSchema.index({ studentId: 1, createdAt: -1 });
 ticketSchema.index({ subjectId: 1, verificationStatus: 1 });
 ticketSchema.index({ verifiedByTeacherId: 1 });
 ticketSchema.index({ status: 1 });
+ticketSchema.index({ tenantId: 1, studentId: 1, createdAt: -1 });
+ticketSchema.index({ tenantId: 1, verifiedByTeacherId: 1, status: 1 });
+ticketSchema.index({ tenantId: 1, status: 1 });
 
 module.exports = mongoose.model('Ticket', ticketSchema);

@@ -1,0 +1,2 @@
+enrollmentNumber,email,firstName,lastName,section,parentName,parentPhone,parentEmail,course,branch,semester,admissionYear
+VER200,not-an-email,Bad,One,A,P1,1,p1@test.local,Bachelor of Technology,CSE,1,2026

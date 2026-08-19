@@ -13,7 +13,7 @@ const generateSecureFilename = (originalname) => {
 // Configure storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = 'uploads/';
+    const uploadDir = path.join(__dirname, '../uploads');
     // Create directory if it doesn't exist
     require('fs').mkdirSync(uploadDir, { recursive: true });
     cb(null, uploadDir);

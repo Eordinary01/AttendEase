@@ -2,6 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primary: 79 70 229;
+  --color-primary-light: 99 102 241;
+  --color-primary-dark: 67 56 202;
+  --color-primary-soft: 238 242 255;
+  --color-primary-surface: 224 231 255;
+  --color-secondary: 139 92 246;
+  --color-secondary-light: 167 139 250;
+  --color-secondary-dark: 124 58 237;
+  --color-secondary-soft: 245 243 255;
+  --color-secondary-surface: 237 233 254;
+  --color-accent: 79 70 229;
+  --color-surface: 255 255 255;
+  --color-background: 248 250 252;
+  --color-ink: 15 23 42;
+  --color-ink-soft: 71 85 105;
+  --color-ink-faint: 148 163 184;
+  --color-line: 226 232 240;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-ink;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-line;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-faint;
+  }
+}
 
 /* Add this to your CSS file */
 .blur-background {

@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "AttendEase",
+  "name": "AttendEase ERP — Education Management Platform",
+  "description": "Manage attendance, exams, fees, timetables, academics and communication for your educational institution.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -8,18 +9,26 @@
       "type": "image/x-icon"
     },
     {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#7c3aed",
   "background_color": "#ffffff"
 }

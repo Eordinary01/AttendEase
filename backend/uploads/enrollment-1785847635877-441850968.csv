@@ -1,0 +1,4 @@
+enrollmentNumber,email,firstName,lastName,section,parentName,parentPhone,parentEmail,course,branch,semester,admissionYear
+VER001,dup-email@test.local,Verify,One,A,Parent One,1111111111,p1@test.local,Bachelor of Technology,CSE,3,2024
+VER007,bca-ds@test.local,Verify,Seven,A,Parent Seven,7777777777,p7@test.local,Bachelor of Computer Applications,DS,3,2024
+VER015,mba-ba@test.local,Verify,Fifteen,A,Parent Fifteen,1515151515,p15@test.local,Master of Business Administration,Business Analytics,3,2024

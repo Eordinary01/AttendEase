@@ -1,455 +1,679 @@
+// controllers/userController.js (Add these functions)
 const User = require("../models/User");
-const Enrollment = require("../models/Enrollment");
-var bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const Tenant = require("../models/Tenant");
+const logger = require("../utils/logger");
+const { escapeRegExp } = require("../utils/sanitize");
+const cache = require("../middleware/cache");
 
-const { JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
+// ==================== PROFILE MANAGEMENT ====================
 
 /**
- * LOGIN - For all users (student, teacher, admin)
- * Only requires email and password
- * Automatically sets role to admin if matches admin credentials
+ * GET /api/users/profile
+ * Get current user's profile
  */
-const login = async (req, res) => {
-  let { email, password } = req.body;
-
-  console.log('🔐 Login attempt:', { email });
-
-  if (!email || !password) {
-    console.log('❌ Missing email or password');
-    return res.status(400).json({ 
-      message: 'Email and password are required' 
-    });
-  }
-
-  // Convert to lowercase
-  email = email.toLowerCase().trim();
-
+const getProfile = async (req, res) => {
   try {
-    // Check if it's admin credentials from environment variables
-    if (ADMIN_EMAIL && ADMIN_PASSWORD) {
-      const adminEmails = ADMIN_EMAIL.split(',').map(e => e.trim().toLowerCase());
-      console.log('🔍 Checking admin emails:', adminEmails);
-      
-      if (adminEmails.includes(email) && password === ADMIN_PASSWORD) {
-        console.log('✅ Admin credentials matched');
-        
-        // Check if admin user exists in database
-        let adminUser = await User.findOne({ email, role: 'admin' });
-        console.log('🔍 Admin user found in DB:', adminUser ? 'Yes' : 'No');
-        
-        if (!adminUser) {
-          console.log('🆕 Creating new admin user');
-          // Create admin user if doesn't exist
-          const hashPassword = await bcrypt.hash(password, 10);
-          adminUser = new User({
-            name: 'System Administrator',
-            email,
-            password: hashPassword,
-            role: 'admin',
-            isActive: true,
-            isFirstLogin: false,
-            section: 'Admin',
-            createdAt: Date.now()
-          });
-          await adminUser.save();
-          console.log('✅ Admin user created:', email);
-        }
-
-        // Generate token
-        const token = jwt.sign(
-          { userId: adminUser._id, role: 'admin' }, 
-          JWT_SECRET, 
-          { expiresIn: '7d' }
-        );
-
-        console.log('✅ Admin login successful, returning response:', {
-          id: adminUser._id,
-          name: adminUser.name,
-          email: adminUser.email,
-          role: adminUser.role
-        });
-
-        return res.status(200).json({
-          success: true,
-          message: 'Admin login successful',
-          token,
-          user: {
-            id: adminUser._id,
-            name: adminUser.name,
-            email: adminUser.email,
-            role: 'admin',
-            section: adminUser.section,
-            isFirstLogin: adminUser.isFirstLogin,
-            isAdmin: true
-          }
-        });
-      }
-    }
-
-    console.log('🔍 Checking regular user login');
-    // Regular user login (student, teacher)
-    const user = await User.findOne({ email });
-    console.log('🔍 User found:', user ? `Yes - Role: ${user.role}` : 'No');
-
-    if (!user) {
-      console.log('❌ User not found');
-      return res.status(404).json({ 
-        success: false,
-        message: 'User not found! Please register first.' 
-      });
-    }
-
-    // Check if account is active
-    if (!user.isActive) {
-      console.log('❌ Account deactivated');
-      return res.status(403).json({ 
-        success: false,
-        message: 'This account has been deactivated. Contact your administrator.' 
-      });
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('🔍 Password valid:', isPasswordValid ? 'Yes' : 'No');
+    const user = await User.findById(req.user._id)
+      .select('-password')
+      .populate('assignedSubjects.subjectId');
     
-    if (!isPasswordValid) {
-      console.log('❌ Invalid password');
-      return res.status(401).json({ 
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: 'Invalid password' 
+        message: 'User not found'
       });
     }
-
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id, role: user.role }, 
-      JWT_SECRET, 
-      { expiresIn: '7d' }
-    );
-
-    console.log('✅ Login successful, returning response:', {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      section: user.section
-    });
-
+    
     return res.status(200).json({
       success: true,
-      message: 'Login successful',
-      token,
-      user: {
+      data: user
+    });
+  } catch (error) {
+    logger.error('Error fetching profile', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch profile',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * PUT /api/users/profile
+ * Update current user's profile
+ */
+const updateProfile = async (req, res) => {
+  try {
+    const { name, phone, address, parentName, parentPhone, parentEmail, qualification, specialization } = req.body;
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Core fields editable by all roles
+    if (name !== undefined) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+    if (address !== undefined) user.address = address;
+    
+    // Role-specific fields
+    if (user.role === 'student') {
+      if (parentName !== undefined) user.parentName = parentName;
+      if (parentPhone !== undefined) user.parentPhone = parentPhone;
+      if (parentEmail !== undefined) user.parentEmail = parentEmail;
+    } else if (user.role === 'teacher') {
+      if (qualification !== undefined) user.qualification = qualification;
+      if (specialization !== undefined) user.specialization = specialization;
+    }
+    
+    user.profileComplete = true;
+    await user.save();
+    
+    // Invalidate user cache
+    await cache.del(`user:${user._id}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        _id: user._id,
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
         section: user.section,
         rollNo: user.rollNo,
-        isFirstLogin: user.isFirstLogin
+        phone: user.phone,
+        address: user.address,
+        qualification: user.qualification,
+        specialization: user.specialization,
+        parentName: user.parentName,
+        parentPhone: user.parentPhone,
+        parentEmail: user.parentEmail,
+        courseName: user.courseName,
+        branch: user.branch,
+        semester: user.semester,
+        emailVerified: user.emailVerified,
+        profileComplete: user.profileComplete,
+        createdAt: user.createdAt,
       }
     });
-
   } catch (error) {
-    console.error('❌ Error logging in user:', error);
-    return res.status(500).json({ 
+    logger.error('Error updating profile', { error: error.message });
+    return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error.message 
+      message: 'Failed to update profile',
+      error: error.message
     });
   }
 };
 
-// Rest of the functions remain the same...
-const registerStudent = async (req, res) => {
-  let { email, enrollmentNumber, password, confirmPassword } = req.body;
+// ==================== STUDENT MANAGEMENT ====================
 
-  // Validation
-  if (!email || !enrollmentNumber || !password || !confirmPassword) {
-    return res.status(400).json({ 
-      message: 'Email, enrollment number, and password are required' 
-    });
-  }
-
-  if (password !== confirmPassword) {
-    return res.status(400).json({ 
-      message: 'Passwords do not match' 
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ 
-      message: 'Password must be at least 6 characters long' 
-    });
-  }
-
-  // Convert to lowercase
-  email = email.toLowerCase().trim();
-  enrollmentNumber = enrollmentNumber.toUpperCase().trim();
-  
+/**
+ * GET /api/users/students
+ * Get all students (admin only)
+ */
+const getAllStudents = async (req, res) => {
   try {
-    // Step 1: Check if enrollment number exists and matches email
-    const enrollment = await Enrollment.findOne({ 
-      enrollmentNumber, 
-      email 
-    });
-
-    if (!enrollment) {
-      return res.status(404).json({ 
-        message: 'Invalid enrollment number or email. Please contact your college administrator.' 
-      });
-    }
-
-    // Step 2: Check if already registered
-    if (enrollment.isRegistered) {
-      return res.status(400).json({ 
-        message: 'This enrollment number is already registered. Please login instead.' 
-      });
-    }
-
-    // Step 3: Check if user already exists
-    let existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ 
-        message: 'Email already registered' 
-      });
-    }
-
-    // Step 4: Hash password
-    const hashPassword = await bcrypt.hash(password, 10);
-
-    // Step 5: Create new student user
-    const newUser = new User({
-      name: `${enrollment.firstName} ${enrollment.lastName}`,
-      email,
-      password: hashPassword,
-      section: enrollment.section,
+    const { page = 1, limit = 50, section, search } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    let query = { 
       role: 'student',
-      rollNo: enrollmentNumber,
-      isFirstLogin: false,
-      createdAt: Date.now()
-    });
+      isActive: true 
+    };
+    if (req.user?.role !== 'super_admin') {
+      query.tenantId = effectiveTenantId;
+    } else if (req.query.tenantId) {
+      query.tenantId = req.query.tenantId;
+    }
 
-    await newUser.save();
-
-    // Step 6: Update enrollment record
-    enrollment.isRegistered = true;
-    enrollment.registeredAt = Date.now();
-    enrollment.userId = newUser._id;
-    await enrollment.save();
-
-    // Step 7: Generate token
-    const token = jwt.sign(
-      { userId: newUser._id }, 
-      JWT_SECRET, 
-      { expiresIn: '7d' }
-    );
-
-    return res.status(201).json({ 
-      message: 'Student registered successfully',
-      token,
-      user: {
-        id: newUser._id,
-        name: newUser.name,
-        email: newUser.email,
-        section: newUser.section,
-        rollNo: newUser.rollNo,
-        role: newUser.role
+    // Teachers can only see students in their assigned sections
+    if (req.user?.role === 'teacher') {
+      const assignedSections = [...new Set((req.user.assignedSubjects || []).map(a => a.section).filter(Boolean))];
+      if (assignedSections.length > 0) {
+        const allowed = section ? assignedSections.filter(s => s === section) : assignedSections;
+        if (allowed.length === 0) {
+          return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit, total: 0, pages: 0 } });
+        }
+        query.section = allowed.length === 1 ? allowed[0] : { $in: allowed };
+      } else {
+        return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit, total: 0, pages: 0 } });
+      }
+    } else if (section) {
+      query.section = section;
+    }
+    if (search) {
+      const safeSearch = escapeRegExp(search);
+      query.$or = [
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
+        { rollNo: { $regex: safeSearch, $options: 'i' } }
+      ];
+    }
+    
+    const [students, total] = await Promise.all([
+      User.find(query)
+        .select('-password')
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      User.countDocuments(query)
+    ]);
+    
+    return res.status(200).json({
+      success: true,
+      data: students,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
       }
     });
-
   } catch (error) {
-    console.error('Error registering student:', error);
-    return res.status(500).json({ 
-      message: 'Internal server error during registration' 
+    logger.error('Error fetching students', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch students',
+      error: error.message
     });
   }
 };
 
 /**
- * TEACHER REGISTRATION - Only via Admin Creation
- * Teachers cannot self-register, only admin can create them
- * Uses temporary password sent via email
+ * GET /api/users/students/:id
+ * Get student by ID
  */
-const registerTeacherFirstLogin = async (req, res) => {
-  const { email, tempPassword, newPassword, confirmPassword } = req.body;
-
-  if (!email || !tempPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ 
-      message: 'All fields are required' 
-    });
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ 
-      message: 'Passwords do not match' 
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({ 
-      message: 'Password must be at least 6 characters long' 
-    });
-  }
-
-  const emailLower = email.toLowerCase().trim();
-
+const getStudentById = async (req, res) => {
   try {
-    // Find teacher with temporary password
-    const teacher = await User.findOne({ 
-      email: emailLower, 
-      role: 'teacher',
-      isFirstLogin: true
+    const student = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'student'
+    }).select('-password');
+    
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: student
     });
+  } catch (error) {
+    logger.error('Error fetching student', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch student',
+      error: error.message
+    });
+  }
+};
 
+/**
+ * PUT /api/users/students/:id
+ * Update student
+ */
+const updateStudent = async (req, res) => {
+  try {
+    const { name, email, section, rollNo, phone, address, parentName, parentPhone } = req.body;
+    
+    const student = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'student'
+    });
+    
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    if (name) student.name = name;
+    if (email) student.email = email;
+    if (section) student.section = section;
+    if (rollNo) student.rollNo = rollNo;
+    if (phone) student.phone = phone;
+    if (address) student.address = address;
+    if (parentName) student.parentName = parentName;
+    if (parentPhone) student.parentPhone = parentPhone;
+    if (req.body.parentEmail) student.parentEmail = req.body.parentEmail;
+    
+    await student.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Student updated successfully',
+      data: student
+    });
+  } catch (error) {
+    logger.error('Error updating student', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update student',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * DELETE /api/users/students/:id
+ * Delete student (soft delete)
+ */
+const deleteStudent = async (req, res) => {
+  try {
+    const student = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'student'
+    });
+    
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    student.isActive = false;
+    await student.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Student deleted successfully'
+    });
+  } catch (error) {
+    logger.error('Error deleting student', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete student',
+      error: error.message
+    });
+  }
+};
+
+// ==================== TEACHER MANAGEMENT ====================
+
+/**
+ * GET /api/users/teachers
+ * Get all teachers (admin only)
+ */
+const getAllTeachers = async (req, res) => {
+  try {
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    let query = {
+      role: 'teacher',
+      isActive: true
+    };
+    if (req.user?.role !== 'super_admin') {
+      query.tenantId = effectiveTenantId;
+    } else if (req.query.tenantId) {
+      query.tenantId = req.query.tenantId;
+    }
+
+    const teachers = await User.find(query)
+      .select('-password')
+      .populate('assignedSubjects.subjectId');
+    
+    return res.status(200).json({
+      success: true,
+      data: teachers
+    });
+  } catch (error) {
+    logger.error('Error fetching teachers', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch teachers',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET /api/users/teachers/:id
+ * Get teacher by ID
+ */
+const getTeacherById = async (req, res) => {
+  try {
+    const teacher = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'teacher'
+    })
+      .select('-password')
+      .populate('assignedSubjects.subjectId');
+    
     if (!teacher) {
-      return res.status(404).json({ 
-        message: 'Teacher account not found or already activated' 
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: teacher
+    });
+  } catch (error) {
+    logger.error('Error fetching teacher', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch teacher',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * PUT /api/users/teachers/:id
+ * Update teacher
+ */
+const updateTeacher = async (req, res) => {
+  try {
+    const { name, email, phone, address } = req.body;
+    
+    const teacher = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'teacher'
+    });
+    
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
+      });
+    }
+    
+    if (name) teacher.name = name;
+    if (email) teacher.email = email;
+    if (phone) teacher.phone = phone;
+    if (address) teacher.address = address;
+    
+    await teacher.save();
+    
+    // Invalidate user cache
+    await cache.del(`user:${teacher._id}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Teacher updated successfully',
+      data: teacher
+    });
+  } catch (error) {
+    logger.error('Error updating teacher', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update teacher',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * DELETE /api/users/teachers/:id
+ * Delete teacher (soft delete)
+ */
+const deleteTeacher = async (req, res) => {
+  try {
+    const teacher = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+      role: 'teacher'
+    });
+    
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
       });
     }
 
-    // Verify temporary password
-    const isTempPasswordValid = await bcrypt.compare(tempPassword, teacher.password);
-    if (!isTempPasswordValid) {
-      return res.status(401).json({ 
-        message: 'Invalid temporary password' 
-      });
-    }
+    const tenantId = req.tenantId;
 
-    // Hash new password
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    // Soft delete — clean up references and mark teacher and timetables as deleted
+    const Timetable = require("../models/Timetable");
+    const Attendance = require("../models/Attendance");
+    const Enrollment = require("../models/Enrollment");
 
-    // Update teacher account
-    teacher.password = hashedNewPassword;
-    teacher.isFirstLogin = false;
+    await Promise.all([
+      Timetable.updateMany({ tenantId, teacherId: teacher._id }, { $set: { isDeleted: true, deletedAt: new Date(), isActive: false } }),
+      Attendance.updateMany({ tenantId, teacherId: teacher._id }, { $set: { teacherId: null } }),
+      Enrollment.updateMany(
+        { tenantId, "subjects.teacherId": teacher._id },
+        { $pull: { subjects: { teacherId: teacher._id } } }
+      ),
+    ]);
+
+    teacher.isActive = false;
+    teacher.isDeleted = true;
+    teacher.deletedAt = new Date();
     await teacher.save();
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: teacher._id }, 
-      JWT_SECRET, 
-      { expiresIn: '7d' }
-    );
-
-    return res.status(200).json({ 
-      message: 'Password changed successfully. You are now logged in.',
-      token,
-      user: {
-        id: teacher._id,
-        name: teacher.name,
-        email: teacher.email,
-        role: teacher.role,
-        section: teacher.section
-      }
-    });
-
-  } catch (error) {
-    console.error('Error in teacher first login:', error);
-    return res.status(500).json({ 
-      message: 'Internal server error' 
-    });
-  }
-};
-
-/**
- * VERIFY TOKEN - Get current user details
- */
-const verifyToken = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId)
-      .select("-password")
-      .populate('assignedSubjects.subjectId');
-
-    if (!user) {
-      return res.status(404).json({ 
-        message: "User not found" 
-      });
-    }
+    // Invalidate user and tenant cache
+    await cache.del(`user:${teacher._id}`);
+    await cache.del(`tenant:${tenantId}`);
 
     return res.status(200).json({
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      section: user.section,
-      rollNo: user.rollNo,
-      isFirstLogin: user.isFirstLogin,
-      assignedSubjects: user.assignedSubjects,
-      isActive: user.isActive
+      success: true,
+      message: 'Teacher deleted successfully'
     });
-
   } catch (error) {
-    console.error("Verification error:", error);
-    return res.status(500).json({ 
-      message: "Error while verifying token" 
+    logger.error('Error deleting teacher', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete teacher',
+      error: error.message
     });
   }
 };
 
-/**
- * CHANGE PASSWORD - For first login (teacher) or anytime
- */
-const changePassword = async (req, res) => {
-  const { oldPassword, newPassword, confirmPassword } = req.body;
+// ==================== USER STATUS MANAGEMENT ====================
 
-  if (!oldPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ 
-      message: 'All fields are required' 
-    });
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ 
-      message: 'New passwords do not match' 
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({ 
-      message: 'Password must be at least 6 characters long' 
-    });
-  }
-
+const activateUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId);
-
+    const user = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId
+    });
+    
     if (!user) {
-      return res.status(404).json({ 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
-
-    // Verify old password
-    const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
-    if (!isOldPasswordValid) {
-      return res.status(401).json({ 
-        message: 'Current password is incorrect' 
-      });
-    }
-
-    // Hash new password
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedNewPassword;
+    
+    user.isActive = true;
     await user.save();
-
-    return res.status(200).json({ 
-      message: 'Password changed successfully' 
+    
+    // Invalidate user cache
+    await cache.del(`user:${user._id}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'User activated successfully'
     });
-
   } catch (error) {
-    console.error('Error changing password:', error);
-    return res.status(500).json({ 
-      message: 'Internal server error' 
+    logger.error('Error activating user', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to activate user',
+      error: error.message
     });
+  }
+};
+
+const deactivateUser = async (req, res) => {
+  try {
+    const user = await User.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId
+    });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    user.isActive = false;
+    await user.save();
+    
+    // Invalidate user cache
+    await cache.del(`user:${user._id}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'User deactivated successfully'
+    });
+  } catch (error) {
+    logger.error('Error deactivating user', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to deactivate user',
+      error: error.message
+    });
+  }
+};
+
+// ==================== SEARCH ====================
+
+const searchUsers = async (req, res) => {
+  try {
+    const { q, role, limit = 20 } = req.query;
+    
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+    
+    let query = {
+      tenantId: req.tenantId,
+      $or: [
+        { name: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } },
+        { rollNo: { $regex: q, $options: 'i' } }
+      ]
+    };
+    
+    if (role) query.role = role;
+    
+    const users = await User.find(query)
+      .select('-password')
+      .limit(parseInt(limit));
+    
+    return res.status(200).json({
+      success: true,
+      data: users,
+      count: users.length
+    });
+  } catch (error) {
+    logger.error('Error searching users', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search users',
+      error: error.message
+    });
+  }
+};
+
+// Placeholder for bulk operations
+const bulkUploadUsers = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not implemented yet' });
+};
+
+const bulkDeleteUsers = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not implemented yet' });
+};
+
+const getAllAdmins = async (req, res) => {
+  try {
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    let query = { role: "admin", isActive: true };
+    if (req.user?.role !== "super_admin") {
+      query.tenantId = effectiveTenantId;
+    } else if (req.query.tenantId) {
+      query.tenantId = req.query.tenantId;
+    }
+
+    const admins = await User.find(query).select("-password").lean();
+    return res.status(200).json({
+      success: true,
+      data: admins,
+    });
+  } catch (error) {
+    logger.error("Error fetching admins", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch admins",
+      error: error.message,
+    });
+  }
+};
+
+const getAdminById = async (req, res) => {
+  try {
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    let query = { _id: req.params.id, role: "admin" };
+    if (req.user?.role !== "super_admin") {
+      query.tenantId = effectiveTenantId;
+    }
+
+    const admin = await User.findOne(query).select("-password").lean();
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+    return res.status(200).json({ success: true, data: admin });
+  } catch (error) {
+    logger.error("Error fetching admin by ID", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to fetch admin" });
   }
 };
 
 module.exports = {
-  registerStudent,
-  registerTeacherFirstLogin,
-  login,
-  verifyToken,
-  changePassword
+  // Profile
+  getProfile,
+  updateProfile,
+  
+  // Student management
+  getAllStudents,
+  getStudentById,
+  updateStudent,
+  deleteStudent,
+  
+  // Teacher management
+  getAllTeachers,
+  getTeacherById,
+  updateTeacher,
+  deleteTeacher,
+  
+  // Admin management
+  getAllAdmins,
+  getAdminById,
+  
+  // User status
+  activateUser,
+  deactivateUser,
+  
+  // Bulk operations
+  bulkUploadUsers,
+  bulkDeleteUsers,
+  
+  // Search
+  searchUsers
 };

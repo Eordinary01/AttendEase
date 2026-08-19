@@ -1,28 +1,32 @@
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 
 // Set up storage for uploaded files
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Store files in uploads folder
     const uploadsDir = path.join(__dirname, '../uploads');
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    // Create unique filename with timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
     cb(null, 'enrollment-' + uniqueSuffix + '.csv');
   }
 });
 
-// File filter - only allow CSV files
+// File filter - allow CSV files by extension AND MIME type
 const fileFilter = (req, file, cb) => {
-  // Check file extension
   const allowedExtensions = ['.csv'];
+  const allowedMimeTypes = ['text/csv', 'application/vnd.ms-excel', 'text/plain'];
   const fileExtension = path.extname(file.originalname).toLowerCase();
   
-  if (allowedExtensions.includes(fileExtension)) {
+  const extOk = allowedExtensions.includes(fileExtension);
+  const mimeOk = allowedMimeTypes.includes(file.mimetype);
+  
+  if (extOk && mimeOk) {
     cb(null, true);
+  } else if (extOk && !mimeOk) {
+    cb(new Error('File content type does not match CSV format'), false);
   } else {
     cb(new Error('Only CSV files are allowed'), false);
   }

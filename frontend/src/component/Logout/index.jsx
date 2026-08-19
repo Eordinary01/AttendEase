@@ -1,12 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getPostLogoutPath } from '../../utils/loginPath';
 
 const Logout = ({ onLogout }) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
     onLogout();
-    navigate('/login');
+    navigate(getPostLogoutPath());
   };
 
   return (

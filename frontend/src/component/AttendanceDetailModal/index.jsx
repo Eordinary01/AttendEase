@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
-import axios from 'axios';
+import { Calendar, Loader2, AlertCircle } from 'lucide-react';
+import api from '../../utils/api';
+import { logError } from '../../utils/logger';
+import Modal from '../common/ui/Modal';
+import Table from '../common/ui/Table';
+import Badge from '../common/ui/Badge';
 
 const ITEMS_PER_PAGE = 10;
 
-const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => {
+const AttendanceDetailModal = ({ isOpen, onClose, subject, token }) => {
   const [attendanceDetails, setAttendanceDetails] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,14 +22,13 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => 
       setError('');
 
       try {
-        const response = await axios.get(`${API_URL}/attendance/details`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await api.get('/attendance/details', {
           params: { subjectCode: subject.code },
         });
 
         setAttendanceDetails(response.data.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (err) {
-        console.error('Error fetching attendance details:', err);
+        logError("Fetch Attendance Details", err);
         setError('Failed to fetch attendance details. Please try again later.');
       } finally {
         setLoading(false);
@@ -35,7 +36,7 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => 
     };
 
     fetchAttendanceDetails();
-  }, [isOpen, subject, token, API_URL]);
+  }, [isOpen, subject, token]);
 
   const totalPages = Math.ceil(attendanceDetails.length / ITEMS_PER_PAGE);
   const currentData = attendanceDetails.slice(
@@ -43,83 +44,70 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token, API_URL }) => 
     currentPage * ITEMS_PER_PAGE
   );
 
+  const columns = [
+    {
+      header: 'Session Date',
+      cell: (row) => {
+        let formattedDate = 'N/A';
+        try {
+          const dateObj = new Date(row.date);
+          if (!isNaN(dateObj.getTime())) {
+            formattedDate = dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          }
+        } catch (e) {}
+        return (
+          <span className="inline-flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-ink-faint" />
+            {formattedDate}
+          </span>
+        );
+      },
+    },
+    {
+      header: 'Status state',
+      cell: (row) => (
+        <Badge tone={row.status === 'present' ? 'success' : 'danger'}>
+          {row.status}
+        </Badge>
+      ),
+    },
+  ];
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <Transition show={isOpen} as={React.Fragment}>
-          <Dialog as="div" className="fixed inset-0 z-50 flex items-center justify-center p-4" onClose={onClose}>
-            <div className="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true" />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-gray-800 p-6 rounded-lg w-full max-w-lg max-h-[80vh] overflow-y-auto relative"
-            >
-              <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Attendance Details - {subject.name} ({subject.code})
-              </h2>
-
-              {loading ? (
-                <p className="text-center text-gray-400">Loading attendance details...</p>
-              ) : error ? (
-                <p className="text-center text-red-500">{error}</p>
-              ) : attendanceDetails.length === 0 ? (
-                <p className="text-center text-gray-400">No attendance records found for this subject.</p>
-              ) : (
-                <>
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-700">
-                        <th className="p-2 text-left text-gray-300">Date</th>
-                        <th className="p-2 text-left text-gray-300">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentData.map((record) => (
-                        <tr key={record.date} className="odd:bg-gray-800 even:bg-gray-700 hover:bg-gray-600">
-                          <td className="p-2 text-gray-300">
-                            {new Date(record.date).getDate()}/
-                            {new Date(record.date).getMonth() + 1}/
-                            {new Date(record.date).getFullYear()}
-                          </td>
-                          <td className="p-2">
-                            <span className={`px-2 py-1 rounded-full text-sm font-medium ${record.status === 'present' ? 'bg-green-500 bg-opacity-20 text-green-400' : 'bg-red-500 bg-opacity-20 text-red-400'}`}>
-                              {record.status === 'present' ? 'Present' : 'Absent'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {totalPages > 1 && (
-                    <div className="flex justify-center mt-4">
-                      <button
-                        onClick={() => setCurrentPage((prev) => prev - 1)}
-                        disabled={currentPage === 1}
-                        className="px-4 py-2 bg-gray-700 text-gray-400 rounded-md hover:bg-gray-600 disabled:opacity-50"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage((prev) => prev + 1)}
-                        disabled={currentPage === totalPages}
-                        className="ml-2 px-4 py-2 bg-gray-700 text-gray-400 rounded-md hover:bg-gray-600 disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </motion.div>
-          </Dialog>
-        </Transition>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Attendance Registry Details"
+      size="md"
+    >
+      {subject && (
+        <p className="text-xs text-ink-soft font-semibold mb-4">
+          {subject.name || "Subject Details"} · <strong className="text-primary font-mono">{subject.code || "Code"}</strong>
+        </p>
       )}
-    </AnimatePresence>
+
+      {loading ? (
+        <div className="flex flex-col justify-center items-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-ink-faint mb-2" />
+          <p className="text-ink-faint text-xs font-semibold">Retrieving session records...</p>
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center text-xs text-red-600 flex flex-col items-center justify-center gap-2 py-8">
+          <AlertCircle className="w-6 h-6 text-red-500" />
+          <strong>Error Loading Logs</strong>
+          <span>{error}</span>
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          data={currentData}
+          emptyTitle="No attendance history"
+          emptyMessage="No attendance history matches this subject code."
+          pagination={{ page: currentPage, pages: totalPages, limit: ITEMS_PER_PAGE, total: attendanceDetails.length }}
+          onPageChange={(page) => setCurrentPage(page)}
+        />
+      )}
+    </Modal>
   );
 };
 

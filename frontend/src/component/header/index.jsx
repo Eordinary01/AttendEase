@@ -19,18 +19,36 @@ import {
   Settings,
   Upload,
   Home,
-  BookMarked // Added for Subjects icon
+  BookMarked,
+  Building2,
+  Shield,
+  LifeBuoy,
+  UserCog,
+  Calendar,
+  DollarSign,
+  Package,
+  FileText
 } from 'lucide-react';
 
 const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
+  const [planModules, setPlanModules] = useState(null);
+  const [themeColors, setThemeColors] = useState({
+    primary: '#7c3aed',    // Default purple-600
+    secondary: '#6d28d9',  // Default purple-700
+    light: '#ede9fe',      // Default purple-100
+    lighter: '#f5f3ff',    // Default purple-50
+  });
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Don't show header on landing page
+  const isLandingPage = location.pathname === '/';
+
   // Debug log
   useEffect(() => {
-    console.log('🔍 Header props:', { isAuthenticated, role, userName, userId });
+    // Header props updated
   }, [isAuthenticated, role, userName, userId]);
 
   useEffect(() => {
@@ -43,12 +61,78 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
     }
   }, [userName, isAuthenticated]);
 
+  useEffect(() => {
+    // Fetch tenant colors when authenticated
+    if (isAuthenticated) {
+      fetchTenantColors();
+      fetchPlanModules();
+    }
+  }, [isAuthenticated]);
+
+  const fetchPlanModules = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const API_URL = process.env.REACT_APP_API_URL;
+      const res = await fetch(`${API_URL}/tenant/usage`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPlanModules(data.data?.plan?.modules || {});
+      }
+    } catch (err) { /* ignore */ }
+  };
+
+  const fetchTenantColors = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const API_URL = process.env.REACT_APP_API_URL;
+      
+      const response = await fetch(`${API_URL}/tenant/info`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const branding = data.data?.tenant?.branding;
+        
+        if (branding) {
+          const colors = {
+            primary: branding.primaryColor || '#7c3aed',
+            secondary: branding.secondaryColor || '#6d28d9',
+            light: adjustColor(branding.primaryColor || '#7c3aed', 85),
+            lighter: adjustColor(branding.primaryColor || '#7c3aed', 92),
+          };
+          setThemeColors(colors);
+          
+          // Apply CSS variables for global theming
+          const root = document.documentElement;
+          root.style.setProperty('--header-primary', colors.primary);
+          root.style.setProperty('--header-secondary', colors.secondary);
+          root.style.setProperty('--header-light', colors.light);
+          root.style.setProperty('--header-lighter', colors.lighter);
+        }
+      }
+    } catch (error) {
+      // Silently fall back to default theme colors
+    }
+  };
+
+  // Helper to adjust color brightness
+  const adjustColor = (hex, percent) => {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * (100 - percent));
+    const R = Math.min(255, Math.max(0, (num >> 16) + amt));
+    const G = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amt));
+    const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
+    return `#${(1 << 24 | R << 16 | G << 8 | B).toString(16).slice(1)}`;
+  };
+
   // Get the display name
   const displayName = userName || currentUserName || 
     (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Account');
 
   const handleLogoutClick = () => {
-    console.log('🚪 Logging out from header');
     onLogout();
     setIsMenuOpen(false);
     navigate('/login');
@@ -58,13 +142,13 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const getSubjectsRoute = () => {
     switch(role) {
       case 'admin':
-        return '/admin/manage-subjects'; // Admin goes to management page
+        return '/admin/manage-subjects';
       case 'teacher':
-        return '/teacher/subjects'; // Teacher goes to their subjects view
+        return '/teacher/subjects';
       case 'student':
-        return '/student/subjects'; // Student goes to their subjects view
+        return '/student/subjects';
       default:
-        return '/subjects'; // Fallback to general subjects page
+        return '/subjects';
     }
   };
 
@@ -84,8 +168,23 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
   // Check if route exists before showing it
   const shouldShowLink = (path) => {
-    // For now, just return true. You can implement actual route checking here
     return true;
+  };
+
+  // Get the display text for the role label
+  const getRoleLabel = () => {
+    switch(role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'admin':
+        return 'Admin';
+      case 'teacher':
+        return 'Teacher';
+      case 'student':
+        return 'Student';
+      default:
+        return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Account';
+    }
   };
 
   // Close mobile menu when route changes
@@ -93,14 +192,31 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
     setIsMenuOpen(false);
   }, [location.pathname]);
 
+  if (isLandingPage) {
+    return null;
+  }
+
+  // Dynamic header styles
+  const headerStyles = {
+    background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`,
+    boxShadow: `0 4px 20px ${themeColors.primary}40`,
+  };
+
+  const getButtonGradient = (primaryColor, secondaryColor) => {
+    return `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`;
+  };
+
   return (
-    <div className="bg-gradient-to-r from-purple-100 to-purple-200 text-purple-900 p-4 flex flex-col z-50 shadow-lg sticky top-0">
+    <div 
+      className="text-white p-4 flex flex-col z-50 shadow-lg sticky top-0 transition-all duration-300"
+      style={headerStyles}
+    >
       <div className="flex justify-between items-center max-w-7xl mx-auto w-full">
         {/* Logo */}
         <div className="flex items-center space-x-2">
-          <GraduationCap className="h-8 w-8 text-purple-700" />
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-700 to-purple-900 bg-clip-text text-transparent">
-            Attend Ease
+          <GraduationCap className="h-8 w-8 text-white drop-shadow-md" />
+          <h1 className="text-2xl font-bold text-white drop-shadow-md">
+            AttendEase
           </h1>
         </div>
 
@@ -108,13 +224,13 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
         <div className="md:hidden">
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 hover:bg-purple-200 rounded-full transition-colors duration-200"
+            className="p-2 hover:bg-white/20 rounded-full transition-colors duration-200"
             aria-label={isMenuOpen ? "Close menu" : "Open menu"}
           >
             {isMenuOpen ? (
-              <X className="h-6 w-6 text-purple-700" />
+              <X className="h-6 w-6 text-white" />
             ) : (
-              <MenuIcon className="h-6 w-6 text-purple-700" />
+              <MenuIcon className="h-6 w-6 text-white" />
             )}
           </button>
         </div>
@@ -125,33 +241,84 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           {isAuthenticated && (
             <Link 
               to="/dashboard" 
-              className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+              className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
             >
               <Home className="h-5 w-5" />
               <span>Dashboard</span>
             </Link>
           )}
           
-          {/* SUBJECTS LINK - Now available for everyone */}
+          {/* TIMETABLE LINK - Available for everyone */}
+          {isAuthenticated && role !== 'parent' && (
+            <Link
+              to="/timetable"
+              className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+            >
+              <Calendar className="h-5 w-5" />
+              <span>Timetable</span>
+            </Link>
+          )}
+
+          {/* SUBJECTS LINK - Available for everyone */}
           {isAuthenticated && (
             <Link 
               to={getSubjectsRoute()}
-              className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+              className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
             >
               <BookMarked className="h-5 w-5" />
               <span>{getSubjectsText()}</span>
             </Link>
           )}
           
+          {/* Parent-specific links (minimal nav) */}
+          {isAuthenticated && role === 'parent' && (
+            <>
+              <Link
+                to="/parent/dashboard"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Home className="h-5 w-5" />
+                <span>Dashboard</span>
+              </Link>
+              <Link
+                to="/timetable"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Calendar className="h-5 w-5" />
+                <span>Timetable</span>
+              </Link>
+            </>
+          )}
+
           {/* Student-specific links */}
           {isAuthenticated && role === 'student' && (
-            <Link 
-              to="/tickets" 
-              className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
-            >
-              <Ticket className="h-5 w-5" />
-              <span>Create Ticket</span>
-            </Link>
+            <>
+              <Link 
+                to="/tickets" 
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Ticket className="h-5 w-5" />
+                <span>Create Ticket</span>
+              </Link>
+              {(planModules === null || planModules.examManagement) && (
+              <Link
+                to="/exams"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <FileText className="h-5 w-5" />
+                <span>Exams</span>
+              </Link>
+              )}
+              {(planModules === null || planModules.financeManagement) && (
+              <Link
+                to="/fees"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <DollarSign className="h-5 w-5" />
+                <span>My Fees</span>
+              </Link>
+              )}
+            </>
           )}
           
           {/* Teacher-specific links */}
@@ -160,7 +327,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {shouldShowLink('/attendance') && (
                 <Link 
                   to="/attendance" 
-                  className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
                 >
                   <PenSquare className="h-5 w-5" />
                   <span>Mark Attendance</span>
@@ -170,12 +337,68 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {shouldShowLink('/attendance-overview') && (
                 <Link 
                   to="/attendance-overview" 
-                  className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
                 >
                   <ClipboardCheck className="h-5 w-5" />
                   <span>Overview</span>
                 </Link>
               )}
+
+              {(planModules === null || planModules.examManagement) && (
+              <Link
+                to="/exams"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <FileText className="h-5 w-5" />
+                <span>Exams</span>
+              </Link>
+              )}
+
+              {(planModules === null || planModules.financeManagement) && (
+              <Link
+                to="/fees"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <DollarSign className="h-5 w-5" />
+                <span>Fees</span>
+              </Link>
+              )}
+            </>
+          )}
+          
+          {/* Super Admin-specific links */}
+          {isAuthenticated && role === 'super_admin' && (
+            <>
+              <Link 
+                to="/super-admin/dashboard" 
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Home className="h-5 w-5" />
+                <span>Dashboard</span>
+              </Link>
+              {shouldShowLink('/super-admin/tenants') && (
+                <Link 
+                  to="/super-admin/tenants" 
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <Building2 className="h-5 w-5" />
+                  <span>Tenants</span>
+                </Link>
+              )}
+              <Link 
+                to="/super-admin/support" 
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <LifeBuoy className="h-5 w-5" />
+                <span>Support</span>
+              </Link>
+              <Link
+                to="/super-admin/plans"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Package className="h-5 w-5" />
+                <span>Plans</span>
+              </Link>
             </>
           )}
           
@@ -185,7 +408,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {shouldShowLink('/admin/upload-enrollments') && (
                 <Link 
                   to="/admin/upload-enrollments" 
-                  className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
                 >
                   <Upload className="h-5 w-5" />
                   <span>Upload</span>
@@ -195,24 +418,70 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {shouldShowLink('/admin/manage-teachers') && (
                 <Link 
                   to="/admin/manage-teachers" 
-                  className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
                 >
                   <Users className="h-5 w-5" />
                   <span>Teachers</span>
                 </Link>
               )}
 
-              {/* Note: Manage Subjects is already covered by the general Subjects link above */}
-              
+              {shouldShowLink('/admin/roles') && (
+                <Link
+                  to="/admin/roles"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <UserCog className="h-5 w-5" />
+                  <span>Roles</span>
+                </Link>
+              )}
+
+              {shouldShowLink('/admin/timetable') && (
+                <Link
+                  to="/admin/timetable"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <Calendar className="h-5 w-5" />
+                  <span>Timetable</span>
+                </Link>
+              )}
+
+              {(planModules === null || planModules.financeManagement) && shouldShowLink('/admin/fees') && (
+                <Link
+                  to="/admin/fees"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <DollarSign className="h-5 w-5" />
+                  <span>Fees</span>
+                </Link>
+              )}
+
               {shouldShowLink('/admin/assign-subjects') && (
                 <Link 
                   to="/admin/assign-subjects" 
-                  className="flex items-center space-x-2 hover:text-purple-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-purple-50"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
                 >
                   <Settings className="h-5 w-5" />
                   <span>Assign</span>
                 </Link>
               )}
+
+              {/* Settings link */}
+              <Link 
+                to="/admin/settings" 
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <Settings className="h-5 w-5" />
+                <span>Settings</span>
+              </Link>
+
+              {/* Support Link */}
+              <Link 
+                to="/admin/support" 
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <LifeBuoy className="h-5 w-5" />
+                <span>Support</span>
+              </Link>
             </>
           )}
 
@@ -221,7 +490,11 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <div className="flex items-center space-x-4">
               <Link 
                 to="/login" 
-                className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-colors duration-200"
+                className="px-4 py-2 rounded-full text-white hover:shadow-lg transition-all duration-200"
+                style={{
+                  background: getButtonGradient(themeColors.primary, themeColors.secondary),
+                  boxShadow: `0 4px 15px ${themeColors.primary}60`,
+                }}
               >
                 Login
               </Link>
@@ -231,7 +504,11 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {/* Account dropdown */}
               <Menu as="div" className="relative inline-block text-left">
                 <Menu.Button 
-                  className="flex items-center space-x-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  className="flex items-center space-x-2 px-4 py-2 rounded-full text-white hover:shadow-lg transition-all duration-200"
+                  style={{
+                    background: getButtonGradient(themeColors.primary, themeColors.secondary),
+                    boxShadow: `0 4px 15px ${themeColors.primary}60`,
+                  }}
                   aria-label="Account menu"
                 >
                   <User className="h-5 w-5" />
@@ -250,8 +527,12 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
                 >
                   <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
                     <div className="p-1">
-                      <div className="px-3 py-2 text-sm text-purple-900/60 font-medium border-b border-purple-100">
-                        {role === 'admin' ? 'Admin Account' : 
+                      <div 
+                        className="px-3 py-2 text-sm font-medium border-b border-gray-100"
+                        style={{ color: themeColors.primary }}
+                      >
+                        {role === 'super_admin' ? 'Super Admin Account' :
+                         role === 'admin' ? 'Admin Account' : 
                          role === 'teacher' ? 'Teacher Account' : 
                          'Student Account'}
                       </div>
@@ -262,8 +543,8 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
                           <Link
                             to="/profile"
                             className={`${
-                              active ? 'bg-purple-50 text-purple-900' : 'text-purple-800'
-                            } group flex items-center rounded-md px-3 py-2 text-sm mt-1`}
+                              active ? 'bg-purple-50' : ''
+                            } group flex items-center rounded-md px-3 py-2 text-sm mt-1 text-gray-700`}
                             onClick={() => setIsMenuOpen(false)}
                           >
                             <User className="h-4 w-4 mr-2" />
@@ -272,14 +553,14 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
                         )}
                       </Menu.Item>
                       
-                      {/* Subjects link in dropdown as well for easy access */}
+                      {/* Subjects link in dropdown */}
                       <Menu.Item>
                         {({ active }) => (
                           <Link
                             to={getSubjectsRoute()}
                             className={`${
-                              active ? 'bg-purple-50 text-purple-900' : 'text-purple-800'
-                            } group flex items-center rounded-md px-3 py-2 text-sm`}
+                              active ? 'bg-purple-50' : ''
+                            } group flex items-center rounded-md px-3 py-2 text-sm text-gray-700`}
                             onClick={() => setIsMenuOpen(false)}
                           >
                             <BookMarked className="h-4 w-4 mr-2" />
@@ -288,13 +569,65 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
                         )}
                       </Menu.Item>
                       
+                      {/* Admin Settings & Support link in dropdown */}
+                      {role === 'admin' && (
+                        <>
+                          <Menu.Item>
+                            {({ active }) => (
+                              <Link
+                                to="/admin/settings"
+                                className={`${
+                                  active ? 'bg-purple-50' : ''
+                                } group flex items-center rounded-md px-3 py-2 text-sm text-gray-700`}
+                                onClick={() => setIsMenuOpen(false)}
+                              >
+                                <Settings className="h-4 w-4 mr-2" />
+                                Settings
+                              </Link>
+                            )}
+                          </Menu.Item>
+                          <Menu.Item>
+                            {({ active }) => (
+                              <Link
+                                to="/admin/support"
+                                className={`${
+                                  active ? 'bg-purple-50' : ''
+                                } group flex items-center rounded-md px-3 py-2 text-sm text-gray-700`}
+                                onClick={() => setIsMenuOpen(false)}
+                              >
+                                <LifeBuoy className="h-4 w-4 mr-2" />
+                                Support
+                              </Link>
+                            )}
+                          </Menu.Item>
+                        </>
+                      )}
+
+                      {/* Super Admin Support link in dropdown */}
+                      {role === 'super_admin' && (
+                        <Menu.Item>
+                          {({ active }) => (
+                            <Link
+                              to="/super-admin/support"
+                              className={`${
+                                active ? 'bg-purple-50' : ''
+                              } group flex items-center rounded-md px-3 py-2 text-sm text-gray-700`}
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <LifeBuoy className="h-4 w-4 mr-2" />
+                              Support
+                            </Link>
+                          )}
+                        </Menu.Item>
+                      )}
+                      
                       {/* Logout button */}
                       <Menu.Item>
                         {({ active }) => (
                           <button
                             onClick={handleLogoutClick}
                             className={`${
-                              active ? 'bg-purple-50 text-purple-900' : 'text-purple-800'
+                              active ? 'bg-red-50 text-red-700' : 'text-gray-700'
                             } group flex w-full items-center rounded-md px-3 py-2 text-sm mt-1`}
                           >
                             <LogOut className="h-4 w-4 mr-2" />
@@ -320,17 +653,22 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
         <div className="flex flex-col space-y-6 mt-16">
           {/* User info in mobile menu */}
           {isAuthenticated && (
-            <div className="px-3 py-2 border-b border-purple-100">
-              <p className="font-medium text-purple-900">{displayName}</p>
-              <p className="text-sm text-purple-600">{role?.charAt(0).toUpperCase() + role?.slice(1)}</p>
+            <div 
+              className="px-3 py-2 border-b border-gray-100"
+              style={{ borderColor: `${themeColors.primary}30` }}
+            >
+              <p className="font-medium text-gray-900">{displayName}</p>
+              <p className="text-sm" style={{ color: themeColors.primary }}>
+                {getRoleLabel()}
+              </p>
             </div>
           )}
 
-          {/* Dashboard link for all authenticated users */}
+          {/* Dashboard link */}
           {isAuthenticated && (
             <Link 
               to="/dashboard" 
-              className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <Home className="h-5 w-5" />
@@ -338,11 +676,11 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             </Link>
           )}
 
-          {/* SUBJECTS LINK - Mobile version for everyone */}
+          {/* Subjects link */}
           {isAuthenticated && (
             <Link 
               to={getSubjectsRoute()}
-              className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <BookMarked className="h-5 w-5" />
@@ -352,14 +690,36 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
           {/* Student-specific mobile links */}
           {isAuthenticated && role === 'student' && (
-            <Link 
-              to="/tickets" 
-              className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Ticket className="h-5 w-5" />
-              <span>Create Ticket</span>
-            </Link>
+            <>
+              <Link 
+                to="/tickets" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Ticket className="h-5 w-5" />
+                <span>Create Ticket</span>
+              </Link>
+              {(planModules === null || planModules.examManagement) && (
+              <Link
+                to="/exams"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <FileText className="h-5 w-5" />
+                <span>Exams</span>
+              </Link>
+              )}
+              {(planModules === null || planModules.financeManagement) && (
+              <Link
+                to="/fees"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <DollarSign className="h-5 w-5" />
+                <span>My Fees</span>
+              </Link>
+              )}
+            </>
           )}
 
           {/* Teacher-specific mobile links */}
@@ -367,7 +727,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <>
               <Link 
                 to="/attendance" 
-                className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <PenSquare className="h-5 w-5" />
@@ -376,21 +736,81 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/attendance-overview" 
-                className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <ClipboardCheck className="h-5 w-5" />
                 <span>Overview</span>
               </Link>
+
+              {(planModules === null || planModules.examManagement) && (
+              <Link
+                to="/exams"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <FileText className="h-5 w-5" />
+                <span>Exams</span>
+              </Link>
+              )}
+
+              {(planModules === null || planModules.financeManagement) && (
+              <Link
+                to="/fees"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <DollarSign className="h-5 w-5" />
+                <span>Fees</span>
+              </Link>
+              )}
             </>
           )}
           
+          {/* Super Admin-specific mobile links */}
+          {isAuthenticated && role === 'super_admin' && (
+            <>
+              <Link 
+                to="/super-admin/dashboard" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Home className="h-5 w-5" />
+                <span>Dashboard</span>
+              </Link>
+              <Link 
+                to="/super-admin/tenants" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Building2 className="h-5 w-5" />
+                <span>All Tenants</span>
+              </Link>
+              <Link 
+                to="/super-admin/support" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <LifeBuoy className="h-5 w-5" />
+                <span>Support</span>
+              </Link>
+              <Link
+                to="/super-admin/plans"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Package className="h-5 w-5" />
+                <span>Plans</span>
+              </Link>
+            </>
+          )}
+
           {/* Admin-specific mobile links */}
           {isAuthenticated && role === 'admin' && (
             <>
               <Link 
                 to="/admin/upload-enrollments" 
-                className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Upload className="h-5 w-5" />
@@ -399,23 +819,50 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/admin/manage-teachers" 
-                className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Users className="h-5 w-5" />
                 <span>Manage Teachers</span>
               </Link>
 
-              {/* Note: Manage Subjects is already covered above */}
-
               <Link 
                 to="/admin/assign-subjects" 
-                className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Settings className="h-5 w-5" />
                 <span>Assign Subjects</span>
               </Link>
+
+              <Link 
+                to="/admin/settings" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Settings className="h-5 w-5" />
+                <span>Settings</span>
+              </Link>
+
+              <Link 
+                to="/admin/support" 
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <LifeBuoy className="h-5 w-5" />
+                <span>Support</span>
+              </Link>
+
+              {(planModules === null || planModules.financeManagement) && (
+              <Link
+                to="/admin/fees"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <DollarSign className="h-5 w-5" />
+                <span>Fee Management</span>
+              </Link>
+              )}
             </>
           )}
 
@@ -423,7 +870,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           {isAuthenticated && (
             <Link 
               to="/profile" 
-              className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-50"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <User className="h-5 w-5" />
@@ -436,7 +883,10 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <div className="flex flex-col space-y-4 pt-4">
               <Link 
                 to="/login" 
-                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white text-center hover:from-purple-700 hover:to-blue-700"
+                className="w-full px-4 py-3 rounded-lg text-white text-center transition"
+                style={{
+                  background: getButtonGradient(themeColors.primary, themeColors.secondary),
+                }}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Login
@@ -445,7 +895,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           ) : (
             <button 
               onClick={handleLogoutClick}
-              className="flex items-center space-x-2 text-purple-900 hover:text-purple-700 px-3 py-3 rounded-lg hover:bg-purple-50 mt-4 border-t border-purple-100 pt-4"
+              className="flex items-center space-x-2 text-red-600 hover:bg-red-50 px-3 py-3 rounded-lg transition mt-4 border-t border-gray-100 pt-4"
             >
               <LogOut className="h-5 w-5" />
               <span>Logout</span>
