@@ -161,6 +161,7 @@ const adminRoute = require("./routes/adminRoute");
 const ticketRoute = require("./routes/ticketRoute");
 const alertRoute = require("./routes/alertRoute");
 const attendanceRoute = require("./routes/attendanceRoute");
+const faceRoutes = require("./routes/faceRoutes");
 const allUser = require("./routes/user");
 const subjectRoute = require("./routes/subjectRoute");
 const billingRoutes = require('./routes/billingRoutes');
@@ -183,6 +184,8 @@ app.use("/api/admin", adminRoute);
 app.use("/api/tickets", ticketRoute);
 app.use("/api/alerts", alertRoute);
 app.use("/api/attendance", attendanceRoute);
+app.use("/api/attendance", faceRoutes);  // mounts mark-face-detection at /api/attendance/mark-face-detection
+app.use("/api/faces", faceRoutes);
 app.use("/api/subjects", subjectRoute);
 app.use('/api/billing',      billingRoutes);
 app.use('/api/tenant',       tenantRoutes);
