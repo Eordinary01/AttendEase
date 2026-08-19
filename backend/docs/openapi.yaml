@@ -1,0 +1,4700 @@
+openapi: 3.0.3
+info:
+  title: AttendEase API
+  description: |
+    Multi-tenant SaaS platform for educational institutions.
+    Manages attendance, timetables, academics, exams, fees, roles, and billing.
+
+    ## Authentication
+    All protected endpoints require a JWT Bearer token in the `Authorization` header.
+    Obtain tokens via the `/api/auth/login` endpoints.
+
+    ## Tenant Scoping
+    Non-super-admin users are automatically scoped to their tenant via the JWT.
+    Super admins can access any tenant's data by passing `tenantId` as a query parameter.
+
+    ## Rate Limits
+    - Login endpoints: 10 requests per 15 minutes
+    - Auth endpoints: 30 requests per 15 minutes
+    - Other endpoints: configurable per-route
+  version: 1.0.0
+  contact:
+    name: AttendEase Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8011/api
+    description: Local development
+  - url: https://api.attendEase.com/api
+    description: Production
+
+tags:
+  - name: Auth
+    description: Authentication, registration, 2FA, sessions
+  - name: Admin
+    description: Tenant admin — teachers, subjects, assignments, enrollments
+  - name: Super Admin
+    description: Cross-tenant management — tenants, stats, monitoring
+  - name: Students
+    description: Student CRUD
+  - name: Attendance
+    description: Mark, query, and report attendance
+  - name: Timetable
+    description: Weekly timetable management
+  - name: Subjects
+    description: Subject CRUD and search
+  - name: Exams
+    description: Exam schedule, grading, results
+  - name: Fees
+    description: Fee records, collections, waivers, transactions
+  - name: Academic
+    description: Courses, branches, semesters, promotion
+  - name: Roles
+    description: Custom roles and RBAC
+  - name: Tenant
+    description: Tenant settings, branding, usage
+  - name: Billing
+    description: Subscriptions, invoices, payments (Razorpay)
+  - name: Plans
+    description: Super-admin plan management
+  - name: Support
+    description: Support tickets
+  - name: Reports
+    description: Attendance reports and CSV export
+  - name: Parent
+    description: Parent portal — child attendance, alerts
+  - name: Calendar
+    description: Calendar events
+  - name: Alerts
+    description: Notifications and alerts
+  - name: Tickets
+    description: Student absence proof tickets
+  - name: Landing
+    description: Public marketing endpoints
+  - name: Users
+    description: Profile, student/teacher/admin management, bulk ops
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, admin, teacher, student, parent]
+        tenantId:
+          type: string
+        rollNo:
+          type: string
+        section:
+          type: string
+        courseId:
+          type: string
+        courseName:
+          type: string
+        branch:
+          type: string
+        semester:
+          type: integer
+        isActive:
+          type: boolean
+
+    Tenant:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        subdomain:
+          type: string
+        contact:
+          type: object
+          properties:
+            email:
+              type: string
+        branding:
+          type: object
+          properties:
+            logo:
+              type: string
+            favicon:
+              type: string
+            primaryColor:
+              type: string
+            secondaryColor:
+              type: string
+        subscription:
+          type: object
+          properties:
+            plan:
+              type: string
+            status:
+              type: string
+            billingCycle:
+              type: string
+        settings:
+          type: object
+
+    Plan:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        pricing:
+          type: object
+          properties:
+            monthly:
+              type: number
+            yearly:
+              type: number
+        modules:
+          type: object
+          additionalProperties:
+            type: boolean
+        limits:
+          type: object
+          additionalProperties:
+            type: integer
+
+    Course:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        durationYears:
+          type: integer
+        semestersPerYear:
+          type: integer
+        branches:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              code:
+                type: string
+        tenantId:
+          type: string
+
+    Subject:
+      type: object
+      properties:
+        _id:
+          type: string
+        subjectName:
+          type: string
+        subjectCode:
+          type: string
+        courseId:
+          type: string
+        branch:
+          type: string
+        semester:
+          type: integer
+        credits:
+          type: integer
+        isActive:
+          type: boolean
+        tenantId:
+          type: string
+
+    TimetableEntry:
+      type: object
+      properties:
+        _id:
+          type: string
+        section:
+          type: string
+        courseCode:
+          type: string
+        branch:
+          type: string
+        semester:
+          type: integer
+        day:
+          type: string
+          enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday]
+        startTime:
+          type: string
+          example: "09:00"
+        endTime:
+          type: string
+          example: "09:45"
+        room:
+          type: string
+        teacherId:
+          type: string
+        subjectId:
+          type: string
+        isNoClass:
+          type: boolean
+
+    Attendance:
+      type: object
+      properties:
+        _id:
+          type: string
+        studentId:
+          type: string
+        timetableId:
+          type: string
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [present, absent, late, leave]
+        remarks:
+          type: string
+        subject:
+          type: object
+          properties:
+            subjectCode:
+              type: string
+            subjectName:
+              type: string
+
+    Exam:
+      type: object
+      properties:
+        _id:
+          type: string
+        title:
+          type: string
+        subjectId:
+          type: string
+        subjectName:
+          type: string
+        section:
+          type: string
+        type:
+          type: string
+          enum: [midterm, final, quiz, assignment]
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
+        maxMarks:
+          type: integer
+        room:
+          type: string
+        instructions:
+          type: string
+
+    Fee:
+      type: object
+      properties:
+        _id:
+          type: string
+        studentId:
+          type: string
+        feeType:
+          type: string
+        amount:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [pending, paid, partial, waived, overdue]
+        section:
+          type: string
+        academicYear:
+          type: string
+        description:
+          type: string
+        waivedAmount:
+          type: number
+
+    CustomRole:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    Alert:
+      type: object
+      properties:
+        _id:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [info, warning, error, success]
+        targetRoles:
+          type: array
+          items:
+            type: string
+        isRead:
+          type: boolean
+
+    Ticket:
+      type: object
+      properties:
+        _id:
+          type: string
+        studentId:
+          type: string
+        subjectId:
+          type: string
+        absentDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          enum: [medical, family, personal, academic, other]
+        reasonDescription:
+          type: string
+        verificationStatus:
+          type: string
+          enum: [pending, approved, rejected]
+
+    CalendarEvent:
+      type: object
+      properties:
+        _id:
+          type: string
+        title:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        description:
+          type: string
+        type:
+          type: string
+          enum: [event, holiday, exam, meeting, deadline]
+
+    SupportTicket:
+      type: object
+      properties:
+        _id:
+          type: string
+        subject:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [billing, technical, account, feature_request, other]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+
+    Subscription:
+      type: object
+      properties:
+        plan:
+          type: string
+        status:
+          type: string
+        billingCycle:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+
+    Invoice:
+      type: object
+      properties:
+        _id:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+        date:
+          type: string
+          format: date
+        planCode:
+          type: string
+
+paths:
+  # ─── Auth ──────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Tenant admin/teacher/student login
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                subdomain:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-codegen-request-body-name: credentials
+
+  /auth/parent-login:
+    post:
+      tags: [Auth]
+      summary: Parent login
+      operationId: parentLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, subdomain]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                subdomain:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /auth/super-admin/login:
+    post:
+      tags: [Auth]
+      summary: Super admin platform login
+      operationId: superAdminLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /auth/register/student:
+    post:
+      tags: [Auth]
+      summary: Student self-registration
+      operationId: registerStudent
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, confirmPassword, enrollmentNumber, subdomain]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                confirmPassword:
+                  type: string
+                enrollmentNumber:
+                  type: string
+                subdomain:
+                  type: string
+      responses:
+        '201':
+          description: Registration successful
+        '400':
+          description: Validation error
+
+  /auth/register/teacher/first-login:
+    post:
+      tags: [Auth]
+      summary: Teacher first-time setup (set permanent password)
+      operationId: registerTeacherFirstLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, tempPassword, newPassword, confirmPassword, subdomain]
+              properties:
+                email:
+                  type: string
+                tempPassword:
+                  type: string
+                newPassword:
+                  type: string
+                confirmPassword:
+                  type: string
+                subdomain:
+                  type: string
+      responses:
+        '200':
+          description: Password set successfully
+        '400':
+          description: Validation error
+
+  /auth/tenant-info:
+    get:
+      tags: [Auth]
+      summary: Get tenant info by subdomain
+      operationId: getTenantInfo
+      security: []
+      parameters:
+        - name: subdomain
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant info
+        '404':
+          description: Tenant not found
+
+  /auth/verify:
+    get:
+      tags: [Auth]
+      summary: Verify JWT token
+      operationId: verifyToken
+      responses:
+        '200':
+          description: Token valid
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid token
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword, confirmPassword]
+              properties:
+                oldPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 6
+                confirmPassword:
+                  type: string
+      responses:
+        '200':
+          description: Password changed
+        '400':
+          description: Validation error
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (client-side token removal)
+      operationId: logout
+      responses:
+        '200':
+          description: Logged out
+
+  /auth/2fa/setup:
+    post:
+      tags: [Auth]
+      summary: Initiate 2FA setup (returns QR code)
+      operationId: setup2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enable:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: 2FA secret and QR code URL
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      secret:
+                        type: string
+                      qrCodeUrl:
+                        type: string
+
+  /auth/2fa/verify:
+    post:
+      tags: [Auth]
+      summary: Verify a 2FA token (enable 2FA)
+      operationId: verify2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: 6-digit TOTP code
+      responses:
+        '200':
+          description: 2FA enabled
+
+  /auth/2fa/disable:
+    post:
+      tags: [Auth]
+      summary: Disable 2FA
+      operationId: disable2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 2FA disabled
+
+  /auth/2fa/status:
+    get:
+      tags: [Auth]
+      summary: Check 2FA status
+      operationId: get2FAStatus
+      responses:
+        '200':
+          description: 2FA status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      enabled:
+                        type: boolean
+
+  /auth/sessions:
+    get:
+      tags: [Auth]
+      summary: List active sessions
+      operationId: getSessions
+      responses:
+        '200':
+          description: Session list
+
+  /auth/sessions/logout-all:
+    post:
+      tags: [Auth]
+      summary: Invalidate all sessions
+      operationId: logoutAllSessions
+      responses:
+        '200':
+          description: All sessions invalidated
+
+  # ─── Admin ─────────────────────────────────────────────────────────
+  /admin/teachers:
+    get:
+      tags: [Admin]
+      summary: List all teachers
+      operationId: listTeachers
+      responses:
+        '200':
+          description: Teacher list with assignments
+
+  /admin/subjects:
+    get:
+      tags: [Admin]
+      summary: List all subjects
+      operationId: listAdminSubjects
+      responses:
+        '200':
+          description: Subject list
+
+  /admin/enrollments:
+    get:
+      tags: [Admin]
+      summary: List all enrollments
+      operationId: listEnrollments
+      responses:
+        '200':
+          description: Enrollment list
+
+  /admin/enrollments/{id}:
+    get:
+      tags: [Admin]
+      summary: Get enrollment by ID
+      operationId: getEnrollment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Enrollment details
+
+  /admin/enrollments/section/{section}:
+    get:
+      tags: [Admin]
+      summary: Get enrollments by section
+      operationId: getEnrollmentsBySection
+      parameters:
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Enrollment list
+
+  /admin/my-enrollment:
+    get:
+      tags: [Admin]
+      summary: Get current user's enrollment
+      operationId: getMyEnrollment
+      responses:
+        '200':
+          description: Enrollment details
+
+  /admin/assignments:
+    get:
+      tags: [Admin]
+      summary: List all teacher-subject assignments
+      operationId: listAssignments
+      responses:
+        '200':
+          description: Assignment list
+
+  /admin/assignments/teacher/{teacherId}:
+    get:
+      tags: [Admin]
+      summary: Get assignments by teacher
+      operationId: getAssignmentsByTeacher
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Assignment list
+
+  /admin/assignments/subject/{subjectId}:
+    get:
+      tags: [Admin]
+      summary: Get assignments by subject
+      operationId: getAssignmentsBySubject
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Assignment list
+
+  /admin/assignments/section/{section}:
+    get:
+      tags: [Admin]
+      summary: Get assignments by section
+      operationId: getAssignmentsBySection
+      parameters:
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Assignment list
+
+  /admin/assign-subject:
+    post:
+      tags: [Admin]
+      summary: Assign subject to teacher
+      operationId: assignSubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teacherId, subjectId, section]
+              properties:
+                teacherId:
+                  type: string
+                subjectId:
+                  type: string
+                section:
+                  type: string
+      responses:
+        '201':
+          description: Assignment created
+
+  /admin/teachers/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete a teacher (hard delete with cascade)
+      operationId: deleteTeacher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher deleted
+
+  /admin/create-teacher:
+    post:
+      tags: [Admin]
+      summary: Create a teacher
+      operationId: createTeacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, employeeId]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                employeeId:
+                  type: string
+                phone:
+                  type: string
+                department:
+                  type: string
+                qualification:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '201':
+          description: Teacher created
+        '409':
+          description: Duplicate email
+
+  /admin/create-subject:
+    post:
+      tags: [Admin]
+      summary: Create a subject
+      operationId: createAdminSubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, courseId, branch, semester]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                credits:
+                  type: integer
+      responses:
+        '201':
+          description: Subject created
+
+  /admin/bulk-subjects:
+    post:
+      tags: [Admin]
+      summary: Bulk create subjects
+      operationId: bulkCreateSubjects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjects]
+              properties:
+                subjects:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Subjects created
+        '400':
+          description: Validation errors
+
+  /admin/bulk-teachers:
+    post:
+      tags: [Admin]
+      summary: Bulk create teachers
+      operationId: bulkCreateTeachers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teachers]
+              properties:
+                teachers:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Teachers created
+
+  /admin/upload-enrollments:
+    post:
+      tags: [Admin]
+      summary: Bulk upload enrollments via CSV
+      operationId: uploadEnrollments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Enrollments imported
+
+  # ─── Super Admin ───────────────────────────────────────────────────
+  /admin/super/tenants:
+    get:
+      tags: [Super Admin]
+      summary: List all tenants
+      operationId: listTenants
+      responses:
+        '200':
+          description: Tenant list
+
+  /admin/super/tenants/{tenantId}:
+    get:
+      tags: [Super Admin]
+      summary: Get tenant details
+      operationId: getTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant details
+    delete:
+      tags: [Super Admin]
+      summary: Delete a tenant and all data
+      operationId: deleteTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant deleted
+
+  /admin/super/tenants/{tenantId}/subscription:
+    put:
+      tags: [Super Admin]
+      summary: Update tenant subscription
+      operationId: updateTenantSubscription
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                status:
+                  type: string
+                billingCycle:
+                  type: string
+      responses:
+        '200':
+          description: Subscription updated
+
+  /admin/super/tenants/{tenantId}/suspend:
+    post:
+      tags: [Super Admin]
+      summary: Suspend a tenant
+      operationId: suspendTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant suspended
+
+  /admin/super/tenants/{tenantId}/activate:
+    post:
+      tags: [Super Admin]
+      summary: Activate a suspended tenant
+      operationId: activateTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant activated
+
+  /admin/super/stats:
+    get:
+      tags: [Super Admin]
+      summary: Platform-wide statistics
+      operationId: getPlatformStats
+      responses:
+        '200':
+          description: Platform stats
+
+  /admin/super/logs:
+    get:
+      tags: [Super Admin]
+      summary: Paginated activity logs
+      operationId: getActivityLogs
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated logs
+
+  /admin/super/logs/recent:
+    get:
+      tags: [Super Admin]
+      summary: Recent activity (live feed)
+      operationId: getRecentActivity
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            description: Epoch milliseconds
+      responses:
+        '200':
+          description: Recent logs
+
+  /admin/super/logs/stats:
+    get:
+      tags: [Super Admin]
+      summary: Activity stats for monitoring
+      operationId: getActivityStats
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+      responses:
+        '200':
+          description: Activity stats
+
+  /admin/super/logs/tenants:
+    get:
+      tags: [Super Admin]
+      summary: Tenants with 24h activity counts
+      operationId: getLogTenants
+      responses:
+        '200':
+          description: Tenant activity counts
+
+  # ─── Subjects ──────────────────────────────────────────────────────
+  /subjects/create:
+    post:
+      tags: [Subjects]
+      summary: Create a subject
+      operationId: createSubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, courseId, branch, semester]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                credits:
+                  type: integer
+                isActive:
+                  type: boolean
+      responses:
+        '201':
+          description: Subject created
+
+  /subjects/bulk:
+    post:
+      tags: [Subjects]
+      summary: Bulk create subjects
+      operationId: bulkCreateSubjectsAlt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjects]
+              properties:
+                subjects:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Subjects created
+
+  /subjects/all:
+    get:
+      tags: [Subjects]
+      summary: Get all subjects (student/teacher view)
+      operationId: getAllSubjects
+      responses:
+        '200':
+          description: Subject list
+
+  /subjects/{subjectId}:
+    get:
+      tags: [Subjects]
+      summary: Get subject by ID
+      operationId: getSubject
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subject details
+    put:
+      tags: [Subjects]
+      summary: Update a subject
+      operationId: updateSubject
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                credits:
+                  type: integer
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Subject updated
+    delete:
+      tags: [Subjects]
+      summary: Delete a subject
+      operationId: deleteSubject
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subject deleted
+
+  /subjects/semester/{semester}:
+    get:
+      tags: [Subjects]
+      summary: Get subjects by semester
+      operationId: getSubjectsBySemester
+      parameters:
+        - name: semester
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Subject list
+
+  /subjects/{subjectId}/deactivate:
+    patch:
+      tags: [Subjects]
+      summary: Soft-deactivate a subject
+      operationId: deactivateSubject
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subject deactivated
+
+  /subjects/teacher/{teacherId}/assignments:
+    get:
+      tags: [Subjects]
+      summary: Get subjects assigned to a teacher
+      operationId: getTeacherAssignments
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Assignment list
+
+  /subjects/search/query:
+    get:
+      tags: [Subjects]
+      summary: Search subjects
+      operationId: searchSubjects
+      parameters:
+        - name: courseId
+          in: query
+          schema:
+            type: string
+        - name: branch
+          in: query
+          schema:
+            type: string
+        - name: semester
+          in: query
+          schema:
+            type: integer
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Subject list
+
+  # ─── Students ──────────────────────────────────────────────────────
+  /students/:
+    post:
+      tags: [Students]
+      summary: Create a student
+      operationId: createStudent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, rollNo, section, courseId, branch, semester]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                rollNo:
+                  type: string
+                section:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                password:
+                  type: string
+      responses:
+        '201':
+          description: Student created
+
+  /students/{id}:
+    put:
+      tags: [Students]
+      summary: Update a student
+      operationId: updateStudent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                rollNo:
+                  type: string
+                section:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+      responses:
+        '200':
+          description: Student updated
+
+  # ─── Attendance ────────────────────────────────────────────────────
+  /attendance/mark:
+    post:
+      tags: [Attendance]
+      summary: Mark attendance for a class session
+      operationId: markAttendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjectId, section, attendanceData]
+              properties:
+                subjectId:
+                  type: string
+                section:
+                  type: string
+                date:
+                  type: string
+                  format: date
+                attendanceData:
+                  type: array
+                  items:
+                    type: object
+                    required: [studentId, status]
+                    properties:
+                      studentId:
+                        type: string
+                      status:
+                        type: string
+                        enum: [present, absent, late, leave]
+                      remarks:
+                        type: string
+      responses:
+        '201':
+          description: Attendance marked
+
+  /attendance/summary:
+    get:
+      tags: [Attendance]
+      summary: Get attendance summary
+      operationId: getAttendanceSummary
+      parameters:
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Attendance summary
+
+  /attendance/by-date:
+    get:
+      tags: [Attendance]
+      summary: Get attendance by date
+      operationId: getAttendanceByDate
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: section
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendance records
+
+  /attendance/{attendanceId}:
+    put:
+      tags: [Attendance]
+      summary: Update an attendance record
+      operationId: updateAttendance
+      parameters:
+        - name: attendanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [present, absent, late, leave]
+                remarks:
+                  type: string
+      responses:
+        '200':
+          description: Attendance updated
+    delete:
+      tags: [Attendance]
+      summary: Delete an attendance record
+      operationId: deleteAttendance
+      parameters:
+        - name: attendanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendance deleted
+
+  /attendance/records:
+    get:
+      tags: [Attendance]
+      summary: Get student's own attendance records
+      operationId: getMyAttendanceRecords
+      parameters:
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Attendance records
+
+  /attendance/stats:
+    get:
+      tags: [Attendance]
+      summary: Get student's attendance statistics
+      operationId: getMyAttendanceStats
+      parameters:
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendance stats
+
+  /attendance/admin/students:
+    get:
+      tags: [Attendance]
+      summary: List students with attendance summary
+      operationId: getAdminStudents
+      parameters:
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Student list with attendance
+
+  /attendance/admin/student/{studentId}:
+    get:
+      tags: [Attendance]
+      summary: Student attendance details
+      operationId: getAdminStudentDetail
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Student attendance detail
+
+  /attendance/admin/section/{section}:
+    get:
+      tags: [Attendance]
+      summary: Section attendance summary
+      operationId: getAdminSectionDetail
+      parameters:
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Section attendance
+
+  /attendance/admin/subject/{subjectId}:
+    get:
+      tags: [Attendance]
+      summary: Subject attendance summary
+      operationId: getAdminSubjectDetail
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Subject attendance
+
+  /attendance/admin/dashboard/stats:
+    get:
+      tags: [Attendance]
+      summary: Admin dashboard attendance stats
+      operationId: getAdminDashboardStats
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Dashboard stats
+
+  # ─── Timetable ─────────────────────────────────────────────────────
+  /timetable/:
+    get:
+      tags: [Timetable]
+      summary: Get all timetable entries (admin, filterable)
+      operationId: getAllTimetable
+      parameters:
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: semester
+          in: query
+          schema:
+            type: integer
+        - name: branch
+          in: query
+          schema:
+            type: string
+        - name: courseCode
+          in: query
+          schema:
+            type: string
+        - name: teacherId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Timetable entries
+    post:
+      tags: [Timetable]
+      summary: Create a timetable entry
+      operationId: createTimetableEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [section, courseCode, branch, semester, day, startTime, endTime, room, teacherId, subjectId]
+              properties:
+                section:
+                  type: string
+                courseCode:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                day:
+                  type: string
+                  enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday]
+                startTime:
+                  type: string
+                endTime:
+                  type: string
+                room:
+                  type: string
+                teacherId:
+                  type: string
+                subjectId:
+                  type: string
+                isNoClass:
+                  type: boolean
+      responses:
+        '201':
+          description: Entry created
+        '409':
+          description: Conflict detected
+
+  /timetable/bulk:
+    post:
+      tags: [Timetable]
+      summary: Bulk create timetable entries
+      operationId: bulkCreateTimetable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Entries created
+        '400':
+          description: Validation errors
+
+  /timetable/{id}:
+    put:
+      tags: [Timetable]
+      summary: Update a timetable entry
+      operationId: updateTimetableEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                day:
+                  type: string
+                startTime:
+                  type: string
+                endTime:
+                  type: string
+                room:
+                  type: string
+                teacherId:
+                  type: string
+                subjectId:
+                  type: string
+                isNoClass:
+                  type: boolean
+      responses:
+        '200':
+          description: Entry updated
+    delete:
+      tags: [Timetable]
+      summary: Delete a timetable entry
+      operationId: deleteTimetableEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entry deleted
+
+  /timetable/section/{section}:
+    get:
+      tags: [Timetable]
+      summary: Get timetable for a section
+      operationId: getTimetableBySection
+      parameters:
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          schema:
+            type: integer
+        - name: branch
+          in: query
+          schema:
+            type: string
+        - name: courseCode
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Timetable entries
+
+  /timetable/teacher/{teacherId}:
+    get:
+      tags: [Timetable]
+      summary: Get timetable for a teacher (admin view)
+      operationId: getTimetableByTeacher
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Timetable entries
+
+  /timetable/teacher:
+    get:
+      tags: [Timetable]
+      summary: Get current teacher's timetable
+      operationId: getMyTimetable
+      responses:
+        '200':
+          description: Timetable entries
+
+  # ─── Exams ─────────────────────────────────────────────────────────
+  /exams/:
+    get:
+      tags: [Exams]
+      summary: List exams (filterable)
+      operationId: listExams
+      parameters:
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: examType
+          in: query
+          schema:
+            type: string
+            enum: [midterm, final, quiz, assignment]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Exam list
+    post:
+      tags: [Exams]
+      summary: Create an exam
+      operationId: createExam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, subjectId, subjectName, section, type, date, startTime, endTime, maxMarks]
+              properties:
+                title:
+                  type: string
+                subjectId:
+                  type: string
+                subjectName:
+                  type: string
+                section:
+                  type: string
+                type:
+                  type: string
+                  enum: [midterm, final, quiz, assignment]
+                date:
+                  type: string
+                  format: date
+                startTime:
+                  type: string
+                endTime:
+                  type: string
+                maxMarks:
+                  type: integer
+                room:
+                  type: string
+                instructions:
+                  type: string
+                isBacklog:
+                  type: boolean
+                  description: Marks this exam as a supplementary/backlog attempt (published results replace failed regular attempts in grade aggregation)
+      responses:
+        '201':
+          description: Exam created
+
+  /exams/bulk:
+    post:
+      tags: [Exams]
+      summary: Bulk create exams
+      operationId: bulkCreateExams
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exams]
+              properties:
+                exams:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Exams created
+
+  /exams/{id}:
+    get:
+      tags: [Exams]
+      summary: Get exam by ID
+      operationId: getExam
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Exam details
+    put:
+      tags: [Exams]
+      summary: Update an exam
+      operationId: updateExam
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                type:
+                  type: string
+                date:
+                  type: string
+                  format: date
+                startTime:
+                  type: string
+                endTime:
+                  type: string
+                maxMarks:
+                  type: integer
+                room:
+                  type: string
+                instructions:
+                  type: string
+      responses:
+        '200':
+          description: Exam updated
+    delete:
+      tags: [Exams]
+      summary: Delete an exam
+      operationId: deleteExam
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Exam deleted
+
+  /exams/upcoming:
+    get:
+      tags: [Exams]
+      summary: Get upcoming exams
+      operationId: getUpcomingExams
+      responses:
+        '200':
+          description: Upcoming exams
+
+  /exams/my-results:
+    get:
+      tags: [Exams]
+      summary: Get current student's exam results
+      operationId: getMyExamResults
+      responses:
+        '200':
+          description: Exam results
+
+  /exams/grade-report:
+    get:
+      tags: [Exams]
+      summary: Get grade report (SGPA/CGPA with backlog handling)
+      operationId: getGradeReport
+      parameters:
+        - name: studentId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Grade report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  student:
+                    type: object
+                  subjects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subjectCode:
+                          type: string
+                        subjectName:
+                          type: string
+                        credits:
+                          type: number
+                        semester:
+                          type: number
+                        status:
+                          type: string
+                          enum: [passed, failed, back, cleared, noResult]
+                        aggregate:
+                          type: number
+                        grade:
+                          type: string
+                        gradePoint:
+                          type: number
+                        isClearedByBack:
+                          type: boolean
+                  semesters:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        semester:
+                          type: number
+                        sgpa:
+                          type: number
+                          nullable: true
+                        hasBack:
+                          type: boolean
+                  cgpa:
+                    type: number
+                    nullable: true
+                  hasBack:
+                    type: boolean
+                  backlogs:
+                    type: integer
+
+  /exams/backlogs:
+    get:
+      tags: [Exams]
+      summary: Get backlog subjects for a section/semester
+      operationId: getBacklogs
+      parameters:
+        - name: section
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Backlog subjects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  backlogs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        studentId:
+                          type: string
+                        studentName:
+                          type: string
+                        section:
+                          type: string
+                        semester:
+                          type: number
+                        subjectCode:
+                          type: string
+                        subjectName:
+                          type: string
+                        credits:
+                          type: number
+                        status:
+                          type: string
+                          enum: [back, cleared]
+                        aggregate:
+                          type: number
+                        grade:
+                          type: string
+
+  /exams/{examId}/grade:
+    post:
+      tags: [Exams]
+      summary: Submit grades for an exam
+      operationId: submitGrades
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results]
+              properties:
+                results:
+                  type: array
+                  items:
+                    type: object
+                    required: [studentId, marksObtained]
+                    properties:
+                      studentId:
+                        type: string
+                      marksObtained:
+                        type: number
+                      subjectCode:
+                        type: string
+                      semester:
+                        type: integer
+                      remarks:
+                        type: string
+      responses:
+        '200':
+          description: Grades submitted
+
+  # ─── Fees ──────────────────────────────────────────────────────────
+  /fees/:
+    get:
+      tags: [Fees]
+      summary: List fees (filterable)
+      operationId: listFees
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: string
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: feeType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, paid, partial, waived, overdue]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Fee list
+    post:
+      tags: [Fees]
+      summary: Create fee records
+      operationId: createFee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fees]
+              properties:
+                fees:
+                  type: array
+                  items:
+                    type: object
+                    required: [studentId, feeType, amount, dueDate]
+                    properties:
+                      studentId:
+                        type: string
+                      feeType:
+                        type: string
+                      amount:
+                        type: number
+                      dueDate:
+                        type: string
+                        format: date
+                      section:
+                        type: string
+                      academicYear:
+                        type: string
+                      description:
+                        type: string
+      responses:
+        '201':
+          description: Fees created
+
+  /fees/{id}:
+    get:
+      tags: [Fees]
+      summary: Get fee by ID
+      operationId: getFee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fee details
+    put:
+      tags: [Fees]
+      summary: Update a fee record
+      operationId: updateFee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feeType:
+                  type: string
+                amount:
+                  type: number
+                dueDate:
+                  type: string
+                  format: date
+                section:
+                  type: string
+                academicYear:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Fee updated
+    delete:
+      tags: [Fees]
+      summary: Delete a fee record
+      operationId: deleteFee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fee deleted
+
+  /fees/my-fees:
+    get:
+      tags: [Fees]
+      summary: Get current student's fee records
+      operationId: getMyFees
+      responses:
+        '200':
+          description: Fee list
+
+  /fees/summary:
+    get:
+      tags: [Fees]
+      summary: Get fee summary (totals, paid, pending)
+      operationId: getFeeSummary
+      responses:
+        '200':
+          description: Fee summary
+
+  /fees/defaulters:
+    get:
+      tags: [Fees]
+      summary: Get students with unpaid fees
+      operationId: getFeeDefaulters
+      responses:
+        '200':
+          description: Defaulter list
+
+  /fees/transactions:
+    get:
+      tags: [Fees]
+      summary: Get payment transaction log
+      operationId: getTransactions
+      responses:
+        '200':
+          description: Transaction list
+
+  /fees/{id}/waive:
+    patch:
+      tags: [Fees]
+      summary: Waive part or all of a fee
+      operationId: waiveFee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [waivedAmount, reason]
+              properties:
+                waivedAmount:
+                  type: number
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Fee waived
+
+  /fees/{id}/pay:
+    post:
+      tags: [Fees]
+      summary: Collect a fee payment
+      operationId: collectPayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, mode]
+              properties:
+                amount:
+                  type: number
+                mode:
+                  type: string
+                  enum: [cash, card, upi, bank_transfer, cheque, online]
+                transactionId:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Payment collected
+
+  # ─── Academic ──────────────────────────────────────────────────────
+  /academic/courses:
+    get:
+      tags: [Academic]
+      summary: List all courses
+      operationId: listCourses
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - name: branch
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course list
+    post:
+      tags: [Academic]
+      summary: Create a course
+      operationId: createCourse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, durationYears, semestersPerYear]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                durationYears:
+                  type: integer
+                semestersPerYear:
+                  type: integer
+                branches:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      code:
+                        type: string
+      responses:
+        '201':
+          description: Course created
+
+  /academic/courses/bulk:
+    post:
+      tags: [Academic]
+      summary: Bulk create courses
+      operationId: bulkCreateCourses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [courses]
+              properties:
+                courses:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Courses created
+
+  /academic/courses/{id}:
+    put:
+      tags: [Academic]
+      summary: Update a course
+      operationId: updateCourse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                durationYears:
+                  type: integer
+                semestersPerYear:
+                  type: integer
+                branches:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      code:
+                        type: string
+      responses:
+        '200':
+          description: Course updated
+    delete:
+      tags: [Academic]
+      summary: Delete a course
+      operationId: deleteCourse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course deleted
+
+  /academic/structure:
+    get:
+      tags: [Academic]
+      summary: Get semester structure
+      operationId: getStructure
+      responses:
+        '200':
+          description: Semester structure
+    put:
+      tags: [Academic]
+      summary: Update semester structure
+      operationId: updateStructure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                semesterStructure:
+                  type: object
+                  description: Map of semester number to array of month ranges
+      responses:
+        '200':
+          description: Structure updated
+
+  /academic/promotion-preview:
+    get:
+      tags: [Academic]
+      summary: Preview student promotion
+      operationId: promotionPreview
+      responses:
+        '200':
+          description: Promotion preview
+
+  /academic/promote:
+    post:
+      tags: [Academic]
+      summary: Promote/graduate students
+      operationId: promoteStudents
+      responses:
+        '200':
+          description: Students promoted
+
+  # ─── Roles ─────────────────────────────────────────────────────────
+  /roles/:
+    get:
+      tags: [Roles]
+      summary: List all custom roles
+      operationId: listRoles
+      parameters:
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Role list
+    post:
+      tags: [Roles]
+      summary: Create a custom role
+      operationId: createRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, permissions]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                  example: ["students:read", "attendance:mark"]
+      responses:
+        '201':
+          description: Role created
+
+  /roles/{id}:
+    get:
+      tags: [Roles]
+      summary: Get role by ID
+      operationId: getRole
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role details
+    put:
+      tags: [Roles]
+      summary: Update a custom role
+      operationId: updateRole
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Role updated
+    delete:
+      tags: [Roles]
+      summary: Delete a custom role
+      operationId: deleteRole
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role deleted
+
+  /roles/my-permissions:
+    get:
+      tags: [Roles]
+      summary: Get current user's permissions
+      operationId: getMyPermissions
+      responses:
+        '200':
+          description: Permission list
+
+  /roles/my-roles:
+    get:
+      tags: [Roles]
+      summary: Get current user's assigned roles
+      operationId: getMyRoles
+      responses:
+        '200':
+          description: Role list
+
+  /roles/teachers/{teacherId}:
+    get:
+      tags: [Roles]
+      summary: Get teacher's assigned roles
+      operationId: getTeacherRoles
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role list
+
+  /roles/assign:
+    post:
+      tags: [Roles]
+      summary: Assign role to teacher
+      operationId: assignRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teacherId, roleId]
+              properties:
+                teacherId:
+                  type: string
+                roleId:
+                  type: string
+      responses:
+        '201':
+          description: Role assigned
+
+  /roles/assign/{teacherId}/{roleId}:
+    delete:
+      tags: [Roles]
+      summary: Unassign role from teacher
+      operationId: unassignRole
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role unassigned
+
+  # ─── Tenant ────────────────────────────────────────────────────────
+  /tenant/info:
+    get:
+      tags: [Tenant]
+      summary: Get current tenant info
+      operationId: getTenantInfoProtected
+      responses:
+        '200':
+          description: Tenant info
+
+  /tenant/settings:
+    put:
+      tags: [Tenant]
+      summary: Update tenant settings and branding
+      operationId: updateTenantSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                subdomain:
+                  type: string
+                settings:
+                  type: object
+                  properties:
+                    semesterStructure:
+                      type: object
+                    enable2FA:
+                      type: boolean
+                    sessionTimeout:
+                      type: integer
+                branding:
+                  type: object
+                  properties:
+                    primaryColor:
+                      type: string
+                    secondaryColor:
+                      type: string
+                    accentColor:
+                      type: string
+      responses:
+        '200':
+          description: Settings updated
+
+  /tenant/usage:
+    get:
+      tags: [Tenant]
+      summary: Get tenant resource usage
+      operationId: getTenantUsage
+      responses:
+        '200':
+          description: Usage data with plan modules
+
+  /tenant/dashboard-stats:
+    get:
+      tags: [Tenant]
+      summary: Get admin dashboard stats
+      operationId: getDashboardStats
+      responses:
+        '200':
+          description: Dashboard statistics
+
+  /tenant/branding/upload:
+    post:
+      tags: [Tenant]
+      summary: Upload branding image (logo/favicon)
+      operationId: uploadBrandingImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Image URL
+
+  /tenant/setup-status:
+    get:
+      tags: [Tenant]
+      summary: Get onboarding setup status
+      operationId: getSetupStatus
+      parameters:
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Setup status
+
+  /tenant/setup/complete:
+    post:
+      tags: [Tenant]
+      summary: Mark a setup step as complete
+      operationId: completeSetupStep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              properties:
+                step:
+                  type: string
+                data:
+                  type: object
+      responses:
+        '200':
+          description: Step completed
+
+  # ─── Billing ───────────────────────────────────────────────────────
+  /billing/plans:
+    get:
+      tags: [Billing]
+      summary: List all available plans (public)
+      operationId: listPublicPlans
+      security: []
+      responses:
+        '200':
+          description: Plan list
+
+  /billing/razorpay-key:
+    get:
+      tags: [Billing]
+      summary: Get Razorpay public key
+      operationId: getRazorpayKey
+      security: []
+      responses:
+        '200':
+          description: Razorpay key
+
+  /billing/webhook:
+    post:
+      tags: [Billing]
+      summary: Razorpay webhook handler
+      operationId: razorpayWebhook
+      security: []
+      responses:
+        '200':
+          description: Webhook processed
+
+  /billing/subscription:
+    get:
+      tags: [Billing]
+      summary: Get current subscription
+      operationId: getSubscription
+      responses:
+        '200':
+          description: Subscription details
+
+  /billing/tenant-subscription:
+    get:
+      tags: [Billing]
+      summary: Get subscription with tenant details
+      operationId: getTenantSubscription
+      responses:
+        '200':
+          description: Subscription and tenant info
+
+  /billing/create-subscription:
+    post:
+      tags: [Billing]
+      summary: Create a new subscription
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode:
+                  type: string
+                billingCycle:
+                  type: string
+                  enum: [monthly, yearly]
+      responses:
+        '201':
+          description: Subscription order created
+
+  /billing/update-subscription:
+    post:
+      tags: [Billing]
+      summary: Update/upgrade/downgrade subscription
+      operationId: updateSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode:
+                  type: string
+                billingCycle:
+                  type: string
+      responses:
+        '200':
+          description: Subscription updated
+
+  /billing/cancel-subscription:
+    post:
+      tags: [Billing]
+      summary: Cancel subscription
+      operationId: cancelSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cancelImmediately:
+                  type: boolean
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Subscription cancelled
+
+  /billing/continue-free:
+    post:
+      tags: [Billing]
+      summary: Continue on free tier
+      operationId: continueFree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId:
+                  type: string
+      responses:
+        '200':
+          description: Free tier continued
+
+  /billing/upcoming-invoice:
+    get:
+      tags: [Billing]
+      summary: Get upcoming invoice
+      operationId: getUpcomingInvoice
+      responses:
+        '200':
+          description: Invoice details
+
+  /billing/current-plan:
+    get:
+      tags: [Billing]
+      summary: Get current plan with feature limits
+      operationId: getCurrentPlan
+      responses:
+        '200':
+          description: Plan modules and limits
+
+  /billing/invoices:
+    get:
+      tags: [Billing]
+      summary: List invoice history
+      operationId: listInvoices
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice list with pagination
+
+  /billing/invoices/{invoiceId}:
+    get:
+      tags: [Billing]
+      summary: Get invoice details
+      operationId: getInvoice
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice details
+
+  /billing/invoices/{invoiceId}/download:
+    get:
+      tags: [Billing]
+      summary: Download invoice PDF
+      operationId: downloadInvoice
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PDF file
+
+  /billing/tax-invoices:
+    get:
+      tags: [Billing]
+      summary: Get tax invoices
+      operationId: getTaxInvoices
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Tax invoice list
+
+  /billing/generate-payment-link:
+    post:
+      tags: [Billing]
+      summary: Generate a payment link
+      operationId: generatePaymentLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode:
+                  type: string
+                billingCycle:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Payment link
+
+  /billing/verify-payment:
+    post:
+      tags: [Billing]
+      summary: Verify Razorpay payment
+      operationId: verifyPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [razorpay_order_id, razorpay_payment_id, razorpay_signature]
+              properties:
+                razorpay_order_id:
+                  type: string
+                razorpay_payment_id:
+                  type: string
+                razorpay_signature:
+                  type: string
+      responses:
+        '200':
+          description: Payment verified
+
+  /billing/payments/{paymentId}:
+    get:
+      tags: [Billing]
+      summary: Get payment details
+      operationId: getPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment details
+
+  /billing/refund/{paymentId}:
+    post:
+      tags: [Billing]
+      summary: Request a refund
+      operationId: requestRefund
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, reason]
+              properties:
+                amount:
+                  type: number
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Refund requested
+
+  /billing/payment-methods:
+    get:
+      tags: [Billing]
+      summary: List saved payment methods
+      operationId: listPaymentMethods
+      responses:
+        '200':
+          description: Payment method list
+    post:
+      tags: [Billing]
+      summary: Add a payment method
+      operationId: addPaymentMethod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentMethodId]
+              properties:
+                paymentMethodId:
+                  type: string
+                isDefault:
+                  type: boolean
+      responses:
+        '201':
+          description: Payment method added
+
+  /billing/payment-methods/{paymentMethodId}:
+    delete:
+      tags: [Billing]
+      summary: Delete a payment method
+      operationId: deletePaymentMethod
+      parameters:
+        - name: paymentMethodId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment method deleted
+
+  /billing/payment-methods/{paymentMethodId}/default:
+    post:
+      tags: [Billing]
+      summary: Set default payment method
+      operationId: setDefaultPaymentMethod
+      parameters:
+        - name: paymentMethodId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Default set
+
+  /billing/address:
+    put:
+      tags: [Billing]
+      summary: Update billing address
+      operationId: updateBillingAddress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, address, city, state, country, pincode, phone, email]
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                country:
+                  type: string
+                pincode:
+                  type: string
+                phone:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Address updated
+
+  /billing/usage:
+    get:
+      tags: [Billing]
+      summary: Get billing cycle usage
+      operationId: getBillingUsage
+      responses:
+        '200':
+          description: Usage stats
+
+  /billing/analytics:
+    get:
+      tags: [Billing]
+      summary: Get billing analytics
+      operationId: getBillingAnalytics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Billing analytics
+
+  /billing/admin/tenants/{tenantId}/transactions:
+    get:
+      tags: [Billing]
+      summary: Get tenant transactions (super admin)
+      operationId: getTenantTransactions
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction list
+
+  /billing/admin/tenants/{tenantId}/adjust:
+    post:
+      tags: [Billing]
+      summary: Adjust billing for a tenant (super admin)
+      operationId: adjustBilling
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, reason, type]
+              properties:
+                amount:
+                  type: number
+                reason:
+                  type: string
+                type:
+                  type: string
+                  enum: [credit, debit]
+      responses:
+        '200':
+          description: Billing adjusted
+
+  # ─── Plans (Super Admin) ──────────────────────────────────────────
+  /admin/plans/:
+    get:
+      tags: [Plans]
+      summary: List all plans
+      operationId: listPlans
+      responses:
+        '200':
+          description: Plan list
+    post:
+      tags: [Plans]
+      summary: Create a plan
+      operationId: createPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                pricing:
+                  type: object
+                  properties:
+                    monthly:
+                      type: number
+                    yearly:
+                      type: number
+                modules:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+                limits:
+                  type: object
+                  additionalProperties:
+                    type: integer
+      responses:
+        '201':
+          description: Plan created
+
+  /admin/plans/{id}:
+    get:
+      tags: [Plans]
+      summary: Get plan by ID
+      operationId: getPlan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan details
+    put:
+      tags: [Plans]
+      summary: Update a plan
+      operationId: updatePlan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                pricing:
+                  type: object
+                  properties:
+                    monthly:
+                      type: number
+                    yearly:
+                      type: number
+                modules:
+                  type: object
+                limits:
+                  type: object
+      responses:
+        '200':
+          description: Plan updated
+    delete:
+      tags: [Plans]
+      summary: Delete a plan
+      operationId: deletePlan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan deleted
+
+  # ─── Support ───────────────────────────────────────────────────────
+  /support/:
+    post:
+      tags: [Support]
+      summary: Create a support ticket
+      operationId: createSupportTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, description, category]
+              properties:
+                subject:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                  enum: [billing, technical, account, feature_request, other]
+                priority:
+                  type: string
+                  enum: [low, medium, high, urgent]
+      responses:
+        '201':
+          description: Ticket created
+
+  /support/my-tickets:
+    get:
+      tags: [Support]
+      summary: List tenant's tickets
+      operationId: getMyTickets
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket list
+
+  /support/admin/all:
+    get:
+      tags: [Support]
+      summary: List all tickets (super admin)
+      operationId: getAllTickets
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket list
+
+  /support/admin/{id}/status:
+    put:
+      tags: [Support]
+      summary: Update ticket status (super admin)
+      operationId: updateTicketStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                response:
+                  type: string
+                assignedTo:
+                  type: string
+      responses:
+        '200':
+          description: Ticket updated
+
+  /support/admin/{id}/notes:
+    post:
+      tags: [Support]
+      summary: Add admin note to ticket
+      operationId: addTicketNote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Note added
+
+  /support/admin/{id}/resolve-reactivate:
+    post:
+      tags: [Support]
+      summary: Resolve ticket and reactivate tenant
+      operationId: resolveAndReactivate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant reactivated
+
+  /support/{id}:
+    get:
+      tags: [Support]
+      summary: Get a ticket
+      operationId: getSupportTicket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket details
+
+  # ─── Reports ───────────────────────────────────────────────────────
+  /reports/attendance:
+    get:
+      tags: [Reports]
+      summary: Get attendance report
+      operationId: getAttendanceReport
+      parameters:
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Report data
+
+  /reports/attendance/export:
+    get:
+      tags: [Reports]
+      summary: Export attendance report as CSV
+      operationId: exportAttendanceReport
+      parameters:
+        - name: section
+          in: query
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: CSV file
+
+  # ─── Parent ────────────────────────────────────────────────────────
+  /parent/dashboard:
+    get:
+      tags: [Parent]
+      summary: Parent dashboard summary
+      operationId: getParentDashboard
+      responses:
+        '200':
+          description: Dashboard data
+
+  /parent/attendance/records:
+    get:
+      tags: [Parent]
+      summary: Get child's attendance records
+      operationId: getParentAttendanceRecords
+      responses:
+        '200':
+          description: Attendance records
+
+  /parent/attendance/stats:
+    get:
+      tags: [Parent]
+      summary: Get child's attendance stats
+      operationId: getParentAttendanceStats
+      responses:
+        '200':
+          description: Attendance stats
+
+  /parent/subjects:
+    get:
+      tags: [Parent]
+      summary: Get child's subjects
+      operationId: getParentSubjects
+      responses:
+        '200':
+          description: Subject list
+
+  /parent/alerts:
+    get:
+      tags: [Parent]
+      summary: Get alerts for parent
+      operationId: getParentAlerts
+      responses:
+        '200':
+          description: Alert list
+
+  /parent/teachers:
+    get:
+      tags: [Parent]
+      summary: Get child's teachers
+      operationId: getParentTeachers
+      responses:
+        '200':
+          description: Teacher list
+
+  /parent/profile:
+    get:
+      tags: [Parent]
+      summary: Get parent profile
+      operationId: getParentProfile
+      responses:
+        '200':
+          description: Profile details
+
+  # ─── Calendar ──────────────────────────────────────────────────────
+  /calendar/:
+    get:
+      tags: [Calendar]
+      summary: Get calendar events
+      operationId: getCalendarEvents
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [event, holiday, exam, meeting, deadline]
+      responses:
+        '200':
+          description: Event list
+    post:
+      tags: [Calendar]
+      summary: Create a calendar event
+      operationId: createCalendarEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, startDate, endDate]
+              properties:
+                title:
+                  type: string
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+                description:
+                  type: string
+                type:
+                  type: string
+                  enum: [event, holiday, exam, meeting, deadline]
+      responses:
+        '201':
+          description: Event created
+
+  # ─── Alerts ────────────────────────────────────────────────────────
+  /alerts/:
+    get:
+      tags: [Alerts]
+      summary: Get alerts (role-filtered)
+      operationId: getAlerts
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [info, warning, error, success]
+        - name: isRead
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Alert list
+    post:
+      tags: [Alerts]
+      summary: Create an alert
+      operationId: createAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, message, type]
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                type:
+                  type: string
+                  enum: [info, warning, error, success]
+                targetRoles:
+                  type: array
+                  items:
+                    type: string
+                    enum: [admin, teacher, student, parent]
+      responses:
+        '201':
+          description: Alert created
+
+  /alerts/stats:
+    get:
+      tags: [Alerts]
+      summary: Get alert statistics
+      operationId: getAlertStats
+      responses:
+        '200':
+          description: Alert stats
+
+  /alerts/{alertId}/read:
+    post:
+      tags: [Alerts]
+      summary: Mark alert as read
+      operationId: markAlertRead
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alert marked as read
+
+  /alerts/{alertId}:
+    put:
+      tags: [Alerts]
+      summary: Update an alert
+      operationId: updateAlert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                type:
+                  type: string
+                  enum: [info, warning, error, success]
+      responses:
+        '200':
+          description: Alert updated
+    delete:
+      tags: [Alerts]
+      summary: Delete an alert
+      operationId: deleteAlert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alert deleted
+
+  # ─── Tickets (Student Absence) ────────────────────────────────────
+  /tickets/:
+    post:
+      tags: [Tickets]
+      summary: Create an absence proof ticket
+      operationId: createTicket
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [subjectId, absentDate, reason]
+              properties:
+                subjectId:
+                  type: string
+                absentDate:
+                  type: string
+                  format: date
+                reason:
+                  type: string
+                  enum: [medical, family, personal, academic, other]
+                reasonDescription:
+                  type: string
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  maxItems: 5
+      responses:
+        '201':
+          description: Ticket created
+
+  /tickets/student:
+    get:
+      tags: [Tickets]
+      summary: Get student's own tickets
+      operationId: getStudentTickets
+      responses:
+        '200':
+          description: Ticket list
+
+  /tickets/teacher/pending:
+    get:
+      tags: [Tickets]
+      summary: Get pending tickets for teacher's subjects
+      operationId: getTeacherPendingTickets
+      responses:
+        '200':
+          description: Ticket list
+
+  /tickets/{ticketId}/verify:
+    put:
+      tags: [Tickets]
+      summary: Verify a ticket (approve/reject)
+      operationId: verifyTicket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verificationStatus]
+              properties:
+                verificationStatus:
+                  type: string
+                  enum: [approved, rejected]
+                verificationRemarks:
+                  type: string
+      responses:
+        '200':
+          description: Ticket verified
+
+  /tickets/{ticketId}/mark-attendance:
+    post:
+      tags: [Tickets]
+      summary: Mark attendance after ticket verification
+      operationId: markTicketAttendance
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendance marked
+
+  /tickets/{ticketId}/notes:
+    post:
+      tags: [Tickets]
+      summary: Add verification notes
+      operationId: addTicketVerificationNotes
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Note added
+
+  /tickets/teacher/stats:
+    get:
+      tags: [Tickets]
+      summary: Get teacher verification stats
+      operationId: getTeacherTicketStats
+      responses:
+        '200':
+          description: Verification stats
+
+  /tickets/{ticketId}:
+    get:
+      tags: [Tickets]
+      summary: Get ticket details
+      operationId: getTicket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket details
+
+  /tickets/{ticketId}/files/{fileId}:
+    get:
+      tags: [Tickets]
+      summary: Download ticket file
+      operationId: getTicketFile
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File stream
+
+  # ─── Landing (Public) ─────────────────────────────────────────────
+  /landing/:
+    get:
+      tags: [Landing]
+      summary: Public landing page info
+      operationId: getLandingInfo
+      security: []
+      responses:
+        '200':
+          description: Landing info
+
+  /landing/pricing:
+    get:
+      tags: [Landing]
+      summary: Get active plans for pricing page
+      operationId: getPublicPricing
+      security: []
+      responses:
+        '200':
+          description: Plan list
+
+  /landing/features:
+    get:
+      tags: [Landing]
+      summary: Get features by module
+      operationId: getPublicFeatures
+      security: []
+      responses:
+        '200':
+          description: Feature list
+
+  /landing/tenant-info:
+    get:
+      tags: [Landing]
+      summary: Get tenant info by subdomain
+      operationId: getPublicTenantInfo
+      security: []
+      parameters:
+        - name: subdomain
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant info
+
+  /landing/contact:
+    post:
+      tags: [Landing]
+      summary: Submit contact form
+      operationId: submitContact
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, message]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                message:
+                  type: string
+                institutionName:
+                  type: string
+      responses:
+        '200':
+          description: Form submitted
+
+  /landing/demo-request:
+    post:
+      tags: [Landing]
+      summary: Request a demo
+      operationId: requestDemo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, institutionName]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                institutionName:
+                  type: string
+                studentCount:
+                  type: integer
+      responses:
+        '200':
+          description: Demo request submitted
+
+  # ─── Users ─────────────────────────────────────────────────────────
+  /users/profile:
+    get:
+      tags: [Users]
+      summary: Get current user's profile
+      operationId: getProfile
+      responses:
+        '200':
+          description: Profile details
+    put:
+      tags: [Users]
+      summary: Update profile
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                address:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+
+  /users/students:
+    get:
+      tags: [Users]
+      summary: List all students
+      operationId: listAllStudents
+      responses:
+        '200':
+          description: Student list
+
+  /users/students/{id}:
+    get:
+      tags: [Users]
+      summary: Get student by ID
+      operationId: getStudentById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Student details
+    put:
+      tags: [Users]
+      summary: Update a student
+      operationId: updateUserStudent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                rollNo:
+                  type: string
+                section:
+                  type: string
+                courseId:
+                  type: string
+                branch:
+                  type: string
+                semester:
+                  type: integer
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Student updated
+    delete:
+      tags: [Users]
+      summary: Delete a student
+      operationId: deleteStudent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Student deleted
+
+  /users/teachers:
+    get:
+      tags: [Users]
+      summary: List all teachers
+      operationId: listAllTeachers
+      responses:
+        '200':
+          description: Teacher list
+
+  /users/teachers/{id}:
+    get:
+      tags: [Users]
+      summary: Get teacher by ID
+      operationId: getTeacherById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher details
+    put:
+      tags: [Users]
+      summary: Update a teacher
+      operationId: updateUserTeacher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                employeeId:
+                  type: string
+                phone:
+                  type: string
+                department:
+                  type: string
+                qualification:
+                  type: string
+      responses:
+        '200':
+          description: Teacher updated
+    delete:
+      tags: [Users]
+      summary: Delete a teacher (hard delete)
+      operationId: deleteUserTeacher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher deleted
+
+  /users/admins:
+    get:
+      tags: [Users]
+      summary: List all admins
+      operationId: listAdmins
+      responses:
+        '200':
+          description: Admin list
+
+  /users/admins/{id}:
+    get:
+      tags: [Users]
+      summary: Get admin by ID
+      operationId: getAdminById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Admin details
+
+  /users/{id}/activate:
+    post:
+      tags: [Users]
+      summary: Activate a user
+      operationId: activateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User activated
+
+  /users/{id}/deactivate:
+    post:
+      tags: [Users]
+      summary: Deactivate a user
+      operationId: deactivateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deactivated
+
+  /users/bulk-upload:
+    post:
+      tags: [Users]
+      summary: Bulk upload users via CSV
+      operationId: bulkUploadUsers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, email, role]
+                    properties:
+                      name:
+                        type: string
+                      email:
+                        type: string
+                      role:
+                        type: string
+                        enum: [student, teacher, admin]
+                      password:
+                        type: string
+      responses:
+        '201':
+          description: Users imported
+
+  /users/bulk-teachers:
+    post:
+      tags: [Users]
+      summary: Bulk create teachers
+      operationId: bulkCreateTeachersAlt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teachers]
+              properties:
+                teachers:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Teachers created
+
+  /users/bulk-delete:
+    delete:
+      tags: [Users]
+      summary: Bulk delete users
+      operationId: bulkDeleteUsers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Users deleted
+
+  /users/search:
+    get:
+      tags: [Users]
+      summary: Search users
+      operationId: searchUsers
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, teacher, student, parent]
+      responses:
+        '200':
+          description: User list
