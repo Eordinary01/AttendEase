@@ -20,7 +20,7 @@ import Modal from "../common/ui/Modal";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import Input, { Select } from "../common/ui/Input";
 import EmptyState from "../common/ui/EmptyState";
 import Skeleton from "../common/ui/Skeleton";
@@ -279,30 +279,30 @@ const AcademicStructure = () => {
     }
   };
 
-  if (loading) {    return (
+  if (loading) {
+    return (
       <div className="space-y-6">
-        <PageHeader title="Academic Structure" subtitle="Courses, branches & semester management" icon={Network} />
-        <Card padding="lg"><Skeleton rows={6} /></Card>
+        <DashboardHeader greeting="Curricular Architecture & Promotion Engine" meta="Courses, branches & semester management" />
+        <Card padding="lg" bordered><Skeleton rows={6} /></Card>
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Academic Structure"
-        subtitle="Courses, branches and semester auto-increment rules"
-        icon={Network}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Curricular Architecture & Promotion Engine"
+        meta={`Degree programs, branch streams, semester boundaries, and auto-increment terms (${courses.length} courses registered)`}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowBulkImport(true)} leftIcon={Layers}>Bulk Import</Button>
-            <Button onClick={openCreate} leftIcon={Plus}>Add Course</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="subtle" size="sm" onClick={() => setShowBulkImport(true)} leftIcon={Layers}>Bulk Import</Button>
+            <Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Add Program</Button>
           </div>
         }
       />
 
-      {error && <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700"><AlertCircle className="w-5 h-5" />{error}</div>}
-      {success && <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700"><Check className="w-5 h-5" />{success}</div>}
+      {error && <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-600 text-xs font-semibold"><AlertCircle className="w-4 h-4" />{error}</div>}
+      {success && <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-emerald-600 text-xs font-semibold"><Check className="w-4 h-4" />{success}</div>}
 
       {/* Semester rules */}
       <Card title="Semester Rules" icon={GraduationCap}>
@@ -639,7 +639,7 @@ const AcademicStructure = () => {
           loadAll();
         }}
       />
-    </motion.div>
+    </div>
   );
 };
 

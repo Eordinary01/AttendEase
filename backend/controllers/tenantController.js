@@ -407,11 +407,13 @@ const updateTenantSettings = async (req, res) => {
 
     await tenant.save();
 
-    // Invalidate tenant cache
+    // Invalidate tenant cache (old + new cacheMiddleware keys)
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
     }
+    await cache.delPattern(`tenant:${tenantId}:*`).catch(() => {});
+    await cache.delPattern(`tenant_usage:${tenantId}:*`).catch(() => {});
 
     const { logAudit } = require('../middleware/auditLogger');
     await logAudit(req, {
@@ -903,6 +905,8 @@ const getDashboardStats = async (req, res) => {
 const path = require('path');
 const fs = require('fs');
 
+const { uploadToCloudinary } = require('../utils/cloudinary');
+
 const uploadBrandingImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -911,24 +915,35 @@ const uploadBrandingImage = async (req, res) => {
 
     const tenantId = req.tenantId;
     const imageType = req.body.type === "favicon" ? "favicon" : "logo";
-    const relativePath = `uploads/${req.file.filename}`;
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/${relativePath}`;
 
     const tenant = await Tenant.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({ success: false, message: "Tenant not found" });
     }
 
+    const uploadResult = await uploadToCloudinary(
+      req.file.buffer || req.file.path,
+      {
+        folder: `attendease/branding/${tenantId}`,
+        publicId: `${imageType}_${Date.now()}`,
+        resourceType: 'image',
+        originalName: req.file.originalname,
+      }
+    );
+
+    const imageUrl = uploadResult.url;
+
     if (!tenant.branding) tenant.branding = {};
     tenant.branding[imageType] = imageUrl;
     await tenant.save();
 
-    // Invalidate tenant cache
+    // Invalidate tenant cache (old + new cacheMiddleware keys)
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
     }
+    await cache.delPattern(`tenant:${tenantId}:*`).catch(() => {});
+    await cache.delPattern(`tenant_usage:${tenantId}:*`).catch(() => {});
 
     return res.status(200).json({
       success: true,

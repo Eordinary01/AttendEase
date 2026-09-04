@@ -5,7 +5,7 @@ import api from "../../utils/api";
 import Modal from "../common/ui/Modal";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import Input, { Select } from "../common/ui/Input";
 import BulkImportModal from "../common/ui/BulkImportModal";
 import { useToast } from "../../contexts/ToastContext";
@@ -596,31 +596,48 @@ const TimetableManager = ({ role = "admin", userId, userName }) => {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Timetable Manager"
-        subtitle="Manage class schedules and time slots"
-        icon={Calendar}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Institutional Timetable & Schedule Grid"
+        meta={`Weekly period matrix, room venues, and lecture scheduling for ${selectedSection ? `Section ${selectedSection}` : "all sections"}`}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Section Filter */}
-            <Select
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="subtle" size="sm" leftIcon={ClipboardList} onClick={() => setShowBulk(true)}>
+              Bulk Import
+            </Button>
+            <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => openAdd(DAYS[0], "09:00")}>
+              Add Class Slot
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Filter Toolbar Card */}
+      <Card padding="md" bordered>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Section Selector */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Section</label>
+            <select
               value={selectedSection}
               onChange={handleSectionChange}
-              className="w-52"
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
             >
               <option value="">Select Section</option>
               {sections.map(s => {
                 const lbl = sectionCoursesLabel(s);
                 return <option key={s} value={s}>{lbl ? `Section ${s} (${lbl})` : `Section ${s}`}</option>;
               })}
-            </Select>
+            </select>
+          </div>
 
-            {/* Course Filter — scoped to the courses present in the selected section */}
-            <Select
+          {/* Course Selector */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Course Matrix</label>
+            <select
               value={filterCourse}
               onChange={e => setFilterCourse(e.target.value)}
-              className="w-40"
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer disabled:opacity-50"
               disabled={!selectedSection}
             >
               <option value="">
@@ -629,13 +646,16 @@ const TimetableManager = ({ role = "admin", userId, userName }) => {
               {(selectedSection ? sectionCourseCodes : availableCourseCodes).map(code => (
                 <option key={code} value={code}>{code}</option>
               ))}
-            </Select>
+            </select>
+          </div>
 
-            {/* Branch Filter */}
-            <Select
+          {/* Branch Selector */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Branch Stream</label>
+            <select
               value={filterBranch}
               onChange={e => setFilterBranch(e.target.value)}
-              className="w-40"
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer disabled:opacity-50"
               disabled={!selectedSection}
             >
               <option value="">All Branches</option>
@@ -649,30 +669,26 @@ const TimetableManager = ({ role = "admin", userId, userName }) => {
                 }
                 return <option key={b} value={b}>{b}{branchName ? ` — ${branchName}` : ""}</option>;
               })}
-            </Select>
+            </select>
+          </div>
 
-            {/* Semester Filter */}
-            <Select
+          {/* Semester Selector */}
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Academic Term</label>
+            <select
               value={filterSemester}
               onChange={e => setFilterSemester(e.target.value)}
-              className="w-36"
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer disabled:opacity-50"
               disabled={!selectedSection}
             >
               <option value="">All Semesters</option>
               {availableSemesters.map(sem => (
                 <option key={sem} value={sem}>Semester {sem}</option>
               ))}
-            </Select>
-
-            <Button variant="outline" leftIcon={ClipboardList} onClick={() => setShowBulk(true)}>
-              Bulk Operations
-            </Button>
-            <Button leftIcon={Plus} onClick={() => openAdd(DAYS[0], "09:00")}>
-              Add Entry
-            </Button>
+            </select>
           </div>
-        }
-      />
+        </div>
+      </Card>
 
 
 
@@ -1148,7 +1164,7 @@ const TimetableManager = ({ role = "admin", userId, userName }) => {
         defaults={{ section: selectedSection, courseCode: filterCourse, semester: filterSemester }}
         onImported={() => { setShowBulk(false); fetchEntries(); }}
       />
-    </motion.div>
+    </div>
   );
 };
 

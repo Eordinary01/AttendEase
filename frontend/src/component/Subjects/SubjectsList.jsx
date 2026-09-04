@@ -5,7 +5,7 @@ import { logError } from '../../utils/logger';
 import SubjectCard from './SubjectsCard';
 import SubjectFilters from './SubjectsFilters';
 import { useTheme } from '../../contexts/ThemeContexts';
-import PageHeader from '../common/ui/PageHeader';
+import DashboardHeader from '../common/ui/DashboardHeader';
 import StatCard from '../common/ui/StatCard';
 import EmptyState from '../common/ui/EmptyState';
 import Card from '../common/ui/Card';
@@ -292,59 +292,45 @@ const SubjectsList = ({ role, userId, userName, userEmail }) => {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <PageHeader
-          title="My Teaching Subjects"
-          subtitle={
-            <span style={{ color: colors.primary }}>
-              You are teaching {groupedSubjects.length} subject{groupedSubjects.length !== 1 ? 's' : ''} across {stats.totalSections || 0} sections
-            </span>
-          }
-          icon={BookOpen}
+        <DashboardHeader
+          greeting="My Teaching Subjects"
+          meta={`Active curriculum across ${groupedSubjects.length} subject${groupedSubjects.length !== 1 ? 's' : ''} and ${stats.totalSections || 0} sections`}
           actions={
-            <>
+            <div className="flex items-center gap-3">
               {teacherInfo && (
                 <div className="flex items-center gap-2">
-                  <span
-                    className="text-sm px-3 py-1 rounded-full"
-                    style={{
-                      backgroundColor: `${colors.primary}20`,
-                      color: colors.primary
-                    }}
-                  >
+                  <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-semibold">
                     {teacherInfo.name}
                   </span>
-                  <span className="text-sm text-ink-soft">
+                  <span className="text-xs text-ink-soft hidden sm:inline">
                     {teacherInfo.email}
                   </span>
                 </div>
               )}
-
               {/* View Toggle */}
-              <div className="flex items-center space-x-2 bg-surface border border-line rounded-lg shadow-sm p-1">
+              <div className="flex items-center space-x-1 bg-surface border border-line rounded-xl shadow-sm p-1">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded transition-colors ${
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                     viewMode === 'grid'
-                      ? 'text-white'
+                      ? 'bg-primary text-white'
                       : 'text-ink-soft hover:bg-background'
                   }`}
-                  style={viewMode === 'grid' ? { backgroundColor: colors.primary } : {}}
                 >
-                  <Grid className="w-5 h-5" />
+                  <Grid className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 rounded transition-colors ${
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                     viewMode === 'list'
-                      ? 'text-white'
+                      ? 'bg-primary text-white'
                       : 'text-ink-soft hover:bg-background'
                   }`}
-                  style={viewMode === 'list' ? { backgroundColor: colors.primary } : {}}
                 >
-                  <List className="w-5 h-5" />
+                  <List className="w-4 h-4" />
                 </button>
               </div>
-            </>
+            </div>
           }
         />
 
@@ -610,47 +596,58 @@ const SubjectsList = ({ role, userId, userName, userEmail }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <PageHeader
-        title={role === 'admin' ? 'Subject Management' : role === 'parent' ? "My Child's Subjects" : 'My Subjects'}
-        subtitle={
-          <span style={{ color: colors.primary }}>
-            {role === 'admin' && `Total Subjects: ${stats.totalSubjects || subjects.length}`}
-            {(role === 'student' || role === 'parent') && `Enrolled Subjects: ${filteredGroups.length}`}
-          </span>
+      <DashboardHeader
+        greeting={role === 'admin' ? 'Curriculum & Subject Directory' : role === 'parent' ? "My Child's Enrolled Subjects" : 'My Enrolled Subjects'}
+        meta={
+          role === 'admin' 
+            ? `Institutional course registry (${stats.totalSubjects || subjects.length} subjects)` 
+            : `Curriculum roster (${filteredGroups.length} subjects enrolled)`
         }
-        icon={BookOpen}
         actions={
           /* View Toggle */
-          <div className="flex items-center space-x-2 bg-surface border border-line rounded-lg shadow-sm p-1">
+          <div className="flex items-center space-x-1 bg-surface border border-line rounded-xl shadow-sm p-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'text-white'
+                  ? 'bg-primary text-white'
                   : 'text-ink-soft hover:bg-background'
               }`}
-              style={viewMode === 'grid' ? { backgroundColor: colors.primary } : {}}
             >
-              <Grid className="w-5 h-5" />
+              <Grid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 viewMode === 'list'
-                  ? 'text-white'
+                  ? 'bg-primary text-white'
                   : 'text-ink-soft hover:bg-background'
               }`}
-              style={viewMode === 'list' ? { backgroundColor: colors.primary } : {}}
             >
-              <List className="w-5 h-5" />
+              <List className="w-4 h-4" />
             </button>
           </div>
         }
       />
 
       {(role === 'student' || role === 'parent') && studentInfo && (
-        <p className="text-sm" style={{ color: colors.secondary }}>
-          Section {studentInfo.section} {studentInfo.enrollmentNumber ? `• Roll/Enrollment: ${studentInfo.enrollmentNumber}` : ''}
+        <p className="text-sm flex flex-wrap items-center gap-2" style={{ color: colors.secondary }}>
+          <span className="font-semibold">Section {studentInfo.section || 'A'}</span>
+          {studentInfo.branch && (
+            <span className="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 font-medium">
+              {studentInfo.branch}
+            </span>
+          )}
+          {studentInfo.courseName && (
+            <span className="text-xs text-ink-soft">
+              ({studentInfo.courseName})
+            </span>
+          )}
+          {studentInfo.enrollmentNumber && (
+            <span className="text-xs text-ink-soft">
+              • Roll: {studentInfo.enrollmentNumber}
+            </span>
+          )}
         </p>
       )}
 

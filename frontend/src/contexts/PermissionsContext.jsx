@@ -48,7 +48,7 @@ export const PermissionsProvider = ({ role, children }) => {
     try {
       const res = await api.get("/roles/my-permissions");
       const perms = res.data?.data?.permissions;
-      setCustomPermissions(perms === "all" ? [] : Array.isArray(perms) ? perms : []);
+      setCustomPermissions(perms === "all" ? "all" : Array.isArray(perms) ? perms : []);
     } catch (err) {
       setCustomPermissions([]);
     } finally {
@@ -69,9 +69,9 @@ export const PermissionsProvider = ({ role, children }) => {
   }, [fetchCustomPermissions]);
 
   const effectivePermissions = useMemo(() => {
-    if (role === "super_admin" || role === "admin") return "all";
+    if (role === "super_admin" || role === "admin" || customPermissions === "all" || (Array.isArray(customPermissions) && customPermissions.includes("*"))) return "all";
     const base = BASELINE_PERMISSIONS[role] || [];
-    return [...new Set([...base, ...customPermissions])];
+    return [...new Set([...base, ...(Array.isArray(customPermissions) ? customPermissions : [])])];
   }, [role, customPermissions]);
 
   const can = useCallback(

@@ -1,9 +1,12 @@
-// controllers/userController.js (Add these functions)
+// controllers/userController.js
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Tenant = require("../models/Tenant");
+const Course = require("../models/Course");
 const logger = require("../utils/logger");
-const { escapeRegExp } = require("../utils/sanitize");
+const { escapeRegExp, toObjectId } = require("../utils/sanitize");
 const cache = require("../middleware/cache");
+const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/cloudinary");
 
 // ==================== PROFILE MANAGEMENT ====================
 
@@ -15,13 +18,36 @@ const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
       .select('-password')
-      .populate('assignedSubjects.subjectId');
+      .populate('assignedSubjects.subjectId')
+      .populate('courseId', 'name code branches');
     
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
+    }
+
+    // Auto-detect profile completeness if essential profile fields are present
+    if (!user.profileComplete) {
+      let isComplete = false;
+      if (user.role === 'teacher') {
+        // Teacher is complete if they have phone or qualification or address filled
+        if (user.phone || user.qualification || user.specialization || user.address) {
+          isComplete = true;
+        }
+      } else if (user.role === 'student') {
+        if (user.phone || user.parentName || user.parentPhone || user.address) {
+          isComplete = true;
+        }
+      } else if (user.role === 'admin' || user.role === 'super_admin') {
+        isComplete = true;
+      }
+
+      if (isComplete) {
+        user.profileComplete = true;
+        await User.findByIdAndUpdate(user._id, { profileComplete: true });
+      }
     }
     
     return res.status(200).json({
@@ -84,6 +110,7 @@ const updateProfile = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatar: user.avatar,
         section: user.section,
         rollNo: user.rollNo,
         phone: user.phone,
@@ -111,6 +138,114 @@ const updateProfile = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/users/profile/photo
+ * Upload user profile photo to Cloudinary
+ */
+const uploadProfilePhoto = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an image file (jpeg, png, or webp)',
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const tenantSubfolder = user.tenantId ? user.tenantId.toString() : 'global';
+
+    // Upload to Cloudinary with face-centered crop
+    const uploadResult = await uploadToCloudinary(req.file.buffer, {
+      folder: `attendease/avatars/${tenantSubfolder}`,
+      publicId: `avatar_${user._id}`,
+      resourceType: 'image',
+      originalName: req.file.originalname,
+      transformation: [
+        { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+        { quality: 'auto', fetch_format: 'auto' }
+      ],
+    });
+
+    user.avatar = uploadResult.url;
+    user.profileComplete = true;
+    await user.save();
+
+    // Invalidate user cache
+    await cache.del(`user:${user._id}`);
+
+    logger.info(`Profile photo updated for user ${user._id}`, { url: uploadResult.url });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile photo uploaded successfully',
+      data: {
+        _id: user._id,
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        profileComplete: user.profileComplete,
+      },
+    });
+  } catch (error) {
+    logger.error('Error uploading profile photo', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile photo',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * DELETE /api/users/profile/photo
+ * Remove user profile photo
+ */
+const deleteProfilePhoto = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (user.avatar) {
+      const tenantSubfolder = user.tenantId ? user.tenantId.toString() : 'global';
+      await deleteFromCloudinary(`attendease/avatars/${tenantSubfolder}/avatar_${user._id}`);
+      user.avatar = null;
+      await user.save();
+      await cache.del(`user:${user._id}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile photo removed successfully',
+      data: {
+        _id: user._id,
+        id: user._id,
+        avatar: null,
+      },
+    });
+  } catch (error) {
+    logger.error('Error removing profile photo', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to remove profile photo',
+      error: error.message,
+    });
+  }
+};
+
 // ==================== STUDENT MANAGEMENT ====================
 
 /**
@@ -119,8 +254,9 @@ const updateProfile = async (req, res) => {
  */
 const getAllStudents = async (req, res) => {
   try {
-    const { page = 1, limit = 50, section, search } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page = 1, limit = 1000, section, search, courseId, course, courseName, courseCode, branch, semester, subjectId } = req.query || {};
+    const safeLimit = req.query?.limit === 'all' ? 5000 : Math.min(5000, Math.max(1, parseInt(limit, 10) || 1000));
+    const skip = (Math.max(1, parseInt(page, 10) || 1) - 1) * safeLimit;
     
     const effectiveTenantId = req.tenantId || req.user?.tenantId;
     let query = { 
@@ -133,54 +269,293 @@ const getAllStudents = async (req, res) => {
       query.tenantId = req.query.tenantId;
     }
 
-    // Teachers can only see students in their assigned sections
-    if (req.user?.role === 'teacher') {
-      const assignedSections = [...new Set((req.user.assignedSubjects || []).map(a => a.section).filter(Boolean))];
-      if (assignedSections.length > 0) {
-        const allowed = section ? assignedSections.filter(s => s === section) : assignedSections;
-        if (allowed.length === 0) {
-          return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit, total: 0, pages: 0 } });
-        }
-        query.section = allowed.length === 1 ? allowed[0] : { $in: allowed };
+    // Course filter (by ObjectId or name/code)
+    const targetCourse = courseId || course || courseName || courseCode;
+    let courseIdsFromTarget = [];
+    if (targetCourse) {
+      const cStr = String(targetCourse).trim();
+      if (mongoose.Types.ObjectId.isValid(cStr) && cStr.length === 24) {
+        courseIdsFromTarget.push(new mongoose.Types.ObjectId(cStr));
       } else {
-        return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit, total: 0, pages: 0 } });
+        const matchingCourses = await Course.find({
+          tenantId: effectiveTenantId,
+          $or: [
+            { name: new RegExp(`^${escapeRegExp(cStr)}$`, "i") },
+            { code: new RegExp(`^${escapeRegExp(cStr)}$`, "i") }
+          ]
+        }).select('_id').lean();
+        courseIdsFromTarget = matchingCourses.map((c) => c._id);
       }
-    } else if (section) {
-      query.section = section;
+
+      const courseOr = [
+        { courseName: new RegExp(`^${escapeRegExp(cStr)}$`, "i") }
+      ];
+      if (courseIdsFromTarget.length > 0) {
+        courseOr.push({ courseId: { $in: courseIdsFromTarget } });
+      }
+      query.$and = query.$and || [];
+      query.$and.push({ $or: courseOr });
     }
+
+const BRANCH_ALIASES = {
+  "CSE": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE & ENGINEERING": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE AND ENGINEERING": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "IT": ["IT", "INFORMATION TECHNOLOGY"],
+  "INFORMATION TECHNOLOGY": ["IT", "INFORMATION TECHNOLOGY"],
+  "ECE": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION", "ELECTRONICS AND COMMUNICATION", "ELECTRONICS & COMMUNICATION ENGINEERING"],
+  "ELECTRONICS": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION", "ELECTRONICS AND COMMUNICATION"],
+  "ELECTRONICS & COMMUNICATION": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION", "ELECTRONICS AND COMMUNICATION"],
+  "EE": ["EE", "ELECTRICAL", "ELECTRICAL ENGINEERING"],
+  "ELECTRICAL": ["EE", "ELECTRICAL", "ELECTRICAL ENGINEERING"],
+  "ME": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "MECHANICAL": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "MECHANICAL ENGINEERING": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "CIVIL": ["CIVIL", "CIVIL ENGINEERING"],
+  "CIVIL ENGINEERING": ["CIVIL", "CIVIL ENGINEERING"],
+  "CHEM": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "CHEMISTRY": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "CHEMICAL": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "ARCH": ["ARCH", "ARCHITECTURE"],
+  "ARCHITECTURE": ["ARCH", "ARCHITECTURE"],
+  "BBA": ["BBA", "BUSINESS ADMINISTRATION", "MANAGEMENT"],
+  "MBA": ["MBA", "BUSINESS ADMINISTRATION", "MANAGEMENT"],
+  "MANAGEMENT": ["BBA", "MBA", "BUSINESS ADMINISTRATION", "MANAGEMENT"]
+};
+
+    // Branch filter (case-insensitive with alias support e.g. CSE -> Computer Science)
+    if (branch) {
+      const bUpper = String(branch).trim().toUpperCase();
+      const validBranches = BRANCH_ALIASES[bUpper] || [bUpper];
+      const branchRegexes = validBranches.map((b) => new RegExp(`^${escapeRegExp(b)}$`, "i"));
+
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { branch: { $in: branchRegexes } },
+          { courseName: { $in: branchRegexes } },
+        ]
+      });
+    }
+
+    // Semester filter
+    if (semester) {
+      const semNum = parseInt(String(semester).replace(/\D/g, ""), 10);
+      if (!isNaN(semNum) && semNum > 0) {
+        query.$and = (query.$and || []);
+        query.$and.push({ $or: [{ semester: semNum }, { semester: String(semNum) }] });
+      }
+    }
+
+    // Teachers can strictly only see students assigned under their subjects, slots, and sections
+    if (req.user?.role === 'teacher') {
+      const Timetable = require('../models/Timetable');
+      const Enrollment = require('../models/Enrollment');
+      const teacherUserId = toObjectId(req.user._id || req.user.id);
+      const activeTenantId = toObjectId(req.user?.tenantId || req.tenantId || req.tenant?._id);
+
+      // Parallel execution of teacher assignments, timetable slots, and enrollments
+      const [teacherDoc, teacherSlots, enrolledStudents] = await Promise.all([
+        User.findById(teacherUserId).select('assignedSubjects').populate('assignedSubjects.subjectId').lean(),
+        Timetable.find({ teacherId: teacherUserId, tenantId: activeTenantId }).populate('subjectId').lean(),
+        Enrollment.find({
+          tenantId: activeTenantId,
+          $or: [
+            { 'subjects.teacherId': teacherUserId },
+            { 'assignedTeachers.teacherId': teacherUserId },
+          ],
+        }).select('userId rollNo enrollmentNumber email section courseId semester branch').lean(),
+      ]);
+
+      const teacherAssignments = teacherDoc?.assignedSubjects || req.user.assignedSubjects || [];
+
+      const enrolledUserIds = enrolledStudents
+        .map((e) => e.userId?.toString())
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+        .map((id) => toObjectId(id));
+
+      const enrolledRollNos = enrolledStudents
+        .map((e) => (e.rollNo || e.enrollmentNumber || '').trim())
+        .filter(Boolean);
+
+      // Build criteria filters from assigned subjects & timetable slots
+      const criteriaList = [];
+      const assignedSectionsSet = new Set();
+
+      teacherAssignments.forEach((a) => {
+        const sec = (a.section || '').trim();
+        if (sec) assignedSectionsSet.add(sec.toUpperCase());
+        const sub = a.subjectId;
+        const crit = {};
+        if (sec) crit.section = new RegExp(`^${escapeRegExp(sec)}$`, 'i');
+        const courseId = sub?.courseId?._id || sub?.courseId;
+        if (courseId && mongoose.Types.ObjectId.isValid(courseId)) crit.courseId = toObjectId(courseId);
+        if (sub?.branch) {
+          const bUpper = String(sub.branch).trim().toUpperCase();
+          const validBranches = BRANCH_ALIASES[bUpper] || [bUpper];
+          const bRegexes = validBranches.map((b) => new RegExp(`^${escapeRegExp(b)}$`, 'i'));
+          crit.$or = crit.$or || [];
+          crit.$or.push({ branch: { $in: bRegexes } }, { courseName: { $in: bRegexes } });
+        }
+        if (sub?.semester) {
+          const semNum = parseInt(String(sub.semester).replace(/\D/g, ''), 10);
+          if (!isNaN(semNum) && semNum > 0) {
+            crit.$or = crit.$or || [];
+            crit.$or.push({ semester: semNum }, { semester: String(semNum) });
+          }
+        }
+        if (Object.keys(crit).length > 0) criteriaList.push(crit);
+      });
+
+      teacherSlots.forEach((slot) => {
+        const sec = (slot.section || '').trim();
+        if (sec) assignedSectionsSet.add(sec.toUpperCase());
+        const crit = {};
+        if (sec) crit.section = new RegExp(`^${escapeRegExp(sec)}$`, 'i');
+        const courseId = slot.courseId?._id || slot.courseId || slot.subjectId?.courseId;
+        if (courseId && mongoose.Types.ObjectId.isValid(courseId)) crit.courseId = toObjectId(courseId);
+        const branchVal = slot.branch || slot.subjectId?.branch;
+        if (branchVal) {
+          const bUpper = String(branchVal).trim().toUpperCase();
+          const validBranches = BRANCH_ALIASES[bUpper] || [bUpper];
+          const bRegexes = validBranches.map((b) => new RegExp(`^${escapeRegExp(b)}$`, 'i'));
+          crit.$or = crit.$or || [];
+          crit.$or.push({ branch: { $in: bRegexes } }, { courseName: { $in: bRegexes } });
+        }
+        const semVal = slot.semester || slot.subjectId?.semester;
+        if (semVal) {
+          const semNum = parseInt(String(semVal).replace(/\D/g, ''), 10);
+          if (!isNaN(semNum) && semNum > 0) {
+            crit.$or = crit.$or || [];
+            crit.$or.push({ semester: semNum }, { semester: String(semNum) });
+          }
+        }
+        if (Object.keys(crit).length > 0) criteriaList.push(crit);
+      });
+
+      enrolledStudents.forEach((e) => {
+        const sec = (e.section || '').trim();
+        if (sec) assignedSectionsSet.add(sec.toUpperCase());
+      });
+
+      const assignedSections = Array.from(assignedSectionsSet);
+
+      // If teacher has zero assignments anywhere, return empty list
+      if (assignedSections.length === 0 && enrolledUserIds.length === 0 && enrolledRollNos.length === 0 && criteriaList.length === 0) {
+        return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit: safeLimit, total: 0, pages: 0 } });
+      }
+
+      // Filter by requested section if passed
+      if (section && section !== 'all') {
+        const secClean = String(section).trim().toUpperCase();
+        query.section = new RegExp(`^${escapeRegExp(secClean)}$`, 'i');
+      }
+
+      // Filter by requested subject if passed
+      if (subjectId && mongoose.Types.ObjectId.isValid(subjectId)) {
+        const targetSub = teacherAssignments.find((a) => (a.subjectId?._id || a.subjectId)?.toString() === subjectId?.toString())?.subjectId;
+        if (targetSub) {
+          const cId = targetSub.courseId?._id || targetSub.courseId;
+          if (cId && mongoose.Types.ObjectId.isValid(cId)) {
+            query.$and = query.$and || [];
+            query.$and.push({ $or: [{ courseId: toObjectId(cId) }, { courseName: new RegExp(`^${escapeRegExp(String(targetSub.courseCode || ''))}$`, 'i') }] });
+          }
+          if (targetSub.branch) {
+            const bUpper = String(targetSub.branch).trim().toUpperCase();
+            const validBranches = BRANCH_ALIASES[bUpper] || [bUpper];
+            const bRegexes = validBranches.map((b) => new RegExp(`^${escapeRegExp(b)}$`, 'i'));
+            query.$and = query.$and || [];
+            query.$and.push({ $or: [{ branch: { $in: bRegexes } }, { courseName: { $in: bRegexes } }] });
+          }
+          if (targetSub.semester) {
+            const semNum = parseInt(String(targetSub.semester).replace(/\D/g, ''), 10);
+            if (!isNaN(semNum) && semNum > 0) {
+              query.$and = query.$and || [];
+              query.$and.push({ $or: [{ semester: semNum }, { semester: String(semNum) }] });
+            }
+          }
+        }
+      }
+
+      // Build overall teacher student match condition
+      const teacherOrConditions = [];
+      if (enrolledUserIds.length > 0) {
+        teacherOrConditions.push({ _id: { $in: enrolledUserIds } });
+      }
+      if (enrolledRollNos.length > 0) {
+        teacherOrConditions.push({ rollNo: { $in: enrolledRollNos } });
+      }
+      if (criteriaList.length > 0) {
+        criteriaList.forEach((c) => teacherOrConditions.push(c));
+      } else if (assignedSections.length > 0) {
+        teacherOrConditions.push({
+          section: { $in: assignedSections.map((s) => new RegExp(`^${escapeRegExp(s)}$`, 'i')) },
+        });
+      }
+
+      if (teacherOrConditions.length > 0) {
+        query.$and = query.$and || [];
+        query.$and.push({ $or: teacherOrConditions });
+      }
+    } else if (section && section !== 'all') {
+      query.section = new RegExp(`^${escapeRegExp(String(section).trim())}$`, "i");
+    }
+
     if (search) {
       const safeSearch = escapeRegExp(search);
-      query.$or = [
-        { name: { $regex: safeSearch, $options: 'i' } },
-        { email: { $regex: safeSearch, $options: 'i' } },
-        { rollNo: { $regex: safeSearch, $options: 'i' } }
-      ];
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { email: { $regex: safeSearch, $options: 'i' } },
+          { rollNo: { $regex: safeSearch, $options: 'i' } }
+        ]
+      });
     }
     
-    const [students, total] = await Promise.all([
+    const [rawStudents, total] = await Promise.all([
       User.find(query)
-        .select('-password')
+        .select('-password -faceDescriptor')
+        .populate('courseId', 'name code')
         .sort({ name: 1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(safeLimit)
+        .lean(),
       User.countDocuments(query)
     ]);
+
+    const students = rawStudents.map((s) => {
+      const hasFace = Boolean(
+        s.faceRegistered ||
+        s.isFaceRegistered ||
+        s.faceImageUrl
+      );
+      return {
+        ...s,
+        courseName: s.courseName || s.courseId?.name || s.courseId?.code || "",
+        admissionYear: s.admissionYear || null,
+        faceRegistered: hasFace,
+        isFaceRegistered: hasFace,
+      };
+    });
     
     return res.status(200).json({
       success: true,
       data: students,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: Math.max(1, parseInt(page, 10) || 1),
+        limit: safeLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / safeLimit)
       }
     });
   } catch (error) {
     logger.error('Error fetching students', { error: error.message });
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch students',
+    return res.status(200).json({
+      success: true,
+      data: [],
+      pagination: { page: 1, limit: 1000, total: 0, pages: 0 },
       error: error.message
     });
   }
@@ -645,10 +1020,47 @@ const getAdminById = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/users/:id
+ * Get user by ID (scoped to tenant unless super_admin)
+ */
+const getUserById = async (req, res) => {
+  try {
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    let query = { _id: req.params.id };
+    if (req.user?.role !== "super_admin") {
+      query.tenantId = effectiveTenantId;
+    }
+
+    const user = await User.findOne(query).select("-password").lean();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    logger.error("Error fetching user by ID", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch user",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   // Profile
   getProfile,
   updateProfile,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
+  getUserById,
   
   // Student management
   getAllStudents,

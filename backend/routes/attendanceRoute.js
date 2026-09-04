@@ -128,6 +128,14 @@ attendanceRoute.get(
   getStudentAttendanceStats,
 );
 
+attendanceRoute.get(
+  "/student/stats",
+  authenticateToken,
+  authorizeRoles(["student", "teacher", "admin", "super_admin", "parent"]),
+  featureGuard("attendance"),
+  getStudentAttendanceStats,
+);
+
 /**
  * GET /api/attendance/history
  * Full attendance history for all roles (student/teacher/parent/admin)
@@ -135,6 +143,19 @@ attendanceRoute.get(
  */
 attendanceRoute.get(
   "/history",
+  authenticateToken,
+  authorizeRoles(["student", "teacher", "admin", "super_admin", "parent"]),
+  featureGuard("attendance"),
+  getAttendanceHistory
+);
+
+/**
+ * GET /api/attendance
+ * General attendance query (aliases to getAttendanceHistory)
+ * Supports: ?subjectId=&section=&date=&fromDate=&toDate=&status=&page=&limit=
+ */
+attendanceRoute.get(
+  "/",
   authenticateToken,
   authorizeRoles(["student", "teacher", "admin", "super_admin", "parent"]),
   featureGuard("attendance"),
@@ -153,7 +174,6 @@ attendanceRoute.get(
   "/admin/students",
   authenticateToken,
   authorizeRoles(["admin", "teacher"]),
-  requirePermission("students:read"),
   featureGuard("attendance"),
   async (req, res) => {
     try {
@@ -196,8 +216,15 @@ attendanceRoute.get(
         }
       }
 
-      // Teachers can only view students in their assigned sections
-      if (req.user.role === 'teacher') {
+      // Teachers without privileged management permissions can only view students in their assigned sections
+      const isPrivileged = req.user.role === 'admin' ||
+                           req.user.role === 'super_admin' ||
+                           req.user.permissions?.includes("students:read") ||
+                           req.user.permissions?.includes("students:write") ||
+                           req.user.permissions?.includes("attendance:read_all") ||
+                           req.user.permissions?.includes("*");
+
+      if (req.user.role === 'teacher' && !isPrivileged) {
         const assignedSections = [...new Set((req.user.assignedSubjects || []).map(a => a.section).filter(Boolean))];
         if (assignedSections.length === 0) {
           return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit: parseInt(limit), total: 0, pages: 0 } });
@@ -218,16 +245,18 @@ attendanceRoute.get(
         ];
       }
 
-      const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+      const safeLimit = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
       const safePage = Math.max(1, parseInt(page, 10) || 1);
       const skip = (safePage - 1) * safeLimit;
 
       // Get students with pagination
       const students = await User.find(query)
         .select('name email section rollNo phone parentName parentPhone courseId courseName branch semester admissionYear academicStatus totalSemesters')
+        .populate('courseId', 'name code branches durationYears semestersPerYear')
         .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
         .skip(skip)
-        .limit(safeLimit);
+        .limit(safeLimit)
+        .lean();
 
       const total = await User.countDocuments(query);
 
@@ -265,20 +294,25 @@ attendanceRoute.get(
           ? ((overall.presentCount / overall.totalClasses) * 100).toFixed(2)
           : 0;
 
+        const resolvedCourseName = student.courseName || student.courseId?.name || student.courseId?.code || "";
+        const resolvedCourseId = student.courseId?._id || student.courseId || null;
+
         return {
           id: student._id,
+          _id: student._id,
           name: student.name,
           email: student.email,
           section: student.section,
           rollNo: student.rollNo,
-          phone: student.phone,
-          parentName: student.parentName,
-          parentPhone: student.parentPhone,
-          courseId: student.courseId || null,
-          courseName: student.courseName || "",
+          phone: student.phone || "",
+          parentName: student.parentName || "",
+          parentPhone: student.parentPhone || "",
+          courseId: resolvedCourseId,
+          courseName: resolvedCourseName,
+          course: student.courseId ? { _id: student.courseId._id, name: student.courseId.name, code: student.courseId.code } : null,
           branch: student.branch || "",
-          semester: student.semester || null,
-          admissionYear: student.admissionYear || null,
+          semester: student.semester || 1,
+          admissionYear: student.admissionYear || 2025,
           academicStatus: student.academicStatus || "active",
           attendance: {
             totalClasses: overall.totalClasses,

@@ -1,4 +1,3 @@
-// src/components/Admin/UploadEnrollments.jsx
 import React, { useState, useRef } from "react";
 import { 
   Upload, 
@@ -15,7 +14,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import api from "../../utils/api";
@@ -27,7 +26,7 @@ const UploadEnrollments = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'error', null
+  const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadSummary, setUploadSummary] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [tenantInfo, setTenantInfo] = useState(null);
@@ -36,14 +35,9 @@ const UploadEnrollments = () => {
 
   const fileInputRef = useRef();
 
-
-
-  // Theme colors
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    light: colors?.primary ? `${colors.primary}20` : '#eef2ff',
-    lighter: colors?.primary ? `${colors.primary}10` : '#f5f3ff',
+    primary: colors?.primary || '#7c3aed',
+    secondary: colors?.secondary || '#06b6d4',
   };
 
   const requiredColumns = [
@@ -64,7 +58,6 @@ const UploadEnrollments = () => {
     "admissionYear"
   ];
 
-  // Fetch tenant info on component mount
   React.useEffect(() => {
     fetchTenantInfo();
   }, []);
@@ -186,7 +179,6 @@ const UploadEnrollments = () => {
   const downloadSample = () => {
     const headers = [...requiredColumns, ...optionalColumns].join(",");
     const sampleRow = "EN001245,student@example.com,John,Doe,A,Mary Doe,+919876543210,mary.doe@example.com,Bachelor of Technology,CSE,1,2026";
-    // Add BOM for UTF-8
     const content = `\uFEFF${headers}\n${sampleRow}`;
     
     const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
@@ -199,137 +191,86 @@ const UploadEnrollments = () => {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl space-y-6"
-    >
-      <PageHeader
-        title="Upload Enrollments"
-        subtitle="Bulk import student enrollment data via CSV"
-        icon={Upload}
+    <div className="max-w-4xl space-y-6">
+      <DashboardHeader
+        greeting="Bulk Student Enrollment Intake"
+        meta={`Upload and batch register student rosters for ${tenantInfo?.name || "your institution"}`}
         actions={
-          tenantInfo && (
-            <div 
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white shadow-sm"
-              style={{ backgroundColor: themeColors.primary }}
-            >
-              <Building2 className="w-4 h-4" />
-              <span className="font-medium">{tenantInfo.name}</span>
-            </div>
-          )
+          <Button
+            variant="subtle"
+            size="sm"
+            leftIcon={Download}
+            onClick={downloadSample}
+          >
+            Download CSV Sample
+          </Button>
         }
       />
 
-      {/* Main Card */}
-      <Card>
-        {/* Requirements Section */}
-        <div 
-          className="mb-6 p-4 rounded-xl border"
-          style={{ 
-            backgroundColor: `${themeColors.primary}10`,
-            borderColor: `${themeColors.primary}20`
-          }}
-        >
+      {/* Main Upload Card */}
+      <Card padding="lg" bordered>
+        {/* Requirements Box */}
+        <div className="mb-6 p-4 rounded-2xl bg-primary/5 border border-primary/20">
           <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: themeColors.primary }} />
-            <div>
-              <h3 className="font-medium mb-2" style={{ color: themeColors.primary }}>CSV Requirements</h3>
+            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+              <Info className="w-4 h-4" />
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-bold text-xs text-ink uppercase tracking-wider">CSV Data Specifications</h3>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium mb-1" style={{ color: themeColors.primary }}>Required Columns:</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-xs font-bold text-ink-soft mb-1.5">Required Headers:</p>
+                  <div className="flex flex-wrap gap-1.5">
                     {requiredColumns.map(col => (
                       <span 
                         key={col} 
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ 
-                          backgroundColor: `${themeColors.primary}20`,
-                          color: themeColors.primary
-                        }}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/20"
                       >
                         {col}
                       </span>
                     ))}
                   </div>
-                  <p className="text-sm font-medium mb-1 mt-3" style={{ color: themeColors.primary }}>Optional (for parent portal):</p>
-                  <div className="flex flex-wrap gap-2">
-                    {optionalColumns.slice(0, 3).map(col => (
+
+                  <p className="text-xs font-bold text-ink-soft mb-1.5 mt-3">Optional Academic Headers:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {optionalColumns.map(col => (
                       <span 
                         key={col} 
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ 
-                          backgroundColor: `${themeColors.primary}15`,
-                          color: themeColors.primary
-                        }}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-background text-ink-soft border border-line/50"
                       >
                         {col}
                       </span>
                     ))}
                   </div>
-                  <p className="text-sm font-medium mb-1 mt-3" style={{ color: themeColors.primary }}>Optional (academic structure):</p>
-                  <div className="flex flex-wrap gap-2">
-                    {optionalColumns.slice(3).map(col => (
-                      <span 
-                        key={col} 
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ 
-                          backgroundColor: `${themeColors.primary}15`,
-                          color: themeColors.primary
-                        }}
-                      >
-                        {col}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs mt-2" style={{ color: themeColors.primary }}>
-                    Parent details enable parents to log in to the parent portal with their own email. Course/branch/semester/admissionYear power the semester auto-increment feature.
-                  </p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium mb-1" style={{ color: themeColors.primary }}>Specifications:</p>
-                  <ul className="text-xs space-y-1" style={{ color: themeColors.primary }}>
-                    <li>• CSV format with headers</li>
-                    <li>• Max file size: 5MB</li>
-                    <li>• Valid email addresses</li>
-                    <li>• Unique enrollment numbers</li>
-                    <li>• Section must exist in your institution</li>
-                  </ul>
+
+                <div className="text-xs space-y-1.5 text-ink-soft">
+                  <p className="font-bold text-ink mb-1">Upload Rules:</p>
+                  <p>• File must be formatted as UTF-8 CSV</p>
+                  <p>• Maximum upload limit is 5MB</p>
+                  <p>• Enrollment numbers must be unique per institution</p>
+                  <p>• Section codes will be automatically matched or mapped</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Upload Area */}
+        {/* Upload Drop Zone */}
         <form onSubmit={handleUpload}>
-          <motion.div
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+          <div
             className={`
-              relative border-2 border-dashed rounded-2xl p-10 mb-6 text-center
-              ${dragActive ? 'border-primary bg-primary-soft' : 'border-line hover:border-primary/40'}
-              ${file ? 'bg-green-50 border-green-400' : ''}
-              transition-all cursor-pointer overflow-hidden
+              relative border-2 border-dashed rounded-2xl p-8 mb-5 text-center
+              ${dragActive ? 'border-primary bg-primary/10' : 'border-line/60 hover:border-primary/40 bg-background/50'}
+              ${file ? 'bg-emerald-500/5 border-emerald-500/30' : ''}
+              transition cursor-pointer overflow-hidden
             `}
-            onClick={() => fileInputRef.current.click()}
+            onClick={() => fileInputRef.current?.click()}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            style={{
-              borderColor: dragActive ? themeColors.primary : undefined,
-              backgroundColor: dragActive ? `${themeColors.primary}10` : undefined,
-            }}
           >
-            {dragActive && (
-              <div className="absolute inset-0 bg-surface/50 backdrop-blur-sm z-10 flex items-center justify-center pointer-events-none">
-                <div className="text-primary font-bold text-xl flex items-center gap-2">
-                  <Upload className="w-8 h-8 animate-bounce" />
-                  Drop to upload
-                </div>
-              </div>
-            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -338,214 +279,130 @@ const UploadEnrollments = () => {
               onChange={(e) => handleFileChange(e.target.files[0])}
             />
 
-            <AnimatePresence mode="wait">
-              {!file ? (
-                <motion.div 
-                  key="no-file"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="space-y-4"
-                >
-                  <div className="flex justify-center">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary-soft">
-                      <Upload className="w-8 h-8" style={{ color: themeColors.primary }} />
-                    </div>
+            {!file ? (
+              <div className="space-y-3 py-4">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-primary/10 text-primary mx-auto">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-ink">
+                    Drag & drop your student CSV file here
+                  </p>
+                  <p className="text-xs text-ink-soft mt-1">
+                    or click to browse files from your computer
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3.5 bg-surface rounded-xl border border-emerald-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-600">
+                    <FileText className="w-5 h-5" />
                   </div>
-                  <div>
-                    <p className="text-xl font-bold text-ink">
-                      Drag & drop your CSV file here
+                  <div className="text-left">
+                    <p className="font-bold text-xs text-ink">{file.name}</p>
+                    <p className="text-[11px] text-ink-soft">
+                      {(file.size / 1024).toFixed(1)} KB • CSV Document
                     </p>
-                    <p className="text-ink-soft mt-2 font-medium">
-                      or <span style={{ color: themeColors.primary }} className="hover:underline">click to browse</span>
-                    </p>
                   </div>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  key="file"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="flex items-center justify-between p-4 bg-surface rounded-xl shadow-sm border border-green-100"
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="p-1.5 hover:bg-rose-500/10 rounded-lg text-ink-soft hover:text-rose-600 transition cursor-pointer"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-bold text-ink">{file.name}</p>
-                      <p className="text-sm font-medium text-ink-soft">
-                        {(file.size / 1024).toFixed(2)} KB
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFile(null);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="p-2 hover:bg-red-50 rounded-full transition-colors group"
-                  >
-                    <X className="w-5 h-5 text-ink-faint group-hover:text-red-500" />
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Progress Bar */}
           {uploadProgress > 0 && (
-            <div className="mb-6">
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-ink-soft">Uploading...</span>
-                <span className="font-medium" style={{ color: themeColors.primary }}>{Math.round(uploadProgress)}%</span>
+            <div className="mb-5">
+              <div className="flex justify-between text-xs mb-1 font-semibold">
+                <span className="text-ink-soft">Processing upload...</span>
+                <span className="text-primary">{Math.round(uploadProgress)}%</span>
               </div>
-              <div className="w-full bg-line rounded-full h-2">
+              <div className="w-full bg-line/50 rounded-full h-1.5 overflow-hidden">
                 <div
-                  className="h-2 rounded-full transition-all duration-300"
-                  style={{ 
-                    width: `${uploadProgress}%`,
-                    backgroundColor: themeColors.primary
-                  }}
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
                 />
               </div>
             </div>
           )}
 
-          {/* Upload Status */}
+          {/* Upload Status Alert */}
           {uploadStatus && (
-            <div className={`mb-6 p-4 rounded-xl ${
+            <div className={`mb-5 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
               uploadStatus.type === 'success' 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-red-50 border border-red-200'
+                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
+                : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
             }`}>
-              <div className="flex items-center gap-2">
-                {uploadStatus.type === 'success' ? (
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                )}
-                <span className={uploadStatus.type === 'success' ? 'text-green-800' : 'text-red-800'}>
-                  {uploadStatus.message}
-                </span>
-              </div>
+              {uploadStatus.type === 'success' ? (
+                <CheckCircle className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{uploadStatus.message}</span>
             </div>
           )}
 
-          {/* Upload Summary */}
+          {/* Upload Summary Box */}
           {uploadSummary && (
-            <div className="mb-6 p-4 bg-background rounded-xl">
-              <h4 className="font-medium text-ink mb-3">Upload Summary</h4>
-              <div className="grid grid-cols-3 gap-4 mb-3">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-ink">{uploadSummary.total}</p>
-                  <p className="text-xs text-ink-soft">Total</p>
+            <div className="mb-5 p-4 bg-background rounded-2xl border border-line/50 space-y-3">
+              <h4 className="font-bold text-xs text-ink uppercase tracking-wider">Upload Results Summary</h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-surface rounded-xl border border-line/50 text-center">
+                  <p className="text-xl font-bold text-ink">{uploadSummary.total}</p>
+                  <p className="text-[11px] text-ink-soft font-semibold">Total Records</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{uploadSummary.success}</p>
-                  <p className="text-xs text-ink-soft">Success</p>
+                <div className="p-3 bg-surface rounded-xl border border-emerald-500/20 text-center">
+                  <p className="text-xl font-bold text-emerald-600">{uploadSummary.success}</p>
+                  <p className="text-[11px] text-ink-soft font-semibold">Successful</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-red-600">{uploadSummary.failed}</p>
-                  <p className="text-xs text-ink-soft">Failed</p>
+                <div className="p-3 bg-surface rounded-xl border border-rose-500/20 text-center">
+                  <p className="text-xl font-bold text-rose-600">{uploadSummary.failed}</p>
+                  <p className="text-[11px] text-ink-soft font-semibold">Failed</p>
                 </div>
               </div>
+
               {uploadSummary.errors && uploadSummary.errors.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-line">
-                  <p className="text-sm font-medium text-ink-soft mb-2">Errors:</p>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
+                <div className="pt-2 border-t border-line/50">
+                  <p className="text-xs font-bold text-rose-600 mb-1">Errors encountered:</p>
+                  <div className="max-h-28 overflow-y-auto space-y-1">
                     {uploadSummary.errors.slice(0, 10).map((err, idx) => (
-                      <p key={idx} className="text-xs text-red-600">• {err}</p>
+                      <p key={idx} className="text-[11px] text-rose-500">• {err}</p>
                     ))}
-                    {uploadSummary.errors.length > 10 && (
-                      <p className="text-xs text-ink-soft">... and {uploadSummary.errors.length - 10} more errors</p>
-                    )}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 mt-8">
-            <Button
-              type="button"
-              variant="outline"
-              leftIcon={Download}
-              onClick={downloadSample}
-              size="lg"
-            >
-              Sample CSV
-            </Button>
+          {/* Submit Action */}
+          <div className="flex justify-end gap-2.5">
             <Button
               type="submit"
               disabled={!file || loading}
               loading={loading}
-              size="lg"
+              variant="primary"
+              size="sm"
               leftIcon={Upload}
-              className="flex-1"
-              style={{ background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})` }}
             >
-              Upload Enrollments
+              Upload & Process Enrollments
             </Button>
           </div>
         </form>
-
-        {/* Instructions */}
-        <div className="mt-6 pt-6 border-t border-line">
-          <h4 className="font-medium text-ink mb-3">Instructions</h4>
-          <div className="space-y-2 text-sm text-ink-soft">
-            <p className="flex items-start gap-2">
-              <ChevronRight className="w-4 h-4 text-ink-faint flex-shrink-0 mt-0.5" />
-              Download the sample CSV template to see the required format
-            </p>
-            <p className="flex items-start gap-2">
-              <ChevronRight className="w-4 h-4 text-ink-faint flex-shrink-0 mt-0.5" />
-              Ensure all enrollment numbers are unique within your institution
-            </p>
-            <p className="flex items-start gap-2">
-              <ChevronRight className="w-4 h-4 text-ink-faint flex-shrink-0 mt-0.5" />
-              Student accounts will be created automatically upon registration
-            </p>
-            <p className="flex items-start gap-2">
-              <ChevronRight className="w-4 h-4 text-ink-faint flex-shrink-0 mt-0.5" />
-              Uploaded data will appear in the enrollments section immediately
-            </p>
-            <p className="flex items-start gap-2">
-              <ChevronRight className="w-4 h-4 text-ink-faint flex-shrink-0 mt-0.5" />
-              Students will be associated with your institution (Tenant ID: {tenantInfo?.id?.slice(-8) || 'Auto-assigned'})
-            </p>
-          </div>
-        </div>
       </Card>
 
-      {/* Tenant Info Card */}
-      {tenantInfo && (
-        <div 
-          className="p-4 rounded-lg border"
-          style={{ 
-            backgroundColor: `${themeColors.primary}10`,
-            borderColor: `${themeColors.primary}20`
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4" style={{ color: themeColors.primary }} />
-            <span className="text-sm text-ink-soft">
-              Uploading to: <strong>{tenantInfo.name}</strong>
-            </span>
-            <span className="text-xs text-ink-faint">
-              (Subdomain: {tenantInfo.subdomain})
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Pricing / Upgrade Modal */}
       <PricingModal {...modalProps} />
-    </motion.div>
+    </div>
   );
 };
 

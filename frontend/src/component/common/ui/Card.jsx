@@ -14,8 +14,9 @@ const Card = ({
   className = '',
   onClick,
   hoverable = false,
-  padding = 'lg',
+  padding = 'md',
   bordered = true,
+  highlight = false,
   title,
   subtitle,
   icon: Icon,
@@ -26,13 +27,13 @@ const Card = ({
     <div className="flex items-center justify-between gap-3 mb-4">
       <div className="flex items-center gap-2.5 min-w-0">
         {Icon && (
-          <span className="w-9 h-9 rounded-lg bg-primary-soft text-primary flex items-center justify-center shrink-0">
-            <Icon className="w-5 h-5" />
+          <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <Icon className="w-4 h-4" />
           </span>
         )}
         <div className="min-w-0">
-          <h3 className="font-bold text-ink truncate leading-tight">{title}</h3>
-          {subtitle && <p className="text-xs text-ink-faint truncate mt-0.5">{subtitle}</p>}
+          <h3 className="text-sm font-bold text-ink truncate leading-tight">{title}</h3>
+          {subtitle && <p className="text-xs text-ink-soft truncate mt-0.5">{subtitle}</p>}
         </div>
         {titleRight}
       </div>
@@ -43,12 +44,12 @@ const Card = ({
   return (
     <motion.div
       onClick={onClick}
-      whileHover={hoverable ? { y: -3 } : {}}
+      whileHover={hoverable ? { y: -2 } : {}}
       className={`
-        bg-surface rounded-2xl shadow-card
-        ${bordered ? 'border border-line' : ''}
+        bg-surface rounded-2xl
+        ${bordered ? (highlight ? 'border border-line/70 shadow-sm' : 'border border-line/50') : ''}
         ${paddingClasses[padding]}
-        ${hoverable ? 'transition-shadow cursor-pointer hover:shadow-cardhover' : ''}
+        ${hoverable ? 'transition-all cursor-pointer hover:border-primary/40' : ''}
         ${className}
       `}
     >

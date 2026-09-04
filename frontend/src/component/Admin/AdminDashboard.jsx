@@ -1,8 +1,7 @@
-// src/components/Admin/AdminDashboard.jsx
-import React, { useState, useEffect } from "react";
+// src/component/Admin/AdminDashboard.jsx (Revamped Admin Workspace — Bento Grid)
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../utils/api";
-import { logError } from "../../utils/logger";
+import { motion } from "framer-motion";
 import {
   Users,
   BookOpen,
@@ -11,7 +10,6 @@ import {
   UserPlus,
   BookMarked,
   Grid,
-  TrendingUp,
   Calendar,
   Clock,
   CheckCircle,
@@ -26,27 +24,32 @@ import {
   CreditCard,
   AlertTriangle,
   Search,
-  DollarSign
+  DollarSign,
+  CalendarDays,
 } from "lucide-react";
-import { useTheme } from '../../contexts/ThemeContexts';
-import { motion } from 'framer-motion';
-import Button from '../common/ui/Button';
-import Card from '../common/ui/Card';
-import Modal from '../common/ui/Modal';
-import Table from '../common/ui/Table';
-import Badge from '../common/ui/Badge';
-import StatCard from '../common/ui/StatCard';
-import EmptyState from '../common/ui/EmptyState';
-import Skeleton from '../common/ui/Skeleton';
 
-const cardItem = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
-};
+import api from "../../utils/api";
+import { logError } from "../../utils/logger";
+import { useTheme } from "../../contexts/ThemeContexts";
+import DashboardHeader from "../common/ui/DashboardHeader";
+import StatValue from "../common/ui/StatValue";
+import Button from "../common/ui/Button";
+import Card from "../common/ui/Card";
+import Modal from "../common/ui/Modal";
+import Table from "../common/ui/Table";
+import Badge from "../common/ui/Badge";
+import EmptyState from "../common/ui/EmptyState";
+import Skeleton from "../common/ui/Skeleton";
+import { formatDateDMY } from "../../utils/dateUtils";
 
-const AdminDashboard = ({ role, userId, userName, userEmail }) => {
+export default function AdminDashboard({ role, userId, userName, userEmail }) {
   const navigate = useNavigate();
   const { colors } = useTheme();
+  const themeColors = {
+    primary: colors?.primary || "#1d4ed8",
+    secondary: colors?.secondary || "#4f46e5",
+  };
+
   const [stats, setStats] = useState({
     totalTeachers: 0,
     totalSubjects: 0,
@@ -60,8 +63,11 @@ const AdminDashboard = ({ role, userId, userName, userEmail }) => {
 
   const [students, setStudents] = useState([]);
   const [showStudentsModal, setShowStudentsModal] = useState(false);
-  const [studentFilter, setStudentFilter] = useState('all'); // all | registered | pending
-  const [studentSearch, setStudentSearch] = useState('');
+  const [studentFilter, setStudentFilter] = useState("all"); // all | registered | pending
+  const [studentSearch, setStudentSearch] = useState("");
+  const [snapshotSearch, setSnapshotSearch] = useState("");
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState("all");
+  const [dashboardSectionFilter, setDashboardSectionFilter] = useState("all");
 
   const [tenantInfo, setTenantInfo] = useState(null);
   const [subscription, setSubscription] = useState(null);
@@ -71,11 +77,113 @@ const AdminDashboard = ({ role, userId, userName, userEmail }) => {
     recentEnrollments: [],
   });
 
+  const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const tenantId = localStorage.getItem("tenantId");
+  const fetchTenantInfo = useCallback(async () => {
+    try {
+      const response = await api.get("/auth/tenant-info");
+      if (response.data.success) {
+        setTenantInfo(response.data.data?.tenant);
+      }
+    } catch (error) {
+      logError("Fetch Tenant Info", error);
+    }
+  }, []);
+
+  const fetchSubscriptionInfo = useCallback(async () => {
+    try {
+      const response = await api.get("/billing/subscription");
+      if (response.data.success) {
+        setSubscription(response.data.data);
+      }
+    } catch (error) {
+      logError("Fetch Subscription Info", error);
+    }
+  }, []);
+
+  const fetchCalendar = useCallback(async () => {
+    try {
+      const response = await api.get("/calendar");
+      if (response.data.success) {
+        setHolidays(response.data.data || []);
+      }
+    } catch (error) {
+      logError("Fetch Calendar", error);
+    }
+  }, []);
+
+  const fetchAllStats = useCallback(async () => {
+    try {
+      const response = await api.get("/admin/dashboard-stats");
+      if (response.data.success) {
+        const d = response.data.data;
+        setStats({
+          totalTeachers: d.totalTeachers || 0,
+          totalSubjects: d.totalSubjects || 0,
+          totalEnrollments: d.totalEnrollments || 0,
+          totalStudents: d.totalStudents || d.totalEnrollments || 0,
+          activeSubjects: d.activeSubjects || d.totalSubjects || 0,
+          pendingRegistrations: d.pendingRegistrations || 0,
+          totalSections: d.totalSections || 0,
+          recentActivities: [],
+        });
+        setEnrollmentStats({
+          bySection: d.bySection || {},
+          byStatus: d.byStatus || { registered: 0, pending: 0 },
+          recentEnrollments: Array.isArray(d.recentEnrollments) ? d.recentEnrollments : [],
+        });
+        if (Array.isArray(d.calendar) && d.calendar.length > 0) {
+          setHolidays(d.calendar);
+        }
+      }
+    } catch (error) {
+      logError("Fetch Admin Dashboard Stats", error);
+    }
+  }, []);
+
+  const fetchEnrollments = useCallback(async () => {
+    try {
+      setLoadingStudents(true);
+      const response = await api.get("/admin/enrollments?limit=2000");
+      if (response.data.success) {
+        const data = response.data.data;
+        const list = Array.isArray(data?.enrollments)
+          ? data.enrollments
+          : Array.isArray(data?.allStudents)
+          ? data.allStudents
+          : Array.isArray(data)
+          ? data
+          : [];
+        setStudents(list);
+      }
+    } catch (error) {
+      logError("Fetch Enrollments", error);
+    } finally {
+      setLoadingStudents(false);
+    }
+  }, []);
+
+  const loadAll = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    else setRefreshing(true);
+
+    try {
+      await Promise.allSettled([
+        fetchAllStats(),
+        fetchTenantInfo(),
+        fetchSubscriptionInfo(),
+        fetchEnrollments(),
+        fetchCalendar(),
+      ]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [fetchAllStats, fetchTenantInfo, fetchSubscriptionInfo, fetchEnrollments, fetchCalendar]);
 
   useEffect(() => {
     const userRole = localStorage.getItem("role");
@@ -84,728 +192,728 @@ const AdminDashboard = ({ role, userId, userName, userEmail }) => {
       setLoading(false);
       return;
     }
-
     if (!localStorage.getItem("token")) {
       setError("Please login again");
       setLoading(false);
       return;
     }
+    loadAll();
+  }, [loadAll]);
 
-    fetchAllStats();
-    fetchTenantInfo();
-    fetchSubscriptionInfo();
-  }, []);
-
-  const fetchTenantInfo = async () => {
-    try {
-      const response = await api.get('/auth/tenant-info');
-
-      if (response.data.success) {
-        setTenantInfo(response.data.data?.tenant);
-      }
-    } catch (error) {
-      logError("Fetch Tenant Info", error);
+  // Filtered students for Roster Snapshot
+  const snapshotFilteredStudents = useMemo(() => {
+    let list = students.length > 0 ? students : enrollmentStats.recentEnrollments;
+    if (dashboardSectionFilter !== "all") {
+      list = list.filter((s) => s.section === dashboardSectionFilter);
     }
-  };
-
-  const fetchSubscriptionInfo = async () => {
-    try {
-      const response = await api.get('/billing/subscription');
-
-      if (response.data.success) {
-        setSubscription(response.data.data);
-        const status = response.data.data?.subscription?.status || null;
-        if (status) {
-          localStorage.setItem('subscriptionStatus', status);
-        }
-      }
-    } catch (error) {
-      logError("Fetch Subscription", error);
+    if (snapshotSearch.trim()) {
+      const q = snapshotSearch.toLowerCase().trim();
+      list = list.filter(
+        (s) =>
+          (s.fullName || s.name || "").toLowerCase().includes(q) ||
+          (s.rollNo || s.enrollmentNumber || "").toLowerCase().includes(q) ||
+          (s.section || "").toLowerCase().includes(q)
+      );
     }
-  };
+    return list;
+  }, [students, enrollmentStats.recentEnrollments, dashboardSectionFilter, snapshotSearch]);
 
-  const fetchAllStats = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [teachersRes, subjectsRes, enrollmentsRes] = await Promise.all([
-        api.get('/admin/teachers'),
-        api.get('/admin/subjects'),
-        api.get('/admin/enrollments?limit=1000'),
-      ]);
-
-      let teachers = [];
-      if (Array.isArray(teachersRes.data)) {
-        teachers = teachersRes.data;
-      } else if (teachersRes.data?.data && Array.isArray(teachersRes.data.data)) {
-        teachers = teachersRes.data.data;
-      }
-
-      let subjects = [];
-      if (subjectsRes.data?.data && Array.isArray(subjectsRes.data.data)) {
-        subjects = subjectsRes.data.data;
-      } else if (Array.isArray(subjectsRes.data)) {
-        subjects = subjectsRes.data;
-      }
-
-      let enrollments = [];
-      if (enrollmentsRes.data?.data?.enrollments && Array.isArray(enrollmentsRes.data.data.enrollments)) {
-        enrollments = enrollmentsRes.data.data.enrollments;
-      } else if (enrollmentsRes.data?.enrollments && Array.isArray(enrollmentsRes.data.enrollments)) {
-        enrollments = enrollmentsRes.data.enrollments;
-      } else if (enrollmentsRes.data?.data && Array.isArray(enrollmentsRes.data.data)) {
-        enrollments = enrollmentsRes.data.data;
-      }
-
-      const bySection = {};
-      let registered = 0;
-      let pending = 0;
-
-      enrollments.forEach((en) => {
-        bySection[en.section] = (bySection[en.section] || 0) + 1;
-        if (en.isRegistered) {
-          registered++;
-        } else {
-          pending++;
-        }
-      });
-
-      const sections = [...new Set(enrollments.map((e) => e.section))];
-      const recentEnrollments = enrollments
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 5);
-      const activeSubjects = subjects?.filter((s) => s.isActive !== false).length;
-
-      setStats({
-        totalTeachers: teachers.length || 0,
-        totalSubjects: subjects.length || 0,
-        totalEnrollments: enrollments.length || 0,
-        totalStudents: enrollments.length || 0,
-        activeSubjects,
-        pendingRegistrations: pending,
-        totalSections: sections.length,
-        recentActivities: generateRecentActivities(enrollments, subjects),
-      });
-
-      setEnrollmentStats({
-        bySection,
-        byStatus: { registered, pending },
-        recentEnrollments,
-      });
-
-      setStudents(enrollments);
-    } catch (err) {
-      logError("Fetch Stats", err);
-      if (err.response?.status === 403 && (err.response?.data?.subscriptionStatus === 'expired' || err.response?.data?.upgradeRequired)) {
-        // Subscription expired — stats loading bypassed gracefully
-      } else {
-        setError(err.response?.data?.message || "Failed to load dashboard statistics");
-      }
-    } finally {
-      setLoading(false);
+  // Filtered students for Modal
+  const filteredStudents = useMemo(() => {
+    let list = students;
+    if (selectedSectionFilter !== "all") {
+      list = list.filter((s) => s.section === selectedSectionFilter);
     }
-  };
+    if (studentFilter === "registered") {
+      list = list.filter((s) => s.isRegistered);
+    } else if (studentFilter === "pending") {
+      list = list.filter((s) => !s.isRegistered);
+    }
+    if (studentSearch.trim()) {
+      const q = studentSearch.toLowerCase().trim();
+      list = list.filter(
+        (s) =>
+          (s.fullName || s.name || "").toLowerCase().includes(q) ||
+          (s.rollNo || s.enrollmentNumber || "").toLowerCase().includes(q) ||
+          (s.section || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [students, selectedSectionFilter, studentFilter, studentSearch]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([fetchAllStats(), fetchTenantInfo(), fetchSubscriptionInfo()]);
-    setRefreshing(false);
-  };
-
-  const generateRecentActivities = (enrollments, subjects) => {
-    const activities = [];
-    enrollments.slice(0, 3).forEach((en) => {
-      activities.push({
-        id: `enroll-${en._id}`,
-        type: "enrollment",
-        message: `${en.firstName} ${en.lastName} enrolled in section ${en.section}`,
-        time: new Date(en.createdAt).toLocaleDateString(),
-        icon: <GraduationCap className="w-4 h-4" />,
-      });
-    });
-    return activities;
-  };
-
-  const getTrialDaysLeft = () => {
-    if (subscription?.subscription?.status !== 'trial' || !subscription?.subscription?.trialEndsAt) return null;
-    const trialEnd = new Date(subscription.subscription.trialEndsAt);
-    const now = new Date();
-    const daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
-    return daysLeft > 0 ? daysLeft : 0;
-  };
-
-  const trialDaysLeft = getTrialDaysLeft();
-  const isTrial = subscription?.subscription?.status === 'trial';
-  const isExpired = subscription?.subscription?.status === 'expired';
-
-  const filteredStudents = students.filter(student => {
-    if (studentFilter === 'registered' && !student.isRegistered) return false;
-    if (studentFilter === 'pending' && student.isRegistered) return false;
-
-    const searchLower = studentSearch.toLowerCase();
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-    const email = (student.email || '').toLowerCase();
-    const enrollNum = (student.enrollmentNumber || '').toLowerCase();
-
-    return fullName.includes(searchLower) || email.includes(searchLower) || enrollNum.includes(searchLower);
-  });
-
-  // ✅ Get theme-based color classes
-  const themeColors = {
-    primary: colors.primary || '#6366f1',
-    secondary: colors.secondary || '#8b5cf6',
-    light: colors.primary ? `${colors.primary}20` : '#eef2ff',
-    lighter: colors.primary ? `${colors.primary}10` : '#f5f3ff',
-  };
-
-  const quickActions = [
-    {
-      title: "Upload Enrollments",
-      description: "Bulk upload student data via CSV",
-      icon: <Upload className="w-6 h-6" />,
-      path: "/admin/upload-enrollments",
-      color: themeColors.primary,
-      lightColor: themeColors.light,
-      textColor: "text-primary",
-      stats: "Process batch enrollments",
-    },
-    {
-      title: "Manage Teachers",
-      description: "Add or update teacher profiles",
-      icon: <UserCog className="w-6 h-6" />,
-      path: "/admin/manage-teachers",
-      color: themeColors.secondary,
-      lightColor: themeColors.lighter,
-      textColor: "text-secondary",
-      stats: `${stats.totalTeachers} active`,
-    },
-    {
-      title: "Manage Subjects",
-      description: "Create and organize subjects",
-      icon: <BookMarked className="w-6 h-6" />,
-      path: "/admin/manage-subjects",
-      color: "#8b5cf6",
-      lightColor: "#f5f3ff",
-      textColor: "text-secondary",
-      stats: `${stats.totalSubjects} total`,
-    },
-    {
-      title: "Assign Subjects",
-      description: "Map subjects to teachers & sections",
-      icon: <Grid className="w-6 h-6" />,
-      path: "/admin/assign-subjects",
-      color: "#f59e0b",
-      lightColor: "#fffbeb",
-      textColor: "text-amber-600",
-      stats: `${stats.totalSections} sections`,
-    },
-    {
-      title: "Fee Management",
-      description: "Manage fees, collect payments",
-      icon: <DollarSign className="w-6 h-6" />,
-      path: "/admin/fees",
-      color: "#16a34a",
-      lightColor: "#f0fdf4",
-      textColor: "text-green-600",
-      stats: "Pending & overdue",
-    },
-  ];
-
-  // Loading Skeleton
-  if (loading && !refreshing) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <Card padding="lg">
-          <Skeleton rows={2} />
-        </Card>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-background rounded-xl animate-pulse"></div>
-                <div className="w-16 h-6 bg-background rounded-full animate-pulse"></div>
-              </div>
-              <div className="h-4 w-24 bg-background rounded animate-pulse mb-2"></div>
-              <div className="h-8 w-32 bg-background rounded animate-pulse"></div>
-            </Card>
-          ))}
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div
+            className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto"
+            style={{
+              borderColor: `${themeColors.primary}30`,
+              borderTopColor: themeColors.primary,
+            }}
+          />
+          <p className="text-xs font-semibold text-ink-soft tracking-wider uppercase">
+            Loading Institution Workspace...
+          </p>
         </div>
       </div>
     );
   }
 
-  // Error UI
   if (error) {
     return (
-      <div className="flex items-center justify-center p-6 min-h-[60vh]">
-        <Card padding="lg" className="max-w-md w-full text-center">
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-10 h-10 text-red-500" />
-          </div>
-          <h2 className="text-2xl font-bold text-ink mb-2">Access Denied</h2>
-          <p className="text-ink-soft mb-6">{error}</p>
-          <Button onClick={() => navigate("/dashboard")}>
-            Go to Dashboard
-          </Button>
-        </Card>
+      <div className="p-8 max-w-lg mx-auto text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-ink">{error}</h2>
+        <Button variant="primary" size="sm" onClick={() => navigate("/login")}>
+          Return to Login
+        </Button>
       </div>
     );
   }
 
+  const adminName = userName || localStorage.getItem("userName") || "Administrator";
+  const tenantName = (typeof tenantInfo?.name === "string" ? tenantInfo.name : "Institution");
+  const subdomain = (typeof tenantInfo?.subdomain === "string" ? tenantInfo.subdomain : "portal");
+  const totalStudents = Number(stats.totalStudents || stats.totalEnrollments || students.length) || 0;
+  const registered = Number(enrollmentStats.byStatus.registered || (totalStudents - stats.pendingRegistrations)) || 0;
+  const pendingRegistrations = Number(stats.pendingRegistrations || enrollmentStats.byStatus.pending || 0);
+  
+  const plan =
+    typeof subscription?.subscription?.planName === "string"
+      ? subscription.subscription.planName
+      : typeof subscription?.plan === "object" && subscription?.plan !== null
+      ? subscription.plan.name || subscription.plan.code || "Professional"
+      : typeof subscription?.plan === "string"
+      ? subscription.plan
+      : "Professional";
+
+  const subStatus =
+    typeof subscription?.subscription?.status === "string"
+      ? subscription.subscription.status
+      : typeof subscription?.status === "string"
+      ? subscription.status
+      : "active";
+
   return (
-    <div className="space-y-6">
-      {/* Welcome Banner with Tenant Info - Dynamic Theme */}
-      <div
-        className="rounded-2xl p-6 text-white"
-        style={{
-          background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-        }}
-      >
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">
-              Welcome, {userName || "Admin"}!
-            </h1>
-            <p className="text-white/80">
-              {tenantInfo?.name || "Your Institution"} • Admin Dashboard
-            </p>
-            {tenantInfo?.subdomain && (
-              <p className="text-white/60 text-sm mt-1">
-                Subdomain: {tenantInfo.subdomain}.yourapp.com
+    <div className="min-h-screen bg-background text-ink pb-12">
+      {/* Shared Dashboard Header Strip */}
+      <DashboardHeader
+        greeting={`Welcome, ${adminName}`}
+        meta={`${tenantName} • ${subdomain}.attendease.com`}
+        highlightAction={
+          subStatus !== "active" ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate("/admin/subscription")}
+              leftIcon={CreditCard}
+            >
+              Manage Subscription
+            </Button>
+          ) : undefined
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadAll(true)}
+            loading={refreshing}
+            leftIcon={RefreshCw}
+          >
+            Sync
+          </Button>
+        }
+      />
+
+      {/* Main Container */}
+      <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+        {/* ── Row 1: Primary Metrics Bento (5-Column) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Total Students — 2 cols, the page's priority */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="md:col-span-2 rounded-2xl bg-surface border border-line/70 p-5 shadow-sm space-y-3"
+          >
+            <StatValue
+              value={totalStudents.toLocaleString()}
+              label="Total Enrolled Students"
+              subtitle={`${registered.toLocaleString()} registered / active`}
+              progress={totalStudents > 0 ? (registered / totalStudents) * 100 : 0}
+              progressColor="primary"
+              variant="hero"
+              accent
+            />
+            {pendingRegistrations > 0 && (
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-line/40">
+                <span className="text-amber-600 font-semibold">
+                  {pendingRegistrations} pending biometric registration
+                </span>
+                <button
+                  onClick={() => {
+                    setStudentFilter("pending");
+                    setShowStudentsModal(true);
+                  }}
+                  className="text-primary font-bold hover:underline"
+                >
+                  Inspect →
+                </button>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Total Teachers — 1 col */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-2 flex flex-col justify-center"
+          >
+            <StatValue
+              value={stats.totalTeachers.toLocaleString()}
+              label="Active Teachers"
+              subtitle="Teaching faculty"
+              variant="compact"
+            />
+          </motion.div>
+
+          {/* Total Subjects — 1 col */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-2 flex flex-col justify-center"
+          >
+            <StatValue
+              value={stats.totalSubjects.toLocaleString()}
+              label="Active Courses"
+              subtitle={`${stats.activeSubjects} in curriculum`}
+              variant="compact"
+            />
+          </motion.div>
+
+          {/* Pending Registrations — 1 col */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            onClick={() => {
+              setStudentFilter("pending");
+              setShowStudentsModal(true);
+            }}
+            className={`rounded-2xl p-5 space-y-2 flex flex-col justify-center cursor-pointer transition ${
+              pendingRegistrations > 0
+                ? "border border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50"
+                : "border border-line/50 bg-surface"
+            }`}
+          >
+            <StatValue
+              value={pendingRegistrations.toLocaleString()}
+              label="Pending Actions"
+              subtitle="Awaiting face enrollment"
+              variant="compact"
+              status={
+                pendingRegistrations > 0
+                  ? { text: "Action Needed", tone: "warning" }
+                  : undefined
+              }
+            />
+          </motion.div>
+        </div>
+
+        {/* ── Row 2: Roster Snapshot [2/3] + Action Panel [1/3] ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Roster Snapshot (2/3 width) */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="lg:col-span-2 rounded-2xl bg-surface border border-line/50 p-5 space-y-4 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-ink">Roster Snapshot</h3>
+                  <p className="text-xs text-ink-soft">
+                    Instant preview of student mappings and face biometric statuses
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStudentFilter("all");
+                    setShowStudentsModal(true);
+                  }}
+                  className="text-xs font-bold"
+                >
+                  View Full Roster ({totalStudents}) →
+                </Button>
+              </div>
+
+              {/* Search & Section Filter Bar */}
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative w-full sm:flex-1">
+                  <Search className="w-3.5 h-3.5 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, roll, section..."
+                    value={snapshotSearch}
+                    onChange={(e) => setSnapshotSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-background border border-line/50 text-xs focus:ring-1 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                {Object.keys(enrollmentStats.bySection).length > 0 && (
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setDashboardSectionFilter("all")}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                        dashboardSectionFilter === "all"
+                          ? "bg-primary text-white"
+                          : "bg-background border border-line/50 text-ink-soft hover:text-ink"
+                      }`}
+                    >
+                      All Sec
+                    </button>
+                    {Object.keys(enrollmentStats.bySection)
+                      .sort()
+                      .map((sec) => (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => setDashboardSectionFilter(sec)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                            dashboardSectionFilter === sec
+                              ? "bg-primary text-white"
+                              : "bg-background border border-line/50 text-ink-soft hover:text-ink"
+                          }`}
+                        >
+                          Sec {sec} ({enrollmentStats.bySection[sec]})
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Roster List */}
+              {snapshotFilteredStudents.length === 0 ? (
+                <EmptyState
+                  icon={<Users className="w-6 h-6 text-primary" />}
+                  title="No students match the criteria"
+                  description="Try adjusting your search or section filter."
+                  className="py-8"
+                />
+              ) : (
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {snapshotFilteredStudents.slice(0, 10).map((student) => {
+                    const hasFace =
+                      student.faceRegistered ||
+                      student.isFaceRegistered ||
+                      (student.faceDescriptor && student.faceDescriptor.length > 0);
+
+                    return (
+                      <div
+                        key={student._id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-background border border-line/50 hover:border-primary/40 transition gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold bg-primary/10 text-primary shrink-0">
+                            {student.firstName?.[0] || student.name?.[0] || "S"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-ink truncate">
+                              {student.fullName || student.name || "Student"}
+                            </p>
+                            <p className="text-[11px] text-ink-soft truncate">
+                              {student.rollNo || student.enrollmentNumber || "Roll N/A"} • Sec {student.section || "A"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge
+                            tone={student.isRegistered ? "success" : "warning"}
+                            size="sm"
+                          >
+                            {student.isRegistered ? "Registered" : "Pending"}
+                          </Badge>
+                          {hasFace ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                              Face ✓
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                              Face ✕
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {snapshotFilteredStudents.length > 10 && (
+              <p className="text-[11px] text-ink-faint pt-2 border-t border-line/40 text-center">
+                Showing 10 of {snapshotFilteredStudents.length} records. Click "View Full Roster" to view all.
               </p>
             )}
-          </div>
-          <Button
-            variant="ghost"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="!bg-white/20 !text-white hover:!bg-white/30 border border-white/30"
-            aria-label="Refresh data"
+          </motion.div>
+
+          {/* Action Panel (1/3 width) */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="space-y-3"
           >
-            <RefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
-
-      {/* Subscription Alert */}
-      {isTrial && trialDaysLeft <= 7 && (
-        <div className={`p-4 rounded-xl flex items-center justify-between gap-4 ${trialDaysLeft <= 3 ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200"
-          }`}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle className={`w-5 h-5 ${trialDaysLeft <= 3 ? "text-red-500" : "text-amber-500"}`} />
-            <div>
-              <p className={`font-medium ${trialDaysLeft <= 3 ? "text-red-700" : "text-amber-700"}`}>
-                {trialDaysLeft === 0 ? "Your trial has expired!" : `${trialDaysLeft} days remaining in your trial`}
-              </p>
-              <p className="text-sm text-ink-soft">
-                {trialDaysLeft === 0
-                  ? "Please upgrade to continue using the platform."
-                  : "Upgrade now to unlock more features and higher limits."}
-              </p>
-            </div>
-          </div>
-          {trialDaysLeft <= 3 ? (
-            <Button
-              variant="danger"
-              onClick={() => navigate("/admin/settings")}
-            >
-              Upgrade Now
-            </Button>
-          ) : (
-            <Button
-              className="!bg-amber-600 hover:!bg-amber-700"
-              onClick={() => navigate("/admin/settings")}
-            >
-              Upgrade Now
-            </Button>
-          )}
-        </div>
-      )}
-
-      {isExpired && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <XCircle className="w-5 h-5 text-red-500" />
-              <div>
-                <p className="font-medium text-red-700">Your subscription has expired!</p>
-                <p className="text-sm text-ink-soft">Please upgrade to continue using the platform.</p>
-              </div>
-            </div>
-            <Button
-              variant="danger"
-              onClick={() => navigate("/pricing")}
-            >
-              Upgrade Now
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Key Metrics Grid */}
-      <motion.div
-        initial="hidden"
-        animate="visible"
-        variants={{
-          hidden: { opacity: 0 },
-          visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
-        }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-      >
-        <motion.div
-          variants={cardItem}
-          className="cursor-pointer"
-          onClick={() => {
-            setStudentFilter('all');
-            setShowStudentsModal(true);
-          }}
-        >
-          <StatCard
-            label="Total Students"
-            value={stats.totalStudents.toLocaleString()}
-            icon={Users}
-            tone="primary"
-            subtitle={`${enrollmentStats.byStatus.registered} registered`}
-            trend="12%"
-            trendDirection="up"
-          />
-        </motion.div>
-        <motion.div variants={cardItem}>
-          <StatCard
-            label="Total Teachers"
-            value={stats.totalTeachers.toLocaleString()}
-            icon={UserCog}
-            tone="success"
-            subtitle={`${stats.totalTeachers} active`}
-            trend="5%"
-            trendDirection="up"
-          />
-        </motion.div>
-        <motion.div variants={cardItem}>
-          <StatCard
-            label="Total Subjects"
-            value={stats.totalSubjects.toLocaleString()}
-            icon={BookOpen}
-            tone="secondary"
-            subtitle={`${stats.activeSubjects} active`}
-            trend="8%"
-            trendDirection="up"
-          />
-        </motion.div>
-        <motion.div
-          variants={cardItem}
-          className="cursor-pointer"
-          onClick={() => {
-            setStudentFilter('pending');
-            setShowStudentsModal(true);
-          }}
-        >
-          <StatCard
-            label="Pending Registrations"
-            value={enrollmentStats.byStatus.pending.toLocaleString()}
-            icon={Clock}
-            tone="warning"
-            subtitle="Awaiting completion"
-            trend="3%"
-            trendDirection="down"
-          />
-        </motion.div>
-      </motion.div>
-
-      {/* Quick Actions Grid */}
-      <div>
-        <h2 className="text-lg font-bold text-ink mb-5 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-ink-faint" />
-          Quick Actions
-        </h2>
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: { opacity: 0 },
-            visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
-          }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          {quickActions.map((action, index) => (
-            <QuickActionCard
-              key={index}
-              {...action}
-              onClick={() => navigate(action.path)}
-              themeColor={themeColors.primary}
-            />
-          ))}
-        </motion.div>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Section Distribution */}
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
-                <Layers className="w-5 h-5" style={{ color: themeColors.primary }} />
-                Enrollment by Section
-              </h3>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(enrollmentStats.bySection).map(([section, count]) => (
+            {[
+              {
+                label: "Upload Enrollments",
+                desc: "Bulk CSV student roster import",
+                stat: `${pendingRegistrations} pending face setup`,
+                icon: Upload,
+                path: "/admin/upload-enrollments",
+              },
+              {
+                label: "Manage Teachers",
+                desc: `${stats.totalTeachers} active faculty members`,
+                stat: "Staff roster & mapping",
+                icon: UserCog,
+                path: "/admin/manage-teachers",
+              },
+              {
+                label: "Manage Subjects",
+                desc: `${stats.totalSubjects} curriculum courses`,
+                stat: "Semester schedules",
+                icon: BookMarked,
+                path: "/admin/manage-subjects",
+              },
+              {
+                label: "Academic Calendar",
+                desc: "Holidays, exams & university events",
+                stat: "Year schedule",
+                icon: CalendarDays,
+                path: "/admin/calendar",
+              },
+            ].map((action, idx) => {
+              const Icon = action.icon;
+              return (
                 <div
-                  key={section}
-                  className="bg-background rounded-xl p-4"
-                  style={{ borderLeft: `4px solid ${themeColors.primary}` }}
+                  key={idx}
+                  onClick={() => navigate(action.path)}
+                  className="rounded-2xl bg-surface border border-line/50 p-4 hover:border-primary/40 transition cursor-pointer space-y-1.5"
                 >
-                  <p className="text-sm text-ink-soft mb-1">Section {section}</p>
-                  <p className="text-2xl font-bold text-ink">{count}</p>
-                  <p className="text-xs text-ink-faint">students</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Recent Enrollments */}
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
-                <GraduationCap className="w-5 h-5" style={{ color: themeColors.primary }} />
-                Recent Enrollments
-              </h3>
-            </div>
-            <div className="space-y-3">
-              {enrollmentStats.recentEnrollments.map((enrollment, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 hover:bg-background rounded-xl transition">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center"
-                      style={{
-                        backgroundColor: `${themeColors.primary}20`,
-                        color: themeColors.primary
-                      }}
-                    >
-                      <span className="font-semibold">
-                        {enrollment.firstName?.[0]}{enrollment.lastName?.[0]}
-                      </span>
+                  <div className="flex items-start justify-between">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                      <Icon className="w-4 h-4" />
                     </div>
-                    <div>
-                      <p className="font-medium text-ink">
-                        {enrollment.firstName} {enrollment.lastName}
-                      </p>
-                      <p className="text-sm text-ink-soft">
-                        {enrollment.enrollmentNumber} • Section {enrollment.section}
-                      </p>
-                    </div>
+                    <ChevronRight className="w-4 h-4 text-ink-faint" />
                   </div>
-                  <div className="text-right">
-                    <Badge tone={enrollment.isRegistered ? 'success' : 'warning'}>
-                      {enrollment.isRegistered ? "Registered" : "Pending"}
-                    </Badge>
-                  </div>
+                  <h4 className="text-xs font-bold text-ink pt-1">{action.label}</h4>
+                  <p className="text-[11px] text-ink-soft">{action.desc}</p>
+                  <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider pt-0.5">
+                    {action.stat}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </Card>
+              );
+            })}
+          </motion.div>
         </div>
 
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Plan & Usage */}
-          <Card>
-            <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5" style={{ color: themeColors.primary }} />
-              Current Plan
-            </h3>
+        {/* ── Row 3: 2-Card Row (Academic Calendar [1/2] + Subscription [1/2]) ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 1. Academic Calendar & Events Snapshot */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-ink-soft">Plan</span>
-                <span className="font-semibold capitalize text-ink">{subscription?.subscription?.plan || "Free"}</span>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4 text-primary" /> Academic Calendar & Schedule
+                </h3>
+                <span className="text-[11px] font-semibold text-ink-faint">
+                  {holidays.length} Events
+                </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-ink-soft">Status</span>
-                <Badge tone={subscription?.subscription?.status === 'active' ? 'success' :
-                  subscription?.subscription?.status === 'trial' ? 'warning' : 'danger'}>
-                  {subscription?.subscription?.status || "Active"}
-                </Badge>
-              </div>
-              {isTrial && (
-                <div className="flex justify-between items-center">
-                  <span className="text-ink-soft">Trial Ends</span>
-                  <span className="text-sm font-medium text-ink">
-                    {new Date(subscription?.subscription?.trialEndsAt).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              <Button
-                className="w-full mt-3 text-sm"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-                }}
-                onClick={() => navigate("/admin/settings")}
-              >
-                Manage Subscription
-              </Button>
-            </div>
-          </Card>
 
-          {/* Registration Status */}
-          <Card>
-            <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-              <Activity className="w-5 h-5" style={{ color: themeColors.primary }} />
-              Registration Status
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-ink-soft">Registered</span>
-                  <span className="font-medium text-ink">{enrollmentStats.byStatus.registered}</span>
-                </div>
-                <div className="w-full bg-line rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full"
-                    style={{
-                      width: `${(enrollmentStats.byStatus.registered / stats.totalStudents) * 100 || 0}%`,
-                      backgroundColor: themeColors.primary
-                    }}
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-ink-soft">Pending</span>
-                  <span className="font-medium text-ink">{enrollmentStats.byStatus.pending}</span>
-                </div>
-                <div className="w-full bg-line rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full"
-                    style={{
-                      width: `${(enrollmentStats.byStatus.pending / stats.totalStudents) * 100 || 0}%`,
-                      backgroundColor: themeColors.secondary
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-              <Activity className="w-5 h-5" style={{ color: themeColors.primary }} />
-              Recent Activity
-            </h3>
-            <div className="space-y-3">
-              {stats.recentActivities.length > 0 ? (
-                stats.recentActivities.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3 p-2 hover:bg-background rounded-lg transition">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{
-                        backgroundColor: `${themeColors.primary}20`,
-                        color: themeColors.primary
-                      }}
-                    >
-                      {activity.icon}
-                    </div>
-                    <div>
-                      <p className="text-sm text-ink">{activity.message}</p>
-                      <p className="text-xs text-ink-faint">{activity.time}</p>
-                    </div>
-                  </div>
-                ))
+              {holidays.length === 0 ? (
+                <EmptyState
+                  icon={<CalendarDays className="w-6 h-6 text-primary" />}
+                  title="No holidays or events configured"
+                  description="Add institution holidays, exams, and semester schedules."
+                  className="py-6"
+                />
               ) : (
-                <p className="text-ink-soft text-sm text-center py-4">No recent activities</p>
+                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                  {holidays.slice(0, 5).map((h, idx) => {
+                    const dateObj = new Date(h.date || h.startDate);
+                    const monthStr = dateObj.toLocaleDateString("en-US", { month: "short" });
+                    const dayNum = dateObj.toLocaleDateString("en-US", { day: "2-digit" });
+                    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+
+                    return (
+                      <div
+                        key={h._id || idx}
+                        className="p-2.5 rounded-xl bg-background border border-line/50 flex items-center gap-3 text-xs hover:border-primary/40 transition"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex flex-col items-center justify-center font-bold shrink-0">
+                          <span className="text-[8px] uppercase leading-none">{monthStr}</span>
+                          <span className="text-xs font-black leading-tight">{dayNum}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-ink truncate">{h.title}</p>
+                          <div className="flex items-center gap-1.5 text-[10px] text-ink-soft mt-0.5">
+                            <span>{dayName}</span>
+                            <span>•</span>
+                            <span className="capitalize font-semibold text-primary">{h.type || "Holiday"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          </Card>
-        </div>
-      </div>
 
-      {/* Student List Modal */}
-      <Modal
-        isOpen={showStudentsModal}
-        onClose={() => {
-          setShowStudentsModal(false);
-          setStudentSearch('');
-        }}
-        title="Student Enrollment List"
-        subtitle="Manage and view all enrolled student registration statuses."
-        size="xl"
-        footer={
-          <div className="flex items-center justify-between w-full text-xs text-ink-faint">
-            <span>Showing {filteredStudents.length} of {students.length} students</span>
             <Button
               variant="outline"
-              onClick={() => {
-                setShowStudentsModal(false);
-                setStudentSearch('');
-              }}
+              size="sm"
+              onClick={() => navigate("/admin/calendar")}
+              className="w-full text-xs mt-2"
             >
-              Close
+              + Manage Academic Calendar →
             </Button>
+          </motion.div>
+
+          {/* 2. Subscription Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-primary" /> Subscription & Tier
+              </h3>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex justify-between items-center p-3 rounded-xl bg-background border border-line/50">
+                  <div>
+                    <p className="font-bold text-ink capitalize">{plan}</p>
+                    <p className="text-[11px] text-ink-soft">Tier allocation</p>
+                  </div>
+                  <Badge tone={subStatus === "active" ? "success" : "warning"} size="sm">
+                    {subStatus}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-background border border-line/50">
+                    <span className="text-ink-soft block">Active Students</span>
+                    <span className="font-bold text-ink text-xs">{totalStudents}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-background border border-line/50">
+                    <span className="text-ink-soft block">Faculty Seats</span>
+                    <span className="font-bold text-ink text-xs">{stats.totalTeachers}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/admin/subscription")}
+              className="w-full text-xs mt-2"
+            >
+              Manage Subscription & Invoices →
+            </Button>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* ── Full Student Modal ── */}
+      <Modal
+        isOpen={showStudentsModal}
+        onClose={() => setShowStudentsModal(false)}
+        size="2xl"
+        title={
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-primary" />
+            <span>Institution Student Directory</span>
+            <Badge tone="primary" size="sm">
+              {filteredStudents.length} Students
+            </Badge>
           </div>
         }
       >
         {/* Modal Filters & Search */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between mb-4">
           {/* Search Input */}
-          <div className="relative w-full sm:w-80">
+          <div className="relative w-full sm:w-72">
             <input
               type="text"
               value={studentSearch}
               onChange={(e) => setStudentSearch(e.target.value)}
-              placeholder="Search by name, email, roll number..."
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-xl text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
+              placeholder="Search by name, roll, section..."
+              className="w-full pl-9 pr-3 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-xl text-xs focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all font-medium"
             />
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint">
-              <Search className="w-4 h-4" />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint">
+              <Search className="w-3.5 h-3.5" />
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex gap-1.5 bg-surface p-1 rounded-xl border border-line shadow-sm w-full sm:w-auto justify-center">
-            {[
-              { id: 'all', label: 'All Students' },
-              { id: 'registered', label: 'Registered' },
-              { id: 'pending', label: 'Pending' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setStudentFilter(tab.id)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${studentFilter === tab.id
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-ink-soft hover:bg-background'
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Section Filter Dropdown */}
+            {Object.keys(enrollmentStats.bySection).length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={selectedSectionFilter}
+                  onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-surface border border-line rounded-xl text-xs font-bold text-ink focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="all">All Sections</option>
+                  {Object.keys(enrollmentStats.bySection)
+                    .sort()
+                    .map((sec) => (
+                      <option key={sec} value={sec}>
+                        Section {sec} ({enrollmentStats.bySection[sec]})
+                      </option>
+                    ))}
+                </select>
+                {selectedSectionFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSectionFilter("all")}
+                    className="px-2 py-1 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-xs font-bold transition"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Filter Tabs */}
+            <div className="flex gap-1 bg-surface-alt p-1 rounded-xl border border-line shadow-sm">
+              {[
+                { id: "all", label: `All (${students.length})` },
+                {
+                  id: "registered",
+                  label: `Registered (${students.filter((s) => s.isRegistered).length})`,
+                },
+                {
+                  id: "pending",
+                  label: `Pending (${students.filter((s) => !s.isRegistered).length})`,
+                },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStudentFilter(tab.id)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    studentFilter === tab.id
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-ink-soft hover:bg-surface hover:text-ink"
                   }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Student Table */}
-        <div className="max-h-[50vh] overflow-y-auto">
-          {filteredStudents.length === 0 ? (
+        <div className="max-h-[52vh] overflow-y-auto pr-1">
+          {loadingStudents ? (
+            <div className="py-12 text-center text-ink-soft space-y-2">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary" />
+              <p className="text-xs font-semibold">Loading student enrollment records...</p>
+            </div>
+          ) : filteredStudents.length === 0 ? (
             <EmptyState
               title="No students found"
-              description="Try adjusting your filters or search keywords."
+              description="No enrolled students match your search or filter criteria."
               icon={Users}
             />
           ) : (
             <Table
               columns={[
-                { header: 'Name', cell: (row) => <span className="font-semibold text-ink">{row.firstName} {row.lastName}</span> },
-                { header: 'Enrollment No', cell: (row) => <span className="text-ink-soft font-mono text-xs">{row.enrollmentNumber}</span> },
-                { header: 'Email', cell: (row) => <span className="text-ink-soft">{row.email}</span> },
-                { header: 'Section', cell: (row) => <span className="font-medium text-ink">Section {row.section}</span> },
                 {
-                  header: 'Status',
-                  cell: (row) => row.isRegistered ? (
-                    <Badge tone="success" dot><CheckCircle className="w-3.5 h-3.5" /> Registered</Badge>
-                  ) : (
-                    <Badge tone="warning" dot><Clock className="w-3.5 h-3.5" /> Pending</Badge>
-                  )
+                  header: "Student Name",
+                  cell: (row) => (
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0"
+                        style={{
+                          backgroundColor: `${themeColors.primary}20`,
+                          color: themeColors.primary,
+                        }}
+                      >
+                        {row.firstName?.[0] || row.name?.[0] || "S"}
+                      </div>
+                      <div>
+                        <p className="font-bold text-ink text-xs">
+                          {row.fullName || `${row.firstName || ""} ${row.lastName || ""}`.trim() || row.name}
+                        </p>
+                        <p className="text-[11px] text-ink-soft">{row.email || "No Email"}</p>
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  header: "Enrollment / Roll No",
+                  cell: (row) => (
+                    <span className="font-mono text-xs font-semibold text-ink bg-surface-alt px-2 py-0.5 rounded-lg border border-line">
+                      {row.enrollmentNumber || row.rollNo || "N/A"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Section",
+                  cell: (row) => (
+                    <span className="font-bold text-xs text-ink px-2.5 py-1 bg-surface-alt border border-line rounded-lg">
+                      Section {row.section || "A"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Face Biometrics",
+                  cell: (row) => {
+                    const hasFace =
+                      row.faceRegistered ||
+                      row.isFaceRegistered ||
+                      (row.faceDescriptor && row.faceDescriptor.length > 0);
+                    return hasFace ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        <CheckCircle className="w-3 h-3" /> Face Enrolled
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <Clock className="w-3 h-3" /> Needs Face
+                      </span>
+                    );
+                  },
+                },
+                {
+                  header: "Registration Status",
+                  cell: (row) =>
+                    row.isRegistered ? (
+                      <Badge tone="success" dot>
+                        <CheckCircle className="w-3 h-3 mr-1" /> Registered
+                      </Badge>
+                    ) : (
+                      <Badge tone="warning" dot>
+                        <Clock className="w-3 h-3 mr-1" /> Pending
+                      </Badge>
+                    ),
                 },
               ]}
               data={filteredStudents}
@@ -816,36 +924,4 @@ const AdminDashboard = ({ role, userId, userName, userEmail }) => {
       </Modal>
     </div>
   );
-};
-
-// ===== Quick Action Card Component =====
-const QuickActionCard = ({ title, description, icon, lightColor, textColor, stats, onClick, themeColor }) => {
-  return (
-    <motion.div variants={cardItem}>
-      <Card
-        hoverable
-        onClick={onClick}
-        className="cursor-pointer group h-full"
-      >
-        <div className="flex items-start justify-between mb-4">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-300"
-            style={{ backgroundColor: `${themeColor || '#6366f1'}15`, color: themeColor || '#6366f1' }}
-          >
-            <div>{icon}</div>
-          </div>
-          <div className="p-1.5 bg-background rounded-lg group-hover:bg-line/60 transition-colors">
-            <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-ink transition-colors" />
-          </div>
-        </div>
-        <div>
-          <h3 className="font-bold text-ink mb-1 tracking-tight">{title}</h3>
-          <p className="text-sm font-medium text-ink-soft mb-4">{description}</p>
-          <p className="text-xs font-bold text-ink-faint uppercase tracking-wider">{stats}</p>
-        </div>
-      </Card>
-    </motion.div>
-  );
-};
-
-export default AdminDashboard;
+}

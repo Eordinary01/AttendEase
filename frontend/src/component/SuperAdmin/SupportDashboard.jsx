@@ -25,12 +25,13 @@ import {
   InboxIcon,
 } from 'lucide-react';
 import api from '../../utils/api';
+import { logError } from '../../utils/logger';
 import Button from '../common/ui/Button';
 import Card from '../common/ui/Card';
 import Badge from '../common/ui/Badge';
 import StatCard from '../common/ui/StatCard';
-import PageHeader from '../common/ui/PageHeader';
-import { Select, Input } from '../common/ui/Input';
+import DashboardHeader from '../common/ui/DashboardHeader';
+import Input, { Select } from '../common/ui/Input';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -108,11 +109,12 @@ const SupportDashboard = () => {
         setSummary(res.data.data?.summary || {});
       }
     } catch (err) {
+      logError("Fetch Tickets", err);
       setError(err.response?.data?.message || 'Failed to load tickets.');
     } finally {
       setLoading(false);
     }
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
 
@@ -137,6 +139,7 @@ const SupportDashboard = () => {
       showSuccess(`Ticket status updated to "${newStatus}".`);
       fetchTickets();
     } catch (err) {
+      logError("Update Ticket Status", err);
       setError(err.response?.data?.message || 'Failed to update status.');
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -155,6 +158,7 @@ const SupportDashboard = () => {
       showSuccess('Note added.');
       fetchTickets();
     } catch (err) {
+      logError("Add Ticket Note", err);
       setError(err.response?.data?.message || 'Failed to add note.');
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -172,9 +176,10 @@ const SupportDashboard = () => {
     try {
       await api.post(`/support/admin/${ticket._id}/resolve-reactivate`,
         { resolution });
-      showSuccess(`✅ Ticket resolved and "${ticket.tenantName}" reactivated on free plan!`);
+      showSuccess(`Ticket resolved and "${ticket.tenantName}" reactivated on free plan!`);
       fetchTickets();
     } catch (err) {
+      logError("Resolve & Reactivate Ticket", err);
       setError(err.response?.data?.message || 'Failed to resolve and reactivate.');
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -186,17 +191,12 @@ const SupportDashboard = () => {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Support Dashboard"
-        subtitle="Review and resolve tenant support tickets."
-        icon={LifeBuoy}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Support Helpdesk Triage"
+        meta="Review, escalate and resolve institution support tickets and billing inquiries"
         actions={
-          <Button onClick={fetchTickets} variant="outline" leftIcon={RefreshCw}>
+          <Button onClick={fetchTickets} variant="subtle" size="sm" leftIcon={RefreshCw}>
             Refresh
           </Button>
         }
@@ -207,47 +207,51 @@ const SupportDashboard = () => {
         <StatCard icon={InboxIcon}      label="Open"        value={summary.open        || 0} tone="primary" />
         <StatCard icon={TrendingUp}     label="In Progress" value={summary.inProgress  || 0} tone="warning" />
         <StatCard icon={CheckCheck}     label="Resolved"    value={summary.resolved    || 0} tone="success" />
-        <StatCard icon={Crown}          label="Total"       value={(summary.open || 0) + (summary.inProgress || 0) + (summary.resolved || 0)} tone="secondary" />
+        <StatCard icon={Crown}          label="Total Handled" value={(summary.open || 0) + (summary.inProgress || 0) + (summary.resolved || 0)} tone="secondary" />
       </div>
 
       {/* Banners */}
       <AnimatePresence>
         {successMsg && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="rounded-xl p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />{successMsg}
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="rounded-xl p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMsg}</span>
           </motion.div>
         )}
         {error && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="rounded-xl p-4 bg-red-50 border border-red-200 text-red-700 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />{error}
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="rounded-xl p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-medium flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Filters */}
-      <Card padding="md">
-        <div className="flex flex-wrap gap-3 items-center">
-          <Filter className="w-4 h-4 text-ink-faint" />
+      <Card padding="md" bordered>
+        <div className="flex flex-wrap gap-2.5 items-center">
+          <Filter className="w-3.5 h-3.5 text-ink-faint mr-1" />
           {[
             { key: 'status',   options: STATUSES },
             { key: 'priority', options: PRIORITIES },
             { key: 'category', options: CATEGORIES },
           ].map(({ key, options }) => (
-            <Select
+            <select
               key={key}
               value={filters[key]}
               onChange={e => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
-              className="w-auto min-w-[160px] capitalize"
+              className="px-2.5 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 capitalize cursor-pointer"
             >
               {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
+            </select>
           ))}
           {(filters.status || filters.priority || filters.category) && (
-            <button onClick={() => setFilters({ status: '', priority: '', category: '' })}
-              className="text-xs text-ink-faint hover:text-red-500 flex items-center gap-1 transition">
-              <X className="w-3 h-3" /> Clear
+            <button
+              onClick={() => setFilters({ status: '', priority: '', category: '' })}
+              className="text-xs text-ink-faint hover:text-rose-600 flex items-center gap-1 transition ml-2 cursor-pointer font-medium"
+            >
+              <X className="w-3 h-3" /> Clear Filters
             </button>
           )}
         </div>
@@ -454,7 +458,7 @@ const SupportDashboard = () => {
           </div>
         )}
       </Card>
-    </motion.div>
+    </div>
   );
 };
 

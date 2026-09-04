@@ -22,7 +22,7 @@ import api from "../../utils/api";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import Button from "../common/ui/Button";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Table from "../common/ui/Table";
 import StatCard from "../common/ui/StatCard";
@@ -89,7 +89,7 @@ const AttendanceHistory = ({
         setSubjects(normalizedSubList);
 
         if (showStudentSelector || isStaff) {
-          const stuRes = await api.get("/users/students");
+          const stuRes = await api.get("/users/students?limit=2000");
           const stuData = stuRes.data;
           const stuList = Array.isArray(stuData)
             ? stuData
@@ -115,7 +115,7 @@ const AttendanceHistory = ({
       setLoading(true);
       const params = new URLSearchParams();
       params.set("page", page);
-      params.set("limit", isStaff && viewMode === "sessions" ? 100 : 20);
+      params.set("limit", isStaff && viewMode === "sessions" ? 1000 : 50);
       if (selectedStudent) params.set("studentId", selectedStudent);
       if (selectedSubject) params.set("subjectId", selectedSubject);
       if (selectedStatus) params.set("status", selectedStatus);
@@ -394,17 +394,16 @@ const AttendanceHistory = ({
   ];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Attendance History"
-        subtitle="Complete log of class sessions, student attendance status, and performance statistics"
-        icon={ClipboardCheck}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Attendance History & Audit Registry"
+        meta="Comprehensive logs of classroom attendance sessions, roll records, and aggregate performance"
         actions={
           <div className="flex gap-2">
             <Button variant="subtle" size="sm" onClick={fetchHistory} leftIcon={RefreshCw} loading={loading}>
               Refresh
             </Button>
-            <Button size="sm" onClick={handleExportCSV} leftIcon={Download} disabled={records.length === 0 || exporting}>
+            <Button variant="primary" size="sm" onClick={handleExportCSV} leftIcon={Download} disabled={records.length === 0 || exporting}>
               Export CSV
             </Button>
           </div>
@@ -412,7 +411,7 @@ const AttendanceHistory = ({
       />
 
       {/* Summary Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <StatCard
           label="Total Classes"
           value={stats.totalClasses}
@@ -420,19 +419,19 @@ const AttendanceHistory = ({
           tone="primary"
         />
         <StatCard
-          label="Present"
+          label="Present Attendance"
           value={`${stats.presentCount} (${stats.percentage || 0}%)`}
           icon={CheckCircle2}
           tone="success"
         />
         <StatCard
-          label="Absent"
+          label="Absent Recorded"
           value={stats.absentCount}
           icon={XCircle}
           tone="danger"
         />
         <StatCard
-          label="On Leave"
+          label="Approved Leave"
           value={stats.leaveCount}
           icon={Clock}
           tone="warning"
@@ -647,7 +646,7 @@ const AttendanceHistory = ({
           </div>
         )}
       </Modal>
-    </motion.div>
+    </div>
   );
 };
 

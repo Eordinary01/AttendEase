@@ -1,0 +1,435 @@
+/* ==========================================================================
+   ATTENDEASE AI BIOMETRIC FACE ATTENDANCE SYSTEM
+   Token-Aligned, High-Tech Biometric Viewport & Workstation Styles
+   ========================================================================== */
+
+/* Root CSS Variables for Face Attendance Theme */
+:root {
+  --face-primary: #6366f1;
+  --face-emerald: #10b981;
+  --face-cyan: #06b6d4;
+  --face-amber: #f59e0b;
+  --face-red: #ef4444;
+  --face-dark-bg: #090d16;
+  --face-card-bg: rgba(15, 23, 42, 0.75);
+  --face-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ==========================================================================
+   1. Camera Viewfinder & HUD Container
+   ========================================================================== */
+
+.cam-container {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, #0d1527 0%, #050811 100%);
+  aspect-ratio: 4/3;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 640px) {
+  .cam-container {
+    aspect-ratio: 16/10;
+  }
+}
+
+.cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);
+  filter: contrast(1.04) brightness(1.02);
+}
+
+.cam-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transform: scaleX(-1);
+  z-index: 10;
+}
+
+/* Subtle Cyber Scanning Grid Texture Overlay */
+.cam-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.35;
+}
+
+/* HUD Top Status Bar */
+.hud-top-bar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.hud-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+}
+
+.hud-pill.live {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.hud-pill.detecting {
+  background: rgba(6, 182, 212, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+}
+
+.hud-pill.challenge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.hud-pill.neutral {
+  background: rgba(15, 23, 42, 0.65);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-fps {
+  background: rgba(0, 0, 0, 0.65);
+  color: #34d399;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Floating Center HUD Reticle */
+.face-viewfinder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 170px;
+  height: 170px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 24px;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 11;
+}
+
+.face-viewfinder.verified {
+  border: 2px solid #10b981;
+  box-shadow: 0 0 35px rgba(16, 185, 129, 0.25), inset 0 0 20px rgba(16, 185, 129, 0.15);
+}
+
+.face-viewfinder.unrecognized {
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 35px rgba(239, 68, 68, 0.25);
+}
+
+.face-viewfinder.challenge {
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 35px rgba(245, 158, 11, 0.25);
+}
+
+/* Guide Tag Below Viewfinder */
+.viewfinder-guide-text {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 6px 16px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewfinder-guide-text.verified {
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(6, 78, 59, 0.9);
+}
+
+.viewfinder-guide-text.unrecognized {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(127, 29, 29, 0.9);
+}
+
+.viewfinder-guide-text.challenge {
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(120, 53, 15, 0.9);
+}
+
+/* Liveness Indicator Bar */
+.liveness-bar-container {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.liveness-bar {
+  height: 100%;
+  background: #10b981;
+  border-radius: 9999px;
+  transition: width 0.25s ease-out;
+}
+
+/* Screen Capture Flash Animation */
+.am-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.4) 0%, rgba(16, 185, 129, 0.08) 80%);
+  pointer-events: none;
+  animation: flashFade 0.45s ease-out forwards;
+  z-index: 25;
+}
+
+@keyframes flashFade {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+
+/* ==========================================================================
+   2. Multi-Face Live Roster & Layout Cards
+   ========================================================================== */
+
+.scanner-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .scanner-grid {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+.roster-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, rgba(226, 232, 240, 0.8));
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .roster-card {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.roster-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -4px rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.roster-card.marked {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.dark .roster-card.marked {
+  background: rgba(6, 78, 59, 0.25);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.roster-card.registered {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+/* Live Detected Face Panel */
+.det-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.det-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 16px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 5-Second Countdown Progress Bar */
+.countdown-bar-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.countdown-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  transition: width 0.95s linear;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+}
+
+/* Cooldown Badge & Style */
+.cooldown-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Countdown Circular Chip */
+.countdown-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1.5px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  animation: countdownPulse 1s ease-in-out infinite;
+}
+
+@keyframes countdownPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(16, 185, 129, 0.2); }
+  50% { transform: scale(1.03); box-shadow: 0 0 14px rgba(16, 185, 129, 0.4); }
+}
+
+/* Drawer / Slide-Over Transitions */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 50;
+  transition: opacity 0.3s ease;
+}
+
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface, #ffffff);
+  border-left: 1px solid var(--line, rgba(226, 232, 240, 0.8));
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.25);
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .drawer-panel {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Glow Animation Badge */
+.glow-badge {
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  animation: glowPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.25); }
+  100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); }
+}
+
+/* Pulse dot */
+.pulse-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Directional Vertical Text for Multi-Angle HUD Prompts */
+.writing-mode-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.1em;
+}

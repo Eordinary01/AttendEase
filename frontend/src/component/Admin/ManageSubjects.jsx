@@ -30,7 +30,7 @@ import Button from "../common/ui/Button";
 import Badge from "../common/ui/Badge";
 import Input, { Select, Textarea } from "../common/ui/Input";
 import EmptyState from "../common/ui/EmptyState";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import SubjectCard from "../Subjects/SubjectsCard";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
@@ -95,7 +95,7 @@ const ManageSubjects = () => {
   const [tenantInfo, setTenantInfo] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [viewMode, setViewMode] = useState('grid');
 
   const { modalProps, openUpgradeForError } = useUpgradeModal();
 
@@ -112,13 +112,9 @@ const ManageSubjects = () => {
 
   const [courses, setCourses] = useState([]);
 
-
-
-  // Theme colors
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    light: colors?.primary ? `${colors.primary}20` : '#eef2ff',
+    primary: colors?.primary || '#7c3aed',
+    secondary: colors?.secondary || '#06b6d4',
   };
 
   useEffect(() => {
@@ -132,12 +128,11 @@ const ManageSubjects = () => {
       const res = await api.get("/academic/courses");
       setCourses(res.data?.data || []);
     } catch (err) {
-      /* courses may not be configured — ignore */
+      /* courses optional */
     }
   };
 
 
-  // Clear messages after 5 seconds
   useEffect(() => {
     if (error || successMessage) {
       const timer = setTimeout(() => {
@@ -167,7 +162,6 @@ const ManageSubjects = () => {
         const response = await api.get('/admin/subjects');
         subjectsList = response.data.data || [];
       } catch (err) {
-        // Teachers with subjects:write don't have admin access — use their subject view.
         const fallback = await api.get('/subjects/all');
         subjectsList = (fallback.data?.allActiveSubjects || []).map(s => ({
           _id: s.id,
@@ -252,36 +246,83 @@ const ManageSubjects = () => {
     });
 
     scopedSubjects.forEach((s) => {
-      const semNum = parseInt(String(s.semester || "").replace(/\D/g, ""), 10);
-      const year = s.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
-      if (year) years.add(year);
-    });
-
-    const courseObj = filterCourse
-      ? courses.find(c => String(c.code || "").toUpperCase() === filterCourse.toUpperCase() || String(c._id) === filterCourse)
-      : null;
-    const courseList = courseObj ? [courseObj] : courses;
-    courseList.forEach((c) => {
-      let maxYears = c.durationYears || 4;
-      if (Array.isArray(c.branches)) {
-        c.branches.forEach((b) => {
-          if (b.durationYears) maxYears = Math.max(maxYears, b.durationYears);
-          if (b.totalSemesters) maxYears = Math.max(maxYears, Math.ceil(b.totalSemesters / 2));
-        });
-      }
-      for (let i = 1; i <= maxYears; i++) {
-        years.add(i);
+      const sem = parseInt(s.semester, 10);
+      if (!isNaN(sem) && sem > 0) {
+        years.add(Math.ceil(sem / 2));
       }
     });
 
     if (years.size === 0) {
-      for (let i = 1; i <= 4; i++) {
-        years.add(i);
-      }
+      return [1, 2, 3, 4];
     }
-
     return Array.from(years).sort((a, b) => a - b);
   }, [subjects, courses, filterCourse, filterBranch]);
+
+  const availableBranches = useMemo(() => {
+    const branches = new Set();
+    courses.forEach((c) => {
+      if (filterCourse && String(c.code || "").toUpperCase() !== filterCourse.toUpperCase() && String(c._id) !== filterCourse) return;
+      if (Array.isArray(c.branches)) {
+        c.branches.forEach((b) => {
+          if (b.code) branches.add(b.code);
+        });
+      }
+    });
+
+    subjects.forEach((s) => {
+      if (filterCourse && String(s.courseCode || "").toUpperCase() !== filterCourse.toUpperCase() && String(s.courseId || "") !== filterCourse) return;
+      if (s.branch) branches.add(s.branch);
+    });
+
+    return Array.from(branches).sort();
+  }, [courses, subjects, filterCourse]);
+
+  const filteredSubjects = useMemo(() => {
+    return subjects.filter((s) => {
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const codeMatch = s.subjectCode?.toLowerCase().includes(term);
+        const nameMatch = s.subjectName?.toLowerCase().includes(term);
+        const courseMatch = s.courseCode?.toLowerCase().includes(term);
+        if (!codeMatch && !nameMatch && !courseMatch) return false;
+      }
+
+      if (filterCourse) {
+        const matchCode = String(s.courseCode || "").toUpperCase() === filterCourse.toUpperCase();
+        const matchId = String(s.courseId || "") === filterCourse;
+        if (!matchCode && !matchId) return false;
+      }
+
+      if (filterBranch && !isBranchMatch(s.branch, filterBranch, courses, { excludeUnassigned: true })) {
+        return false;
+      }
+
+      if (filterSemester && String(s.semester) !== String(filterSemester)) {
+        return false;
+      }
+
+      if (filterYear) {
+        const sem = parseInt(s.semester, 10);
+        if (isNaN(sem) || Math.ceil(sem / 2) !== parseInt(filterYear, 10)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [subjects, searchTerm, filterCourse, filterBranch, filterSemester, filterYear, courses]);
+
+  const paginationInfo = useMemo(() => ({
+    page,
+    limit: pageSize,
+    total: filteredSubjects.length,
+    pages: Math.ceil(filteredSubjects.length / pageSize) || 1,
+  }), [page, pageSize, filteredSubjects.length]);
+
+  const paginatedSubjects = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredSubjects.slice(start, start + pageSize);
+  }, [filteredSubjects, page, pageSize]);
 
   const subjectBranches = useMemo(() => {
     if (!formData.courseId) return [];
@@ -289,20 +330,6 @@ const ManageSubjects = () => {
     if (!selectedCourseObj || !Array.isArray(selectedCourseObj.branches)) return [];
     return selectedCourseObj.branches.filter(b => b.isActive !== false);
   }, [formData.courseId, courses]);
-
-  const availableBranches = useMemo(() => {
-    const set = new Set();
-    const courseObj = filterCourse
-      ? courses.find(c => String(c.code || "").toUpperCase() === filterCourse.toUpperCase() || String(c._id) === filterCourse)
-      : null;
-    if (courseObj && Array.isArray(courseObj.branches)) {
-      courseObj.branches.filter(b => b.isActive !== false).forEach(b => b.code && set.add(b.code));
-    } else {
-      subjects.forEach(s => s.branch && set.add(s.branch));
-      courses.forEach(c => Array.isArray(c.branches) && c.branches.forEach(b => b.code && set.add(b.code)));
-    }
-    return Array.from(set).sort();
-  }, [subjects, courses, filterCourse]);
 
   const handleCourseChange = (cid) => {
     const selectedCourseObj = courses.find(c => String(c._id) === String(cid));
@@ -314,77 +341,6 @@ const ManageSubjects = () => {
       branch: activeBranches.length > 0 ? activeBranches[0].code : "",
     }));
   };
-
-  const filteredSubjects = useMemo(() => {
-    let filtered = [...subjects];
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.subjectName?.toLowerCase().includes(term) ||
-        s.subjectCode?.toLowerCase().includes(term) ||
-        s.courseCode?.toLowerCase().includes(term) ||
-        s.branch?.toLowerCase().includes(term) ||
-        String(s.semester || "")?.toLowerCase().includes(term)
-      );
-    }
-
-    if (filterCourse) {
-      filtered = filtered.filter(s =>
-        String(s.courseCode || "").toUpperCase() === filterCourse.toUpperCase() ||
-        String(s.courseId || "") === filterCourse
-      );
-    }
-
-    if (filterBranch) {
-      filtered = filtered.filter(s => isBranchMatch(s.branch, filterBranch, courses, { excludeUnassigned: true }));
-    }
-
-    if (filterSemester) {
-      filtered = filtered.filter(s => String(s.semester) === String(filterSemester));
-    }
-
-    if (filterYear) {
-      filtered = filtered.filter(s => {
-        const semNum = parseInt(String(s.semester || "").replace(/\D/g, ""), 10);
-        const year = s.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
-        return Number(year) === Number(filterYear);
-      });
-    }
-
-    return filtered;
-  }, [subjects, courses, searchTerm, filterCourse, filterBranch, filterSemester, filterYear]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, filterCourse, filterBranch, filterSemester, filterYear]);
-
-  useEffect(() => {
-    if (filterBranch && availableBranches.length > 0 && !availableBranches.includes(filterBranch)) {
-      setFilterBranch("");
-    }
-  }, [filterCourse, filterBranch, availableBranches]);
-
-  useEffect(() => {
-    if (filterSemester && availableSemesters.length > 0 && !availableSemesters.includes(filterSemester)) {
-      setFilterSemester("");
-    }
-    if (filterYear && availableYears.length > 0 && !availableYears.includes(Number(filterYear))) {
-      setFilterYear("");
-    }
-  }, [filterCourse, filterBranch, filterSemester, filterYear, availableSemesters, availableYears]);
-
-  const paginationInfo = useMemo(() => ({
-    page,
-    limit: pageSize,
-    total: filteredSubjects.length,
-    pages: Math.ceil(filteredSubjects.length / pageSize) || 1
-  }), [page, pageSize, filteredSubjects.length]);
-
-  const paginatedSubjects = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredSubjects.slice(start, start + pageSize);
-  }, [filteredSubjects, page, pageSize]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -419,7 +375,6 @@ const ManageSubjects = () => {
       const response = await api.post('/subjects/create', formData);
 
       if (response.data.success) {
-        // Replace optimistic with real data
         const newSubject = response.data.subject;
         setSubjects(prev =>
           prev.map(s =>
@@ -430,7 +385,6 @@ const ManageSubjects = () => {
         setSuccessMessage(msg);
         toastSuccess(msg);
 
-        // Reset form
         setFormData({
           subjectCode: "",
           subjectName: "",
@@ -484,19 +438,17 @@ const ManageSubjects = () => {
     return subject.assignments?.length || 0;
   };
 
-  // Export subjects as CSV
   const exportSubjects = () => {
-    const headers = ['Subject Code', 'Subject Name', 'Semester', 'Credits', 'Course Code', 'Status', 'Teachers'];
+    const headers = ['Subject Code', 'Subject Name', 'Semester', 'Course', 'Branch', 'Credits', 'Status'];
     const rows = filteredSubjects.map(s => [
-      s.subjectCode,
-      s.subjectName,
-      s.semester,
-      s.credits || 0,
-      s.courseCode || '',
-      s.isActive ? 'Active' : 'Inactive',
-      getTeacherCount(s)
+      `"${s.subjectCode || ''}"`,
+      `"${s.subjectName || ''}"`,
+      `"${s.semester || ''}"`,
+      `"${s.courseCode || ''}"`,
+      `"${s.branch || ''}"`,
+      s.credits || 4,
+      s.isActive ? 'Active' : 'Inactive'
     ]);
-
     const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -509,70 +461,58 @@ const ManageSubjects = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Manage Subjects"
-        subtitle={`${filteredSubjects.length} subject${filteredSubjects.length !== 1 ? 's' : ''} found`}
-        icon={BookOpen}
+      <DashboardHeader
+        greeting="Subject Catalog & Course Matrix"
+        meta={`Managing ${filteredSubjects.length} subjects for ${tenantInfo?.name || "your campus"}`}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {tenantInfo && (
-              <span
-                className="px-3 py-1.5 rounded-full text-sm flex items-center gap-1 text-white"
-                style={{ backgroundColor: themeColors.primary }}
-              >
-                <Building2 className="w-3 h-3" />
-                {tenantInfo.name}
-              </span>
-            )}
-            {/* View Toggle */}
-            <div className="flex bg-surface rounded-lg shadow-sm p-1 border border-line">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* View Mode Toggle */}
+            <div className="flex bg-surface rounded-xl p-1 border border-line/50">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded transition ${viewMode === 'grid'
-                  ? 'text-white'
-                  : 'text-ink-soft hover:bg-background'
-                  }`}
-                style={viewMode === 'grid' ? { backgroundColor: themeColors.primary } : {}}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'text-ink-soft hover:text-ink'
+                }`}
                 aria-label="Grid view"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
+                Grid
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded transition ${viewMode === 'list'
-                  ? 'text-white'
-                  : 'text-ink-soft hover:bg-background'
-                  }`}
-                style={viewMode === 'list' ? { backgroundColor: themeColors.primary } : {}}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'list'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'text-ink-soft hover:text-ink'
+                }`}
                 aria-label="List view"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                List
               </button>
             </div>
+
             <Button
-              variant="outline"
+              variant="subtle"
+              size="sm"
               leftIcon={Upload}
               onClick={() => setShowBulkModal(true)}
             >
-              Bulk Operations
+              Bulk Import
             </Button>
             <Button
-              variant="outline"
+              variant="subtle"
+              size="sm"
               leftIcon={Download}
               onClick={exportSubjects}
             >
               Export
             </Button>
             <Button
+              variant="primary"
+              size="sm"
               leftIcon={Plus}
               onClick={() => setShowForm(true)}
-              style={{
-                background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-              }}
             >
               Add Subject
             </Button>
@@ -581,24 +521,24 @@ const ManageSubjects = () => {
       />
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          {error}
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
       {successMessage && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-green-600 flex items-center gap-2">
-          <Check className="w-5 h-5 flex-shrink-0" />
-          {successMessage}
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-medium flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0" />
+          <span>{successMessage}</span>
         </div>
       )}
 
-      {/* Filters */}
-      <Card>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Filters Toolbar */}
+      <Card padding="md" bordered>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
             <input
               type="text"
               placeholder="Search by name, code or course..."

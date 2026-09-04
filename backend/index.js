@@ -66,11 +66,11 @@ app.use(helmet({
   contentSecurityPolicy: isProd ? {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React needs unsafe-inline/eval in dev
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", process.env.FRONTEND_URL || "*"],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || "*", "https://cdn.jsdelivr.net"],
       frameAncestors: ["'none'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
@@ -99,7 +99,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id', 'X-Request-ID'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Tenant-Id',
+    'X-Request-ID',
+    'x-offline-sync',
+    'X-Offline-Sync',
+    'x-device-fingerprint',
+    'X-Device-Fingerprint',
+  ],
   exposedHeaders: ['X-Request-ID'],
   credentials: true
 }));
@@ -171,12 +180,14 @@ const roleRoutes   = require('./routes/roleRoutes');
 const parentRoutes = require('./routes/parentRoutes');
 const timetableRoutes = require('./routes/timetableRoutes');
 const examRoutes = require('./routes/examRoutes');
+const examSeatingRoutes = require('./routes/examSeatingRoutes');
 const feeRoutes = require('./routes/feeRoutes');
 const planRoutes = require('./routes/planRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const academicRoutes = require('./routes/academicRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const calendarRoute = require('./routes/calendarRoute');
 
 // Protected routes (require tenant resolution)
 app.use("/api/users", userRoute);
@@ -193,6 +204,8 @@ app.use('/api/support',      supportRoutes);    // Support tickets (bypass-liste
 app.use('/api/roles',        roleRoutes);       // Custom role management
 app.use('/api/parent',       parentRoutes);     // Parent portal (read-only)
 app.use('/api/timetable',    timetableRoutes);  // Timetable management
+app.use('/api/calendar',     calendarRoute);    // Academic calendar & events
+app.use('/api/exams/seating', examSeatingRoutes); // Phase 8: Exam seating allocation & cryptographic hall tickets
 app.use('/api/exams',        examRoutes);       // Exam portal
 app.use('/api/fees',         feeRoutes);        // Fee management
 app.use('/api/admin/plans',  planRoutes);       // Plan management (super admin)

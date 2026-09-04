@@ -6,6 +6,7 @@ const Attendance = require("../models/Attendance");
 const mongoose = require("mongoose");
 const logger = require("../utils/logger");
 const { logActivity } = require("../utils/activityLogger");
+const { toObjectId, escapeRegExp } = require("../utils/sanitize");
 const path = require("path");
 const fs = require("fs");
 
@@ -112,19 +113,72 @@ const registerFace = async (req, res) => {
     });
   }
 
-  // --- Save the uploaded face image (if provided) ---
-  let faceImageUrl = null;
-  if (req.file) {
-    // req.file comes from the multer middleware configured for this route.
-    // Store a relative URL path for retrieval.
-    faceImageUrl = `/uploads/face-attendance/${req.file.filename}`;
-    logger.info("Face image stored", {
-      studentId: student._id,
-      filename: req.file.filename,
+  // --- Duplicate Face Biometric Collision Check ---
+  // Ensure this face is not already enrolled for another student in the same institution
+  try {
+    const existingEnrolledStudents = await User.find({
       tenantId: tenantId,
-      registeredBy: requesterId,
-    });
+      role: "student",
+      isActive: true,
+      isDeleted: false,
+      _id: { $ne: student._id },
+      faceDescriptor: { $exists: true, $ne: null, $not: { $size: 0 } },
+    }).select("name rollNo section courseName branch faceDescriptor").lean();
+
+    const COLLISION_THRESHOLD = 0.48; // Euclidean distance threshold for matching identity
+    let duplicateMatch = null;
+    let minDistance = Infinity;
+
+    for (const other of existingEnrolledStudents) {
+      if (Array.isArray(other.faceDescriptor) && other.faceDescriptor.length === faceDescriptor.length) {
+        let sum = 0;
+        for (let i = 0; i < faceDescriptor.length; i++) {
+          const diff = faceDescriptor[i] - other.faceDescriptor[i];
+          sum += diff * diff;
+        }
+        const dist = Math.sqrt(sum);
+        if (dist < COLLISION_THRESHOLD && dist < minDistance) {
+          minDistance = dist;
+          duplicateMatch = other;
+        }
+      }
+    }
+
+    if (duplicateMatch) {
+      logger.warn("Face registration collision detected: Face already registered for another student", {
+        targetStudentId: student._id,
+        targetRollNo: student.rollNo,
+        targetName: student.name,
+        matchedStudentId: duplicateMatch._id,
+        matchedRollNo: duplicateMatch.rollNo,
+        matchedName: duplicateMatch.name,
+        distance: minDistance,
+        tenantId,
+      });
+
+      return res.status(409).json({
+        success: false,
+        message: `Face biometrics collision: This face is already enrolled for student "${duplicateMatch.name}" (Roll No: ${duplicateMatch.rollNo || "N/A"}, Sec: ${duplicateMatch.section || "N/A"}). The same face cannot be registered for multiple students.`,
+        duplicateStudent: {
+          id: duplicateMatch._id,
+          name: duplicateMatch.name,
+          rollNo: duplicateMatch.rollNo,
+          section: duplicateMatch.section,
+          courseName: duplicateMatch.courseName,
+          branch: duplicateMatch.branch,
+        },
+        distance: Math.round(minDistance * 1000) / 1000,
+      });
+    }
+  } catch (collisionErr) {
+    logger.error("registerFace: error checking duplicate face collision", { err: collisionErr?.message });
   }
+
+  // --- 100% Vector-Only Privacy Preservation ---
+  // We NEVER store raw facial photos during enrollment or attendance.
+  // Only the mathematical 128-dimensional numerical descriptor is retained.
+  const faceImageUrl = null;
+  const now = new Date();
 
   // --- Upsert the face descriptor onto the User ---
   try {
@@ -132,10 +186,13 @@ const registerFace = async (req, res) => {
       studentId,
       {
         faceDescriptor: faceDescriptor,
-        faceImageUrl: faceImageUrl,
+        faceRegistered: true,
+        isFaceRegistered: true,
+        faceImageUrl: null, // Zero photo storage guarantee
+        faceUpdatedAt: now,
       },
       { new: true, runValidators: true }
-    ).select("name rollNo section faceDescriptor faceImageUrl");
+    ).select("name rollNo section faceDescriptor faceImageUrl faceUpdatedAt faceRegistered isFaceRegistered");
 
     if (!updated) {
       return res.status(404).json({
@@ -144,21 +201,40 @@ const registerFace = async (req, res) => {
       });
     }
 
+    // Sync face registration status to Enrollment record if one exists
+    try {
+      await Enrollment.updateMany(
+        {
+          tenantId: tenantId,
+          $or: [
+            { userId: student._id },
+            { email: student.email },
+            { rollNo: student.rollNo },
+            { enrollmentNumber: student.rollNo },
+          ],
+        },
+        { $set: { isRegistered: true } }
+      );
+    } catch (enrErr) {
+      logger.debug("Non-fatal enrollment face sync", { err: enrErr?.message });
+    }
+
     logActivity({
       tenantId: tenantId,
       userId: requesterId,
-      description: `Face descriptor registered for ${student.name} (${student.rollNo})`,
+      description: `Face vector descriptor registered (vector-only privacy) for ${student.name} (${student.rollNo})`,
       endpoint: "/api/faces/register",
       statusCode: 200,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
     });
 
-    logger.info("Face descriptor registered", {
+    logger.info("Privacy-preserving face descriptor registered", {
       studentId: student._id,
       rollNo: student.rollNo,
       descriptorLength: faceDescriptor.length,
-      hasImage: !!faceImageUrl,
+      zeroPhotoStorage: true,
+      faceUpdatedAt: now,
       registeredBy: requesterId,
       tenantId: tenantId,
     });
@@ -166,8 +242,9 @@ const registerFace = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Face descriptor registered",
-      faceImageUrl: faceImageUrl,
-      registeredAt: new Date().toISOString(),
+      faceImageUrl: null,
+      faceUpdatedAt: now.toISOString(),
+      registeredAt: now.toISOString(),
     });
   } catch (err) {
     logger.error("registerFace: error saving descriptor", { studentId, err: err?.message });
@@ -348,28 +425,6 @@ const markFaceDetection = async (req, res) => {
     });
   }
 
-  // --- Teacher assignment check ---
-  if (requesterRole === "teacher") {
-    const isAssigned = req.user.assignedSubjects?.some(
-      (a) =>
-        a.subjectId?.toString() === subjectId &&
-        a.section?.trim().toUpperCase() === (req.body.section || "").trim().toUpperCase()
-    );
-
-    // Also check that the teacher is assigned to this subject at all (section
-    // will be derived from the timetable, so we accept any section match here).
-    const isAssignedToSubject = req.user.assignedSubjects?.some(
-      (a) => a.subjectId?.toString() === subjectId
-    );
-
-    if (!isAssignedToSubject) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not assigned to teach this subject",
-      });
-    }
-  }
-
   // --- Resolve the timetable slot ---
   let timetableSlot = null;
   try {
@@ -394,6 +449,21 @@ const markFaceDetection = async (req, res) => {
     });
   }
 
+  // --- Teacher assignment check (Admins and Super Admins manage whole tenant org) ---
+  if (requesterRole === "teacher") {
+    const isAssignedToSubject = req.user.assignedSubjects?.some(
+      (a) => a.subjectId?.toString() === subjectId
+    );
+    const isSlotTeacher = timetableSlot.teacherId && timetableSlot.teacherId.toString() === teacherId.toString();
+
+    if (!isAssignedToSubject && !isSlotTeacher) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to teach this subject or timetable slot",
+      });
+    }
+  }
+
   // Verify the timetable's subject matches the requested subjectId (if the
   // timetable has a subjectId field — some slots may be generic).
   if (timetableSlot.subjectId && timetableSlot.subjectId.toString() !== subjectId) {
@@ -403,23 +473,42 @@ const markFaceDetection = async (req, res) => {
     });
   }
 
+  // Live Day Gate: Attendance can ONLY be marked for the current day's scheduled session
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const currentDay = WEEKDAYS[new Date().getDay()];
+
+  if (timetableSlot.day && timetableSlot.day.trim().toLowerCase() !== currentDay.toLowerCase()) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot mark attendance for a ${timetableSlot.day} session today (${currentDay}). Live face attendance is restricted to today's scheduled classes only.`,
+      scheduledDay: timetableSlot.day,
+      currentDay: currentDay,
+    });
+  }
+
   // Derive section from the timetable (fall back to what the timetable says).
   const section = timetableSlot.section;
 
   // --- Build the classSessionId ---
-  const day = timetableSlot.day || "Monday";
-  const classSessionId = `${subjectId}_${section}_${attendanceDate.toISOString().split("T")[0]}`;
+  const day = currentDay;
+  const dateStr = attendanceDate.toISOString().split("T")[0];
+  const classSessionId = `${subjectId}_${section}_${dateStr}_${timetableId}`;
 
-  // --- Pre-fetch existing records for this session (duplicate detection) ---
+  // --- Pre-fetch existing records for this specific timetable slot session (duplicate detection) ---
   let existingRecords = [];
   try {
     existingRecords = await Attendance.find({
       tenantId: tenantId,
-      classSessionId: classSessionId,
+      timetableId: timetableId,
+      date: {
+        $gte: new Date(`${dateStr}T00:00:00.000Z`),
+        $lte: new Date(`${dateStr}T23:59:59.999Z`),
+      },
     }).select("studentId status").lean();
   } catch (err) {
     logger.error("markFaceDetection: error fetching existing attendance", {
       classSessionId,
+      timetableId,
       err: err?.message,
     });
     return res.status(500).json({
@@ -609,9 +698,140 @@ const markFaceDetection = async (req, res) => {
   return res.status(statusCode).json(response);
 };
 
+// ============================================================
+// GET /api/faces/section/:section — retrieve face descriptors for
+// all registered students in a section (fast batch sync)
+// ============================================================
+const getSectionFaceDescriptors = async (req, res) => {
+  try {
+    const { section } = req.params;
+    const { courseId, branch, semester, since } = req.query || {};
+    const tenantId = req.user?.tenantId || req.tenantId;
+    const requesterRole = req.user?.role;
+
+    if (requesterRole !== "teacher" && requesterRole !== "admin" && requesterRole !== "super_admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only teachers and admins can retrieve face descriptors",
+      });
+    }
+
+    const isAllSections = !section || String(section).trim().toLowerCase() === "all";
+    const cleanTenantId = toObjectId(tenantId);
+
+    const query = {
+      role: "student",
+      isActive: true,
+      isDeleted: false,
+      faceDescriptor: { $exists: true, $ne: null, $not: { $size: 0 } },
+    };
+
+    if (cleanTenantId) {
+      query.$or = [{ tenantId: cleanTenantId }, { tenantId: String(tenantId) }];
+    } else if (tenantId) {
+      query.tenantId = tenantId;
+    }
+
+    if (!isAllSections) {
+      query.section = new RegExp(`^${escapeRegExp(section.trim())}$`, "i");
+    }
+
+    // Incremental delta sync: If client provides a valid timestamp, fetch only modified descriptors
+    if (since) {
+      const sinceDate = new Date(since);
+      if (!isNaN(sinceDate.getTime())) {
+        const deltaCondition = [
+          { faceUpdatedAt: { $gt: sinceDate } },
+          { updatedAt: { $gt: sinceDate } },
+        ];
+        if (query.$or) {
+          query.$and = query.$and || [];
+          query.$and.push({ $or: deltaCondition });
+        } else {
+          query.$or = deltaCondition;
+        }
+      }
+    }
+
+    const BRANCH_ALIASES = {
+      "CSE": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+      "COMPUTER SCIENCE": ["CSE", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+      "IT": ["IT", "INFORMATION TECHNOLOGY"],
+      "INFORMATION TECHNOLOGY": ["IT", "INFORMATION TECHNOLOGY"],
+      "ECE": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION"],
+      "ME": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+      "CIVIL": ["CIVIL", "CIVIL ENGINEERING"],
+      "CHEM": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+      "CHEMISTRY": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+      "ARCH": ["ARCH", "ARCHITECTURE"],
+      "ARCHITECTURE": ["ARCH", "ARCHITECTURE"],
+    };
+
+    if (courseId) {
+      query.courseId = courseId;
+    }
+    if (branch) {
+      const bUpper = String(branch).trim().toUpperCase();
+      const validBranches = BRANCH_ALIASES[bUpper] || [bUpper];
+      const branchRegexes = validBranches.map((b) => new RegExp(`^${b}$`, "i"));
+      query.branch = { $in: branchRegexes };
+    }
+    if (semester) {
+      const semNum = parseInt(String(semester).replace(/\D/g, ""), 10);
+      if (!isNaN(semNum) && semNum > 0) {
+        query.$and = (query.$and || []);
+        query.$and.push({ $or: [{ semester: semNum }, { semester: String(semNum) }] });
+      }
+    }
+
+    const students = await User.find(query)
+      .select("name rollNo section faceDescriptor faceImageUrl faceUpdatedAt updatedAt createdAt")
+      .lean();
+
+    let maxUpdatedAt = null;
+    const data = students.map((s) => {
+      const updatedTimestamp = s.faceUpdatedAt || s.updatedAt || s.createdAt || new Date();
+      const isoStr = updatedTimestamp instanceof Date ? updatedTimestamp.toISOString() : new Date(updatedTimestamp).toISOString();
+      if (!maxUpdatedAt || isoStr > maxUpdatedAt) {
+        maxUpdatedAt = isoStr;
+      }
+
+      return {
+        studentId: s._id,
+        name: s.name,
+        rollNo: s.rollNo,
+        section: s.section,
+        descriptor: s.faceDescriptor,
+        faceImageUrl: null, // Zero photo storage guarantee
+        updatedAt: isoStr,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      isDelta: Boolean(since),
+      since: since || null,
+      maxUpdatedAt: maxUpdatedAt || (since ? since : new Date().toISOString()),
+      data: data,
+    });
+  } catch (error) {
+    logger.error("getSectionFaceDescriptors: error fetching section descriptors", {
+      section: req.params?.section,
+      err: error?.message,
+    });
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching section face descriptors",
+    });
+  }
+};
+
 // Export all controller functions
 module.exports = {
   registerFace,
   getFaceDescriptor,
+  getSectionFaceDescriptors,
   markFaceDetection,
 };
+

@@ -25,6 +25,7 @@ const createRole = async (req, res) => {
       assignedSections: assignedSections || [],
       createdBy: req.user._id,
     });
+    await cache.delPattern(`roles:${tenantId}:*`).catch(() => {});
 
     return res.status(201).json({ success: true, message: "Role created successfully", data: role });
   } catch (error) {
@@ -86,6 +87,7 @@ const updateRole = async (req, res) => {
 
     const usersWithRole = await User.find({ tenantId: req.user.tenantId, "customRoles.roleId": role._id }).select("_id").lean();
     await Promise.all(usersWithRole.map(u => cache.del(`user:${u._id}`)));
+    await cache.delPattern(`roles:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ success: true, message: "Role updated successfully", data: role });
   } catch (error) {
@@ -113,6 +115,7 @@ const deleteRole = async (req, res) => {
     role.isActive = false;
     role.updatedBy = req.user._id;
     await role.save();
+    await cache.delPattern(`roles:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ success: true, message: "Role deleted successfully" });
   } catch (error) {
@@ -148,6 +151,7 @@ const assignRole = async (req, res) => {
     });
     await teacher.save();
     await cache.del(`user:${teacher._id}`);
+    await cache.delPattern(`roles:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ success: true, message: "Role assigned successfully" });
   } catch (error) {
@@ -170,6 +174,7 @@ const unassignRole = async (req, res) => {
     );
     await teacher.save();
     await cache.del(`user:${teacher._id}`);
+    await cache.delPattern(`roles:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ success: true, message: "Role unassigned successfully" });
   } catch (error) {

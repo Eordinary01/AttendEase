@@ -34,6 +34,8 @@ import StatCard from "../common/ui/StatCard";
 import Table from "../common/ui/Table";
 import Input, { Select } from "../common/ui/Input";
 
+import DashboardHeader from "../common/ui/DashboardHeader";
+
 const TenantDetails = () => {
   const { tenantId } = useParams();
   const navigate = useNavigate();
@@ -221,9 +223,9 @@ const TenantDetails = () => {
   };
 
   const tabs = [
-    { id: "overview", label: "Overview", icon: <Building2 className="w-4 h-4" /> },
-    { id: "subscription", label: "Subscription", icon: <CreditCard className="w-4 h-4" /> },
-    { id: "billing", label: "Billing", icon: <Receipt className="w-4 h-4" /> },
+    { id: "overview", label: "Overview", icon: <Building2 className="w-3.5 h-3.5" /> },
+    { id: "subscription", label: "Subscription", icon: <CreditCard className="w-3.5 h-3.5" /> },
+    { id: "billing", label: "Billing", icon: <Receipt className="w-3.5 h-3.5" /> },
   ];
 
   const transactionColumns = [
@@ -232,14 +234,14 @@ const TenantDetails = () => {
     {
       header: "Status",
       cell: (row) => (
-        <Badge tone={getTxStatusTone(row.status)}>{row.status}</Badge>
+        <Badge tone={getTxStatusTone(row.status)} size="sm">{row.status}</Badge>
       ),
     },
-    { header: "Plan", cell: (row) => <span className="capitalize text-ink-soft">{row.plan || "—"}</span> },
+    { header: "Plan", cell: (row) => <span className="capitalize text-ink-soft text-xs">{row.plan || "—"}</span> },
     {
       header: "Date",
       cell: (row) => (
-        <span className="text-ink-faint">
+        <span className="text-ink-faint text-xs">
           {row.paidAt ? new Date(row.paidAt).toLocaleDateString() : row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
         </span>
       ),
@@ -250,19 +252,9 @@ const TenantDetails = () => {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-10 h-10 bg-line rounded-lg animate-pulse"></div>
-          <div className="h-8 w-64 bg-line rounded-lg animate-pulse"></div>
-        </div>
-        <div className="h-16 w-full bg-surface rounded-t-2xl shadow-card animate-pulse border border-line"></div>
-        <div className="h-96 bg-surface rounded-b-2xl rounded-tr-2xl shadow-card animate-pulse border border-line p-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-background rounded-2xl animate-pulse"></div>)}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="h-48 bg-background rounded-2xl animate-pulse"></div>
-            <div className="h-48 bg-background rounded-2xl animate-pulse"></div>
-          </div>
+        <div className="h-20 bg-surface rounded-2xl border border-line/50 p-5 animate-pulse" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-surface rounded-2xl border border-line/50 animate-pulse" />)}
         </div>
       </div>
     );
@@ -271,18 +263,18 @@ const TenantDetails = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center p-6 min-h-[60vh]">
-        <div className="bg-surface rounded-2xl shadow-pop p-8 max-w-md w-full text-center border border-line">
-          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-10 h-10 text-red-500" />
+        <div className="bg-surface rounded-2xl border border-line/50 p-8 max-w-md w-full text-center shadow-sm">
+          <div className="w-14 h-14 bg-rose-500/10 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
+            <AlertCircle className="w-7 h-7" />
           </div>
-          <h2 className="text-2xl font-bold text-ink mb-2">Error</h2>
-          <p className="text-ink-soft mb-6">{error}</p>
-          <div className="flex justify-center gap-3">
-            <Button variant="outline" onClick={() => navigate("/super-admin/tenants")}>
-              Back to Tenants
+          <h2 className="text-lg font-bold text-ink mb-1">Error Loading Institution</h2>
+          <p className="text-xs text-ink-soft mb-6">{error}</p>
+          <div className="flex justify-center gap-2.5">
+            <Button variant="subtle" size="sm" onClick={() => navigate("/super-admin/tenants")}>
+              Back to Directory
             </Button>
-            <Button onClick={fetchTenantDetails}>
-              Retry
+            <Button size="sm" variant="primary" onClick={fetchTenantDetails}>
+              Retry Connection
             </Button>
           </div>
         </div>
@@ -294,158 +286,143 @@ const TenantDetails = () => {
 
   return (
     <div className="space-y-6">
-      {/* Back Button & Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-6 rounded-3xl shadow-card border border-line"
-      >
-        <div className="flex items-center gap-4 flex-1">
-          <Button
-            onClick={() => navigate("/super-admin/tenants")}
-            variant="outline"
-            className="px-2.5 py-2.5"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap mb-1">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm"
-                style={{ backgroundColor: tenant.branding?.primaryColor || "#6366f1" }}>
-                {tenant.name?.[0] || "T"}
-              </div>
-              <h1 className="text-2xl font-extrabold text-ink truncate tracking-tight">{tenant.name}</h1>
-              <Badge tone={getStatusTone(tenant.subscription?.status)} dot>
-                {tenant.subscription?.status}
-              </Badge>
-              <Badge tone={getPlanTone(tenant.subscription?.plan)}>
-                {tenant.subscription?.plan}
-              </Badge>
-            </div>
-            <p className="text-ink-soft mt-1 flex items-center gap-2 font-medium text-sm ml-14">
-              <Globe className="w-4 h-4 text-ink-faint" />
-              {tenant.subdomain} • Joined {new Date(tenant.createdAt).toLocaleDateString()}
-            </p>
+      {/* Header */}
+      <DashboardHeader
+        greeting={tenant.name}
+        meta={`${tenant.subdomain}.attendease.com • Joined ${new Date(tenant.createdAt).toLocaleDateString()}`}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => navigate("/super-admin/tenants")}
+              variant="subtle"
+              size="sm"
+              leftIcon={ArrowLeft}
+            >
+              Back
+            </Button>
+            <Button
+              onClick={fetchTenantDetails}
+              variant="subtle"
+              size="sm"
+              leftIcon={RefreshCw}
+            >
+              Refresh
+            </Button>
           </div>
-        </div>
-        <Button
-          onClick={fetchTenantDetails}
-          variant="outline"
-          leftIcon={RefreshCw}
-        >
-          Refresh
-        </Button>
-      </motion.div>
+        }
+      />
 
-      {/* Tabs */}
-      <div className="flex border-b border-line mb-6 bg-surface rounded-t-xl px-4">
+      {/* Segmented Navigation Tabs */}
+      <div className="flex items-center gap-1.5 p-1 bg-surface border border-line/50 rounded-2xl w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition -mb-px ${activeTab === tab.id
-                ? "border-primary text-primary"
-                : "border-transparent text-ink-soft hover:text-ink"
-              }`}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+              activeTab === tab.id
+                ? "bg-primary text-white shadow-xs"
+                : "text-ink-soft hover:text-ink hover:bg-background"
+            }`}
           >
             {tab.icon}
-            {tab.label}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <Card padding="lg" className="rounded-b-xl rounded-tr-xl">
+      <div>
         {/* ===== OVERVIEW TAB ===== */}
         {activeTab === "overview" && (
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard icon={GraduationCap} label="Students" value={(tenant.stats?.totalStudents || 0).toLocaleString()} tone="secondary" />
-              <StatCard icon={Users} label="Teachers" value={(tenant.stats?.totalTeachers || 0).toLocaleString()} tone="success" />
+              <StatCard icon={Users} label="Faculty" value={(tenant.stats?.totalTeachers || 0).toLocaleString()} tone="success" />
               <StatCard icon={UserCog} label="Admins" value={(tenant.stats?.totalAdmins || 0).toLocaleString()} tone="warning" />
               <StatCard icon={BookOpen} label="Subjects" value={(tenant.stats?.totalSubjects || 0).toLocaleString()} tone="primary" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Contact Info */}
-              <div className="border border-line rounded-xl p-5 bg-background">
-                <h3 className="text-sm font-semibold text-ink-faint uppercase tracking-wider mb-4">Contact Information</h3>
-                <div className="space-y-3">
-                  <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={tenant.contact?.email} />
-                  <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={tenant.contact?.phone || "—"} />
-                  <InfoRow icon={<MapPin className="w-4 h-4" />} label="Address" value={tenant.contact?.address || "—"} />
+              <Card padding="md" bordered>
+                <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-4">Contact Information</h3>
+                <div className="space-y-3 text-xs">
+                  <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={tenant.contact?.email} />
+                  <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={tenant.contact?.phone || "—"} />
+                  <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label="Address" value={tenant.contact?.address || "—"} />
                   <div className="flex gap-4">
-                    <InfoRow icon={<MapPin className="w-4 h-4" />} label="City" value={tenant.contact?.city || "—"} />
-                    <InfoRow icon={<MapPin className="w-4 h-4" />} label="State" value={tenant.contact?.state || "—"} />
+                    <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label="City" value={tenant.contact?.city || "—"} />
+                    <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label="State" value={tenant.contact?.state || "—"} />
                   </div>
-                  <InfoRow icon={<Globe className="w-4 h-4" />} label="Country" value={tenant.contact?.country || "—"} />
+                  <InfoRow icon={<Globe className="w-3.5 h-3.5" />} label="Country" value={tenant.contact?.country || "—"} />
                 </div>
-              </div>
+              </Card>
 
               {/* Subscription Summary */}
-              <div className="border border-line rounded-xl p-5 bg-background">
-                <h3 className="text-sm font-semibold text-ink-faint uppercase tracking-wider mb-4">Subscription</h3>
-                <div className="space-y-3">
-                  <InfoRow label="Plan" value={tenant.subscription?.plan?.toUpperCase() || "FREE"} />
-                  <InfoRow label="Status" value={<span className="capitalize">{tenant.subscription?.status}</span>} />
+              <Card padding="md" bordered>
+                <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-4">Subscription Plan</h3>
+                <div className="space-y-3 text-xs">
+                  <InfoRow label="Tier" value={tenant.subscription?.plan?.toUpperCase() || "FREE"} />
+                  <InfoRow label="Status" value={<Badge tone={getStatusTone(tenant.subscription?.status)} size="sm">{tenant.subscription?.status}</Badge>} />
                   <InfoRow label="Billing Cycle" value={tenant.subscription?.billingCycle || "monthly"} />
                   <InfoRow
-                    icon={<Calendar className="w-4 h-4" />}
+                    icon={<Calendar className="w-3.5 h-3.5" />}
                     label="Start Date"
                     value={tenant.subscription?.startDate ? new Date(tenant.subscription.startDate).toLocaleDateString() : "—"}
                   />
                   {tenant.subscription?.status === "trial" && (
                     <InfoRow
-                      icon={<Calendar className="w-4 h-4" />}
+                      icon={<Calendar className="w-3.5 h-3.5" />}
                       label="Trial Ends"
                       value={tenant.subscription?.trialEndsAt ? new Date(tenant.subscription.trialEndsAt).toLocaleDateString() : "—"}
                     />
                   )}
                 </div>
-              </div>
+              </Card>
 
               {/* Branding */}
-              <div className="border border-line rounded-xl p-5 bg-background">
-                <h3 className="text-sm font-semibold text-ink-faint uppercase tracking-wider mb-4">Branding</h3>
+              <Card padding="md" bordered>
+                <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-4">Campus Identity & Branding</h3>
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl flex items-center justify-center text-white text-2xl font-bold"
-                    style={{ backgroundColor: tenant.branding?.primaryColor || "#6366f1" }}
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-xl font-bold shadow-xs shrink-0"
+                    style={{ backgroundColor: tenant.branding?.primaryColor || "#7c3aed" }}
                   >
                     {tenant.name?.[0] || "T"}
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 text-xs">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full border-2 border-line" style={{ backgroundColor: tenant.branding?.primaryColor || "#6366f1" }} />
-                      <span className="text-sm text-ink-soft">Primary: {tenant.branding?.primaryColor || "#6366f1"}</span>
+                      <div className="w-4 h-4 rounded-full border border-line/50" style={{ backgroundColor: tenant.branding?.primaryColor || "#7c3aed" }} />
+                      <span className="text-ink-soft">Primary: <code className="font-bold text-ink">{tenant.branding?.primaryColor || "#7c3aed"}</code></span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full border-2 border-line" style={{ backgroundColor: tenant.branding?.secondaryColor || "#8b5cf6" }} />
-                      <span className="text-sm text-ink-soft">Secondary: {tenant.branding?.secondaryColor || "#8b5cf6"}</span>
+                      <div className="w-4 h-4 rounded-full border border-line/50" style={{ backgroundColor: tenant.branding?.secondaryColor || "#06b6d4" }} />
+                      <span className="text-ink-soft">Secondary: <code className="font-bold text-ink">{tenant.branding?.secondaryColor || "#06b6d4"}</code></span>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Card>
 
               {/* Limits */}
-              <div className="border border-line rounded-xl p-5 bg-background">
-                <h3 className="text-sm font-semibold text-ink-faint uppercase tracking-wider mb-4">Limits</h3>
+              <Card padding="md" bordered>
+                <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-4">Resource Utilization</h3>
                 <div className="space-y-3">
                   <LimitBar label="Students" current={tenant.stats?.totalStudents || 0} max={tenant.limits?.maxStudents || 50} />
-                  <LimitBar label="Teachers" current={tenant.stats?.totalTeachers || 0} max={tenant.limits?.maxTeachers || 5} />
+                  <LimitBar label="Faculty" current={tenant.stats?.totalTeachers || 0} max={tenant.limits?.maxTeachers || 5} />
                   <LimitBar label="Admins" current={tenant.stats?.totalAdmins || 0} max={tenant.limits?.maxAdmins || 1} />
                   <LimitBar label="Subjects" current={tenant.stats?.totalSubjects || 0} max={tenant.limits?.maxSubjects || 100} />
                 </div>
-              </div>
+              </Card>
             </div>
 
             {/* Actions */}
-            <div className="border-t border-line pt-6">
-              <h3 className="text-sm font-semibold text-ink-faint uppercase tracking-wider mb-4">Actions</h3>
-              <div className="flex flex-wrap gap-3">
+            <Card padding="md" bordered>
+              <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-3">Administrative Controls</h3>
+              <div className="flex flex-wrap gap-2.5">
                 <Button
                   onClick={() => setActiveTab("subscription")}
                   variant="primary"
+                  size="sm"
                   leftIcon={CreditCard}
                 >
                   Manage Subscription
@@ -453,46 +430,51 @@ const TenantDetails = () => {
                 {tenant.subscription?.status !== "suspended" ? (
                   <Button
                     onClick={() => setConfirmModal({ type: "suspend" })}
-                    variant="primary"
+                    variant="subtle"
+                    size="sm"
                     leftIcon={Ban}
-                    className="!bg-amber-500 hover:!bg-amber-600"
+                    className="text-amber-600 hover:bg-amber-500/10"
                   >
                     Suspend Tenant
                   </Button>
                 ) : (
                   <Button
                     onClick={() => setConfirmModal({ type: "activate" })}
-                    variant="primary"
+                    variant="subtle"
+                    size="sm"
                     leftIcon={CheckCircle}
-                    className="!bg-emerald-600 hover:!bg-emerald-700"
+                    className="text-emerald-600 hover:bg-emerald-500/10"
                   >
                     Activate Tenant
                   </Button>
                 )}
                 <Button
                   onClick={() => setConfirmModal({ type: "delete" })}
-                  variant="danger"
+                  variant="dangerSubtle"
+                  size="sm"
                   leftIcon={Trash2}
                 >
                   Delete Tenant
                 </Button>
               </div>
-            </div>
+            </Card>
           </div>
         )}
 
         {/* ===== SUBSCRIPTION TAB ===== */}
         {activeTab === "subscription" && (
-          <div className="max-w-lg space-y-6">
-            <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" />
-              Update Subscription
-            </h3>
-            <p className="text-ink-soft text-sm">
-              Change the subscription plan, status, or billing cycle for this tenant.
-            </p>
+          <Card padding="md" bordered className="max-w-lg">
+            <div className="flex items-center gap-2 pb-3 mb-4 border-b border-line/50">
+              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-ink">Update Subscription Tier</h3>
+                <p className="text-xs text-ink-soft">Adjust plan, billing cycle and activation status</p>
+              </div>
+            </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               <Select
                 label="Plan"
                 value={subscriptionForm.plan}
@@ -527,42 +509,49 @@ const TenantDetails = () => {
                 <option value="yearly">Yearly</option>
               </Select>
 
-              <Button
-                onClick={handleUpdateSubscription}
-                disabled={actionLoading === "subscription" || (!subscriptionForm.plan && !subscriptionForm.status && !subscriptionForm.billingCycle)}
-                loading={actionLoading === "subscription"}
-                leftIcon={Save}
-              >
-                {actionLoading === "subscription" ? "Updating..." : "Update Subscription"}
-              </Button>
+              <div className="pt-2">
+                <Button
+                  onClick={handleUpdateSubscription}
+                  disabled={actionLoading === "subscription" || (!subscriptionForm.plan && !subscriptionForm.status && !subscriptionForm.billingCycle)}
+                  loading={actionLoading === "subscription"}
+                  variant="primary"
+                  size="sm"
+                  leftIcon={Save}
+                >
+                  {actionLoading === "subscription" ? "Updating..." : "Save Subscription Changes"}
+                </Button>
+              </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* ===== BILLING TAB ===== */}
         {activeTab === "billing" && (
           <div className="space-y-6">
             {/* Adjustment Form */}
-            <div className="max-w-lg border border-line rounded-xl p-5 bg-background">
-              <h3 className="text-lg font-semibold text-ink mb-1 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-primary" />
-                Billing Adjustment
-              </h3>
-              <p className="text-ink-soft text-sm mb-4">
-                Apply a credit or debit to this tenant's billing account.
-              </p>
-              <form onSubmit={handleAdjustBilling} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+            <Card padding="md" bordered className="max-w-lg">
+              <div className="flex items-center gap-2 pb-3 mb-4 border-b border-line/50">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink">Manual Billing Adjustment</h3>
+                  <p className="text-xs text-ink-soft">Apply manual credit or debit ledger adjustment</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleAdjustBilling} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
                   <Select
                     label="Type"
                     value={adjustmentForm.type}
                     onChange={(e) => setAdjustmentForm({ ...adjustmentForm, type: e.target.value })}
                   >
-                    <option value="credit">Credit</option>
-                    <option value="debit">Debit</option>
+                    <option value="credit">Credit (+)</option>
+                    <option value="debit">Debit (-)</option>
                   </Select>
                   <Input
-                    label="Amount (₹)"
+                    label="Amount (INR)"
                     type="number"
                     min="1"
                     step="0.01"
@@ -573,41 +562,49 @@ const TenantDetails = () => {
                   />
                 </div>
                 <Input
-                  label="Reason"
+                  label="Adjustment Reason"
                   type="text"
                   value={adjustmentForm.reason}
                   onChange={(e) => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })}
-                  placeholder="Reason for adjustment..."
+                  placeholder="e.g. Promotional discount, dispute resolution..."
                   required
                 />
                 <Button
                   type="submit"
                   disabled={actionLoading === "adjust"}
                   loading={actionLoading === "adjust"}
+                  variant="primary"
+                  size="sm"
                   leftIcon={Plus}
                 >
                   {actionLoading === "adjust" ? "Applying..." : "Apply Adjustment"}
                 </Button>
               </form>
-            </div>
+            </Card>
 
             {/* Transaction History */}
-            <div>
-              <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-primary" />
-                Transaction History
-              </h3>
+            <Card padding="md" bordered>
+              <div className="flex items-center gap-2 pb-3 mb-4 border-b border-line/50">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink">Transaction History</h3>
+                  <p className="text-xs text-ink-soft">Billing invoices, adjustments and payment receipts</p>
+                </div>
+              </div>
+
               <Table
                 columns={transactionColumns}
                 data={transactions}
                 rowKey="_id"
-                emptyTitle="No transactions found"
-                emptyMessage="No transactions found for this tenant."
+                emptyTitle="No transactions recorded"
+                emptyMessage="No billing records have been generated for this institution."
               />
-            </div>
+            </Card>
           </div>
         )}
-      </Card>
+      </div>
 
       {/* Confirmation Modal */}
       <Modal

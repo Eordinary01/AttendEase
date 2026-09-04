@@ -26,7 +26,7 @@ import {
 } from "recharts";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import StatCard from "../common/ui/StatCard";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
@@ -103,18 +103,21 @@ const SuperAdminMonitoring = () => {
       if (filters.statusGroup) params.set("statusGroup", filters.statusGroup);
       if (filters.endpoint) params.set("endpoint", filters.endpoint);
       if (filters.description) params.set("description", filters.description);
-      if (filters.from) params.set("from", new Date(filters.from).toISOString());
-      if (filters.to) params.set("to", new Date(filters.to).toISOString());
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
 
       const res = await api.get(`/admin/super/logs?${params.toString()}`);
       if (res.data.success) {
-        setLogs(res.data.data.logs);
-        setPagination(res.data.data.pagination);
-        setError(null);
+        setLogs(res.data.data.logs || []);
+        setPagination((prev) => ({
+          ...prev,
+          total: res.data.data.total || 0,
+          page: res.data.data.page || page,
+          pages: res.data.data.pages || 1,
+        }));
       }
     } catch (err) {
-      logError("Fetch Logs", err);
-      setError("Failed to load activity logs.");
+      logError("Fetch Activity Logs", err);
     } finally {
       setLoadingLogs(false);
     }
@@ -123,47 +126,48 @@ const SuperAdminMonitoring = () => {
   const fetchTenants = useCallback(async () => {
     try {
       const res = await api.get("/admin/super/logs/tenants");
-      if (res.data.success) setTenants(res.data.data);
+      if (res.data.success) {
+        setTenants(res.data.data || []);
+      }
     } catch (err) {
       logError("Fetch Log Tenants", err);
     }
   }, []);
 
-  const fetchFeed = useCallback(async (since) => {
+  const pollFeed = useCallback(async () => {
+    if (!live) return;
     try {
-      const res = await api.get(`/admin/super/logs/recent?since=${since != null ? since : lastSeen.current}`);
-      if (res.data.success && Array.isArray(res.data.data.logs)) {
-        lastSeen.current = res.data.data.now || Date.now();
-        const fresh = res.data.data.logs.filter((l) => !feedSeen.current.has(l._id));
-        fresh.forEach((l) => feedSeen.current.add(l._id));
+      const res = await api.get(`/admin/super/logs/feed?since=${lastSeen.current}&limit=20`);
+      const rawList = Array.isArray(res.data?.data)
+        ? res.data.data
+        : (res.data?.data?.logs || res.data?.logs || []);
+      if (res.data?.success && Array.isArray(rawList)) {
+        const fresh = rawList.filter((item) => !feedSeen.current.has(item._id));
         if (fresh.length > 0) {
-          setFeed((prev) => [...fresh, ...prev].slice(0, 60));
+          fresh.forEach((i) => feedSeen.current.add(i._id));
+          lastSeen.current = res.data.now || Date.now();
+          setFeed((prev) => [...fresh, ...prev].slice(0, 50));
         }
       }
     } catch (err) {
-      /* ignore transient polling errors */
+      // feed poll quiet failure
     }
-  }, []);
+  }, [live]);
 
-  // Initial load
   useEffect(() => {
     fetchStats();
     fetchLogs(1);
     fetchTenants();
-    fetchFeed(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchStats, fetchLogs, fetchTenants]);
 
-  // Live feed polling
   useEffect(() => {
-    if (!live) return undefined;
-    const interval = setInterval(fetchFeed, 5000);
+    if (!live) return;
+    const interval = setInterval(pollFeed, 5000);
     return () => clearInterval(interval);
-  }, [live, fetchFeed]);
+  }, [live, pollFeed]);
 
-  // Auto-refresh stats + logs
   useEffect(() => {
-    if (!autoRefresh) return undefined;
+    if (!autoRefresh) return;
     const interval = setInterval(() => {
       fetchStats();
       fetchLogs(pagination.page);
@@ -174,77 +178,66 @@ const SuperAdminMonitoring = () => {
   const handleRefresh = () => {
     fetchStats();
     fetchLogs(pagination.page);
-    fetchFeed();
+    fetchTenants();
   };
 
   const handleApplyFilters = () => {
-    lastSeen.current = Date.now();
-    feedSeen.current = new Set();
-    setFeed([]);
     fetchLogs(1);
-    fetchFeed(0);
   };
 
   const handleClearFilters = () => {
-    setFilters({ tenantId: "", method: "", statusGroup: "", endpoint: "", description: "", from: "", to: "" });
-    lastSeen.current = Date.now();
-    feedSeen.current = new Set();
-    setFeed([]);
-    setTimeout(() => fetchLogs(1), 0);
-    fetchFeed(0);
+    setFilters({
+      tenantId: "",
+      method: "",
+      statusGroup: "",
+      endpoint: "",
+      description: "",
+      from: "",
+      to: "",
+    });
   };
 
-  const changeFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
+  const changeFilter = (key, val) => {
+    setFilters((prev) => ({ ...prev, [key]: val }));
+  };
 
   const columns = useMemo(
     () => [
       {
         header: "Time",
         cell: (row) => (
-          <div>
-            <p className="font-semibold text-ink">{format(new Date(row.createdAt), "h:mm:ss a")}</p>
-            <p className="text-xs text-ink-faint">{formatDistanceToNow(new Date(row.createdAt), { addSuffix: true })}</p>
-          </div>
+          <span className="text-xs text-ink-soft whitespace-nowrap" title={format(new Date(row.createdAt), "PPpp")}>
+            {formatDistanceToNow(new Date(row.createdAt), { addSuffix: true })}
+          </span>
         ),
       },
       {
         header: "Tenant",
-        cell: (row) =>
-          row.tenantId ? (
-            <div>
-              <p className="font-semibold text-ink">{row.tenantName}</p>
-              <p className="text-xs text-ink-faint">{row.tenantSubdomain}</p>
-            </div>
-          ) : (
-            <Badge tone="secondary">Platform</Badge>
-          ),
+        cell: (row) => (
+          <span className="font-medium text-ink text-xs truncate max-w-[140px] block" title={row.tenantName}>
+            {row.tenantName}
+          </span>
+        ),
       },
       {
-        header: "User",
-        cell: (row) =>
-          row.userId ? (
-            <div>
-              <p className="font-semibold text-ink">{row.userName}</p>
-              <p className="text-xs text-ink-faint capitalize">{row.userRole}</p>
-            </div>
-          ) : (
-            <span className="text-ink-faint">Anonymous</span>
-          ),
+        header: "User / Actor",
+        cell: (row) => (
+          <div className="text-xs">
+            <span className="font-semibold text-ink">{row.userName}</span>
+            <span className="text-ink-faint ml-1">({row.userRole})</span>
+          </div>
+        ),
       },
       {
         header: "Method",
         cell: (row) => <Badge tone={methodTone[row.method] || "neutral"}>{prettyMethod(row.method)}</Badge>,
       },
       {
-        header: "Activity",
+        header: "Action / Description",
         cell: (row) => (
-          <div className="max-w-[260px]">
-            <p className="font-semibold text-ink truncate" title={row.description}>
-              {row.description}
-            </p>
-            <p className="text-xs text-ink-faint truncate" title={row.endpoint}>
-              {row.endpoint}
-            </p>
+          <div className="min-w-0 max-w-xs">
+            <p className="text-xs font-semibold text-ink truncate">{row.description}</p>
+            <p className="text-[11px] font-mono text-ink-faint truncate">{row.endpoint}</p>
           </div>
         ),
       },
@@ -254,11 +247,11 @@ const SuperAdminMonitoring = () => {
       },
       {
         header: "Duration",
-        cell: (row) => <span className="text-ink-soft tabular-nums">{row.responseTime != null ? `${row.responseTime}ms` : "—"}</span>,
+        cell: (row) => <span className="text-ink-soft tabular-nums text-xs">{row.responseTime != null ? `${row.responseTime}ms` : "—"}</span>,
       },
       {
         header: "IP",
-        cell: (row) => <span className="text-ink-faint text-xs">{row.ipAddress || "—"}</span>,
+        cell: (row) => <span className="text-ink-faint font-mono text-xs">{row.ipAddress || "—"}</span>,
       },
     ],
     []
@@ -276,7 +269,7 @@ const SuperAdminMonitoring = () => {
   const statusData = useMemo(() => {
     if (!stats?.status) return [];
     const order = ["2xx", "3xx", "4xx", "5xx"];
-    const colors = { "2xx": "bg-emerald-500", "3xx": "bg-sky-500", "4xx": "bg-amber-500", "5xx": "bg-red-500" };
+    const colors = { "2xx": "bg-emerald-500", "3xx": "bg-sky-500", "4xx": "bg-amber-500", "5xx": "bg-rose-500" };
     const total = order.reduce((sum, k) => sum + (stats.status[k] || 0), 0) || 1;
     return order.map((k) => ({ key: k, count: stats.status[k] || 0, pct: ((stats.status[k] || 0) / total) * 100, color: colors[k] }));
   }, [stats]);
@@ -298,78 +291,79 @@ const SuperAdminMonitoring = () => {
       value: stats ? stats.errors.toLocaleString() : "—",
       icon: AlertCircle,
       tone: "danger",
-      subtitle: stats ? `${stats.errorRate}% error rate` : "",
+      subtitle: stats ? `${stats.errorRate}% error rate` : "0%",
     },
     {
-      label: "Avg Response",
+      label: "Avg Latency",
       value: stats ? `${stats.avgResponseTime}ms` : "—",
       icon: Zap,
       tone: "success",
-      subtitle: stats ? `max ${stats.maxResponseTime}ms` : "",
+      subtitle: stats ? `Peak ${stats.maxResponseTime}ms` : "",
     },
     {
       label: "Active Tenants",
       value: stats ? stats.activeTenants.toLocaleString() : "—",
       icon: Building2,
       tone: "secondary",
-      subtitle: "Active in last 30 min",
+      subtitle: "Last 30 minutes",
     },
     {
       label: "Active Users",
       value: stats ? stats.activeUsers.toLocaleString() : "—",
       icon: Users,
       tone: "warning",
-      subtitle: "Users in last 30 min",
+      subtitle: "Last 30 minutes",
     },
     {
       label: "Live Feed",
       value: feed.length,
       icon: Radio,
-      tone: "info",
-      subtitle: live ? "Streaming live" : "Paused",
+      tone: "primary",
+      subtitle: live ? "Streaming" : "Paused",
     },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Monitoring Dashboard"
-        subtitle="Real-time activity across all tenants — every request, event and error."
-        icon={Activity}
+      <DashboardHeader
+        greeting="Real-time Platform Monitoring"
+        meta="Telemetry, HTTP request telemetry, error tracking and live multi-tenant stream"
         actions={
-          <>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setLive((prev) => !prev)}
-              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                 live
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-surface text-ink-soft border-line"
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                  : "bg-surface text-ink-soft border-line/50"
               }`}
             >
-              <span className="relative flex h-2.5 w-2.5">
+              <span className="relative flex h-2 w-2">
                 {live && (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 )}
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${live ? "bg-emerald-500" : "bg-ink-faint"}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${live ? "bg-emerald-500" : "bg-ink-faint"}`} />
               </span>
-              {live ? "LIVE" : "PAUSED"}
+              <span>{live ? "LIVE" : "PAUSED"}</span>
             </button>
-            <Button variant="outline" leftIcon={RefreshCw} onClick={handleRefresh}>
+            <Button variant="subtle" size="sm" leftIcon={RefreshCw} onClick={handleRefresh}>
               Refresh
             </Button>
             <Button
-              variant={autoRefresh ? "subtle" : "outline"}
+              variant={autoRefresh ? "primary" : "subtle"}
+              size="sm"
               onClick={() => setAutoRefresh((prev) => !prev)}
             >
-              Auto-refresh {autoRefresh ? "ON" : "OFF"}
+              Auto {autoRefresh ? "ON" : "OFF"}
             </Button>
-          </>
+          </div>
         }
       />
 
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm font-medium">
-          {error}
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-rose-600 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 

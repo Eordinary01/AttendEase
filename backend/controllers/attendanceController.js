@@ -14,17 +14,23 @@ const markAttendance = async (req, res) => {
   const teacherId = req.user._id;
   const tenantId = req.user.tenantId;
 
-  if (!subjectId || !section || !date || !attendanceData) {
-    return res.status(400).json({
-      success: false,
-      message: "subjectId, section, date, and attendanceData are required",
-    });
+  // Normalize attendanceData (supports both object map { [studentId]: status } and array format [{ studentId, status }])
+  let normalizedAttendance = {};
+  if (Array.isArray(attendanceData)) {
+    for (const item of attendanceData) {
+      if (item && (item.studentId || item.id || item._id)) {
+        const sId = String(item.studentId || item.id || item._id);
+        normalizedAttendance[sId] = item.status || "present";
+      }
+    }
+  } else if (typeof attendanceData === "object" && attendanceData !== null) {
+    normalizedAttendance = attendanceData;
   }
 
-  if (Object.keys(attendanceData).length === 0) {
+  if (!subjectId || !section || !date || Object.keys(normalizedAttendance).length === 0) {
     return res.status(400).json({
       success: false,
-      message: "attendanceData cannot be empty",
+      message: "subjectId, section, date, and valid attendanceData are required",
     });
   }
 
@@ -95,9 +101,6 @@ const markAttendance = async (req, res) => {
       });
     }
 
-    // Generate a unique session ID for this class
-    const classSessionId = `${subjectId}_${section}_${attendanceDate.toISOString().split('T')[0]}`;
-
     // 📅 Timetable gate — attendance can only be marked against a scheduled class
     const day = WEEKDAYS[attendanceDate.getUTCDay()];
     const scheduledSlots = await Timetable.find({
@@ -143,6 +146,9 @@ const markAttendance = async (req, res) => {
       });
     }
 
+    const dateStr = attendanceDate.toISOString().split("T")[0];
+    const classSessionId = `${subjectId}_${section}_${dateStr}_${classSlot._id}`;
+
     // Get all students in this section once for validation within tenant
     const sectionRegex = new RegExp(`^${section.trim()}$`, "i");
     const studentsInSection = await User.find({
@@ -168,8 +174,22 @@ const markAttendance = async (req, res) => {
     const isOfflineSync = req.headers['x-offline-sync'] === 'true' || req.body.isOfflineSync === true;
     const existingRecords = await Attendance.find({
       tenantId: tenantId,
-      classSessionId: classSessionId,
+      timetableId: classSlot._id,
+      date: {
+        $gte: new Date(`${dateStr}T00:00:00.000Z`),
+        $lte: new Date(`${dateStr}T23:59:59.999Z`),
+      },
     }).session(session).lean();
+
+    if (existingRecords.length > 0 && !isOfflineSync) {
+      await cleanupSession(true);
+      return res.status(409).json({
+        success: false,
+        message: `Attendance has already been marked for this class session on ${day} (${dateStr}). Re-marking or updating attendance is locked.`,
+        code: "ALREADY_MARKED",
+        existingCount: existingRecords.length,
+      });
+    }
 
     if (existingRecords.length > 0 && isOfflineSync) {
       const existingMap = new Map(existingRecords.map(r => [r.studentId.toString(), r]));
@@ -201,7 +221,7 @@ const markAttendance = async (req, res) => {
     const errors = [];
     const processedStudentIds = [];
 
-    for (const [studentId, status] of Object.entries(attendanceData)) {
+    for (const [studentId, status] of Object.entries(normalizedAttendance)) {
 
       try {
         // Validate status
@@ -491,14 +511,18 @@ const getAttendanceRecords = async (req, res) => {
       if (toDate) query.date.$lte = new Date(toDate);
     }
 
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const l = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (p - 1) * l;
+
     const total = await Attendance.countDocuments(query);
     const attendanceRecords = await Attendance.find(query)
       .populate("subjectId", "subjectCode subjectName semester")
       .populate("teacherId", "name email")
       .sort({ date: -1 })
       .lean()
-      .skip((Math.max(1, parseInt(page, 10) || 1) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10) || 50)))
-      .limit(Math.min(100, Math.max(1, parseInt(limit, 10) || 50)));
+      .skip(skip)
+      .limit(l);
 
     const stats = attendanceRecords.reduce(
       (acc, record) => {
@@ -529,9 +553,6 @@ const getAttendanceRecords = async (req, res) => {
         bySubject: {},
       },
     );
-
-    const p = Math.max(1, parseInt(page, 10) || 1);
-    const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
 
     // Resolve academic fields with fallback to Enrollment if missing on User document
     let courseId = req.user.courseId || null;
@@ -662,7 +683,7 @@ const getAttendanceSummary = async (req, res) => {
     }
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const skip = (page - 1) * limit;
     const sectionRegex = new RegExp(`^${section.trim()}$`, "i");
 
@@ -1299,18 +1320,26 @@ const getAttendanceHistory = async (req, res) => {
       query.studentId = studentId;
     }
     if (subjectId) query.subjectId = subjectId;
+    if (req.query.timetableId) query.timetableId = req.query.timetableId;
     if (section && role === "admin") query.section = section.toUpperCase();
     if (status && ["present", "absent", "leave"].includes(status)) {
       query.status = status;
     }
-    if (fromDate || toDate) {
+    const singleDate = req.query.date;
+    if (singleDate && !fromDate && !toDate) {
+      const dStart = new Date(singleDate);
+      dStart.setHours(0, 0, 0, 0);
+      const dEnd = new Date(singleDate);
+      dEnd.setHours(23, 59, 59, 999);
+      query.date = { $gte: dStart, $lte: dEnd };
+    } else if (fromDate || toDate) {
       query.date = {};
       if (fromDate) query.date.$gte = new Date(fromDate);
       if (toDate) query.date.$lte = new Date(toDate);
     }
 
     const p = Math.max(1, parseInt(page, 10) || 1);
-    const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const l = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
     const skip = (p - 1) * l;
 
     const [records, total] = await Promise.all([

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { DollarSign, CheckCircle2, Clock, AlertCircle, FileText, Lock, ArrowUpRight, Receipt, Calendar, ShieldCheck } from "lucide-react";
+import { DollarSign, CheckCircle2, Clock, AlertCircle, FileText, Lock, ArrowUpRight, Receipt, Calendar, ShieldCheck, Filter } from "lucide-react";
 import api from "../utils/api";
 import Card from "./common/ui/Card";
 import Badge from "./common/ui/Badge";
 import StatCard from "./common/ui/StatCard";
-import PageHeader from "./common/ui/PageHeader";
+import DashboardHeader from "./common/ui/DashboardHeader";
 import EmptyState from "./common/ui/EmptyState";
 import Table from "./common/ui/Table";
+import { formatDateDMY } from "../utils/dateUtils";
 
 const FeePortal = () => {
   const [fees, setFees] = useState([]);
@@ -51,7 +51,7 @@ const FeePortal = () => {
     const tones = {
       paid: "success", partial: "warning", pending: "info", waived: "neutral", overdue: "danger",
     };
-    return <Badge tone={tones[status] || "neutral"} className="capitalize font-semibold">{status}</Badge>;
+    return <Badge tone={tones[status] || "neutral"} size="sm" className="capitalize font-semibold">{status}</Badge>;
   };
 
   const formatCurrency = (amount) => {
@@ -66,7 +66,7 @@ const FeePortal = () => {
     {
       header: "Receipt #",
       cell: (row) => (
-        <span className="font-mono text-xs font-bold text-primary bg-primary-soft/30 px-2 py-1 rounded">
+        <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-md border border-primary/20">
           {row.receiptNumber}
         </span>
       )
@@ -88,7 +88,7 @@ const FeePortal = () => {
     },
     {
       header: "Payment Mode",
-      cell: (row) => <span className="capitalize text-xs font-medium px-2 py-0.5 rounded bg-background border border-line">{row.mode?.replace("_", " ")}</span>
+      cell: (row) => <span className="capitalize text-xs font-medium px-2 py-0.5 rounded-md bg-background border border-line/60">{row.mode?.replace("_", " ")}</span>
     },
     {
       header: "Collected By",
@@ -100,7 +100,7 @@ const FeePortal = () => {
     },
     {
       header: "Status",
-      cell: (row) => <Badge tone={row.status === "completed" ? "success" : "neutral"} className="capitalize font-medium">{row.status}</Badge>
+      cell: (row) => <Badge tone={row.status === "completed" ? "success" : "neutral"} size="sm" className="capitalize font-medium">{row.status}</Badge>
     },
   ];
 
@@ -108,8 +108,8 @@ const FeePortal = () => {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-ink-soft font-medium">Loading fee records...</p>
+          <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-ink-soft font-medium text-xs">Loading fee records...</p>
         </div>
       </div>
     );
@@ -117,15 +117,15 @@ const FeePortal = () => {
 
   if (planModules && !planModules.financeManagement) {
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center py-16">
-        <Card className="max-w-lg w-full text-center">
-          <div className="w-20 h-20 rounded-full bg-background flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-10 h-10 text-ink-faint" />
+      <div className="flex items-center justify-center py-16">
+        <Card padding="lg" bordered className="max-w-lg w-full text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 text-primary">
+            <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-bold text-ink mb-3">Fee Portal</h2>
-          <p className="text-ink-soft mb-6">Fee management is not included in your current plan. Contact your institution for more information.</p>
+          <h2 className="text-xl font-bold text-ink mb-2">Institutional Fee Portal</h2>
+          <p className="text-ink-soft text-xs mb-4">Fee management is not active on your current institution plan tier.</p>
         </Card>
-      </motion.div>
+      </div>
     );
   }
 
@@ -134,32 +134,31 @@ const FeePortal = () => {
   const pastFees = fees.filter(f => f.isPastSemester);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="My Fees & Payments"
-        subtitle="Track semester fee schedules, payment progress, and transaction receipts"
-        icon={DollarSign}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="My Fees & Payment Ledger"
+        meta="Track semester fee schedules, payment milestones, and official transaction receipts"
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-ink-soft hidden sm:inline">Filter Semester:</label>
+            <select
+              value={semesterFilter}
+              onChange={e => setSemesterFilter(e.target.value)}
+              className="rounded-xl border border-line/60 bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:ring-2 focus:ring-primary/20 font-medium cursor-pointer"
+            >
+              <option value="">All Semesters</option>
+              {Array.from({ length: totalSemesters || 8 }, (_, i) => i + 1).map(s => (
+                <option key={s} value={s}>Semester {s}</option>
+              ))}
+            </select>
+          </div>
+        }
       />
 
-      <div className="flex gap-3 items-center">
-        <div className="w-48">
-          <select
-            value={semesterFilter}
-            onChange={e => setSemesterFilter(e.target.value)}
-            className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 font-medium"
-          >
-            <option value="">All Semesters</option>
-            {Array.from({ length: totalSemesters || 8 }, (_, i) => i + 1).map(s => (
-              <option key={s} value={s}>Semester {s}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard label="Total Remaining Due" value={formatCurrency(totalDue)} icon={Clock} tone={totalDue > 0 ? "warning" : "success"} />
-        <StatCard label="Total Paid & Verified" value={formatCurrency(totalPaid)} icon={CheckCircle2} tone="success" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        <StatCard label="Remaining Due" value={formatCurrency(totalDue)} icon={Clock} tone={totalDue > 0 ? "warning" : "success"} />
+        <StatCard label="Total Paid & Settled" value={formatCurrency(totalPaid)} icon={CheckCircle2} tone="success" />
         <StatCard label="Overdue Records" value={`${overdueCount} records`} icon={AlertCircle} tone={overdueCount > 0 ? "danger" : "neutral"} />
       </div>
 
@@ -191,7 +190,7 @@ const FeePortal = () => {
                       </div>
                     ) : (
                       <span className="text-red-600 font-semibold text-xs flex items-center gap-1">
-                        <Clock className="w-4 h-4" /> Due: {currentFee.deadlineLabel || new Date(currentFee.dueDate).toLocaleDateString()}
+                        <Clock className="w-4 h-4" /> Due: {currentFee.deadlineLabel || formatDateDMY(currentFee.dueDate)}
                       </span>
                     )}
                   </div>
@@ -272,7 +271,7 @@ const FeePortal = () => {
                             Balance: <strong className={uRemaining > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>{formatCurrency(uRemaining)}</strong>
                           </span>
                           <span className="text-ink-soft">
-                            Due: <strong className="text-ink font-medium">{uFee.deadlineLabel || new Date(uFee.dueDate).toLocaleDateString()}</strong>
+                            Due: <strong className="text-ink font-medium">{uFee.deadlineLabel || formatDateDMY(uFee.dueDate)}</strong>
                           </span>
                         </div>
                       </div>
@@ -319,7 +318,7 @@ const FeePortal = () => {
                       <p className="text-sm font-medium text-ink">{fee.description || `${fee.feeType} Fee for Semester ${fee.semester}`}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-soft pt-1">
                         <span>Window: <strong className="text-ink">{fee.windowLabel || (fee.semester % 2 !== 0 ? "July – Dec" : "Jan – Jun")}</strong></span>
-                        <span>Due Date: <strong className="text-ink">{new Date(fee.dueDate).toLocaleDateString()}</strong></span>
+                        <span>Due Date: <strong className="text-ink">{formatDateDMY(fee.dueDate)}</strong></span>
                         <span>Total: <strong className="text-ink font-semibold">{formatCurrency(fee.amount)}</strong></span>
                         <span>Paid: <strong className="text-emerald-600 font-semibold">{formatCurrency(fee.paidAmount)}</strong></span>
                         {fee.lateFee > 0 && <span className="text-red-500 font-semibold">Late Fee: {formatCurrency(fee.lateFee)}</span>}
@@ -358,7 +357,7 @@ const FeePortal = () => {
           />
         </Card>
       )}
-    </motion.div>
+    </div>
   );
 };
 

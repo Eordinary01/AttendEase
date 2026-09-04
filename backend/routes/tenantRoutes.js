@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, adminAuth } = require('../middleware/auth');
 const { tenantResolver } = require('../middleware/tenantResolver');
+const { cacheMiddleware } = require('../middleware/cache');
 const upload = require('../middleware/multer');
 const validate = require('../middleware/validate');
 const {
@@ -23,9 +24,9 @@ const {
 router.use(authenticateToken);
 
 // Tenant information routes
-router.get('/info', getTenantInfo);
+router.get('/info', cacheMiddleware('tenant', 300), getTenantInfo);
 router.put('/settings', adminAuth, updateTenantSettings, updateTenantSettingsCtrl);
-router.get('/usage', getTenantUsage);
+router.get('/usage', cacheMiddleware('tenant_usage', 120), getTenantUsage);
 router.get('/dashboard-stats', adminAuth, getDashboardStats);
 
 // Branding image upload

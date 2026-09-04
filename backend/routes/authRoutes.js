@@ -95,14 +95,14 @@ authRoute.get('/tenant-info', async (req, res) => {
           { domain: subdomain.toLowerCase() }
         ],
         isActive: true 
-      }).select('name subdomain branding subscription.plan');
+      }).select('name subdomain domain branding subscription.plan');
       
       if (tenant) {
         return res.json({
           success: true,
           tenant: {
             id: tenant._id,
-            name: tenant.name,
+            name: tenant.branding?.institutionName || tenant.name,
             subdomain: tenant.subdomain,
             branding: tenant.branding,
             plan: tenant.subscription?.plan
@@ -119,14 +119,14 @@ authRoute.get('/tenant-info', async (req, res) => {
       const tenant = await Tenant.findOne({ 
         subdomain: detectedSubdomain,
         isActive: true 
-      }).select('name subdomain branding subscription.plan');
+      }).select('name subdomain domain branding subscription.plan');
       
       if (tenant) {
         return res.json({
           success: true,
           tenant: {
             id: tenant._id,
-            name: tenant.name,
+            name: tenant.branding?.institutionName || tenant.name,
             subdomain: tenant.subdomain,
             branding: tenant.branding,
             plan: tenant.subscription?.plan

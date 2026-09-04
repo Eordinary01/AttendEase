@@ -6,7 +6,11 @@ const cache = require("./cache");
 
 const displayNames = {
   attendance: "Attendance Management",
+  biometric_attendance: "AI Biometric Face Attendance",
+  face_attendance: "AI Biometric Face Attendance",
   exam_management: "Exam Management",
+  exam_structure: "Exam Structure Configuration",
+  exam_seating: "Exam Seating & Hall Tickets",
   finance_management: "Finance Management",
   library_management: "Library Management",
   hr_management: "HR Management",

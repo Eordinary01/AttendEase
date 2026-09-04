@@ -1,114 +1,253 @@
 /**
- * OFFLINE ATTENDANCE SYNC UTILITY
- * Handles local caching (localStorage / IndexedDB) of attendance marks when offline,
- * and handles background auto-syncing when internet connectivity is restored.
+ * OFFLINE ATTENDANCE SYNC ORCHESTRATOR
+ * Coordinates IndexedDB offline persistence, background Web Worker synchronization,
+ * exponential backoff, auto-reconnection synchronization, and event broadcasting.
  */
 
-const STORAGE_KEY = 'attendease_offline_attendance_queue';
+import {
+  openDB,
+  addToQueue as idbAddToQueue,
+  getPendingCount as idbGetPendingCount,
+  getAllQueueItems as idbGetAllQueueItems,
+  removeItem as idbRemoveItem,
+  updateItemStatus as idbUpdateItemStatus,
+  migrateFromLocalStorage,
+  purgeStaleItems,
+  clearAll as idbClearAll,
+} from './idbStorage';
+
+let syncWorker = null;
+const syncListeners = new Set();
+let isInitialized = false;
 
 /**
- * Get all pending attendance payloads from local queue
+ * Broadcast an event to all registered UI subscribers
  */
-export const getOfflineQueue = () => {
+const broadcast = (event) => {
+  syncListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch (e) {
+      console.error('[OfflineSync] Error in listener callback:', e);
+    }
+  });
+};
+
+/**
+ * Initialize IndexedDB, migrate old localStorage data, auto-purge stale items,
+ * spawn the background Web Worker, and attach global network online listeners.
+ */
+export const initOfflineSync = async () => {
+  if (isInitialized && syncWorker) return;
+
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (e) {
-    console.error('Failed to read offline queue from localStorage:', e);
-    return [];
+    // 1. Initialize IndexedDB connection
+    await openDB();
+
+    // 2. Perform one-time migration from localStorage if exists
+    await migrateFromLocalStorage();
+
+    // 3. Purge failed items older than 7 days
+    await purgeStaleItems();
+
+    // 4. Initialize background sync worker if Web Workers are supported
+    if (typeof Worker !== 'undefined') {
+      if (syncWorker) {
+        syncWorker.terminate();
+      }
+
+      syncWorker = new Worker('/attendanceSyncWorker.js');
+
+      syncWorker.onmessage = (e) => {
+        const data = e.data || {};
+        broadcast(data);
+      };
+
+      syncWorker.onerror = (err) => {
+        console.error('[OfflineSync] Worker error:', err);
+        broadcast({ type: 'SYNC_ERROR', error: err.message || 'Worker error' });
+      };
+    }
+
+    // 5. Global automatic sync trigger on network reconnection
+    if (typeof window !== 'undefined' && !window.__attendease_online_listener_added) {
+      window.__attendease_online_listener_added = true;
+      window.addEventListener('online', async () => {
+        console.info('[OfflineSync] 🌐 Network online detected. Triggering auto-sync...');
+        try {
+          await triggerOfflineSync();
+        } catch (e) {
+          console.warn('[OfflineSync] Auto-sync on online event failed:', e);
+        }
+      });
+    }
+
+    isInitialized = true;
+  } catch (err) {
+    console.error('[OfflineSync] Initialization failed:', err);
   }
 };
 
 /**
- * Save pending attendance payload to offline queue
+ * Register a callback to receive sync events from the background worker.
+ * Returns an unsubscribe function.
  */
-export const saveToOfflineQueue = (payload) => {
+export const onSyncEvent = (callback) => {
+  syncListeners.add(callback);
+  return () => {
+    syncListeners.delete(callback);
+  };
+};
+
+/**
+ * Save an attendance payload to the offline IndexedDB queue (capped at 100 items).
+ * Automatically attempts background synchronization if the browser is online.
+ */
+export const saveToOfflineQueue = async (payload) => {
+  await initOfflineSync();
+  const queued = await idbAddToQueue(payload);
+  broadcast({ type: 'ITEM_QUEUED', payload: queued });
+
+  // If online, immediately trigger background synchronization
+  if (typeof navigator !== 'undefined' && navigator.onLine) {
+    triggerOfflineSync().catch(() => {});
+  }
+
+  return queued;
+};
+
+/**
+ * Get current count of pending offline attendance payloads in IndexedDB.
+ */
+export const getPendingSyncCount = async () => {
   try {
-    const queue = getOfflineQueue();
-    const newItem = {
-      id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      payload,
-      createdAt: new Date().toISOString(),
-      attempts: 0,
-    };
-    queue.push(newItem);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-    return newItem;
+    return await idbGetPendingCount();
   } catch (e) {
-    console.error('Failed to save payload to offline queue:', e);
-    return null;
+    return 0;
   }
 };
 
 /**
- * Remove an item from the queue after successful sync
+ * Trigger synchronization of all pending offline records via the background Web Worker.
+ * If Web Worker is unavailable, falls back to inline asynchronous fetch.
  */
-export const removeOfflineQueueItem = (id) => {
-  try {
-    const queue = getOfflineQueue();
-    const updated = queue.filter(item => item.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.error('Failed to remove item from offline queue:', e);
+export const triggerOfflineSync = async (token, apiUrl) => {
+  await initOfflineSync();
+
+  const currentCount = await getPendingSyncCount();
+  if (currentCount === 0) {
+    return { syncedCount: 0, failedCount: 0, remainingCount: 0 };
   }
-};
 
-/**
- * Clear all items in offline queue
- */
-export const clearOfflineQueue = () => {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (e) {
-    console.error('Failed to clear offline queue:', e);
+  const effectiveApiUrl =
+    apiUrl ||
+    process.env.REACT_APP_API_URL ||
+    'http://127.0.0.1:8011/api';
+  const effectiveToken =
+    token ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+    '';
+
+  if (syncWorker) {
+    // Dispatch job to background Web Worker
+    syncWorker.postMessage({
+      type: 'START_SYNC',
+      token: effectiveToken,
+      apiUrl: effectiveApiUrl,
+    });
+    return;
   }
+
+  // Fallback for environments where Web Workers might be restricted
+  return await fallbackInlineSync(effectiveToken, effectiveApiUrl);
 };
 
 /**
- * Get count of pending offline attendance marks
+ * Fallback inline sync runner when Web Workers are unavailable
  */
-export const getPendingSyncCount = () => {
-  return getOfflineQueue().length;
-};
-
-/**
- * Synchronize all pending offline attendance payloads to the backend API
- */
-export const syncOfflineAttendance = async (apiClient) => {
-  const queue = getOfflineQueue();
-  if (queue.length === 0) return { syncedCount: 0, failedCount: 0, remainingCount: 0 };
-
+async function fallbackInlineSync(token, apiUrl) {
+  const items = await idbGetAllQueueItems();
   let syncedCount = 0;
   let failedCount = 0;
 
-  for (const item of queue) {
+  for (const item of items) {
+    if (item.attempts >= 5) continue;
+
+    const p = item.payload;
+    if (!p || typeof p !== 'object' || !p.subjectId || !p.section || !p.date || !p.attendanceData) {
+      await idbRemoveItem(item.id);
+      failedCount++;
+      broadcast({ type: 'ITEM_FAILED', id: item.id, error: 'Malformed payload' });
+      continue;
+    }
+
+    let normalizedAttendance = p.attendanceData;
+    if (Array.isArray(p.attendanceData)) {
+      normalizedAttendance = {};
+      p.attendanceData.forEach((d) => {
+        if (d && (d.studentId || d.id || d._id)) {
+          const sId = String(d.studentId || d.id || d._id);
+          normalizedAttendance[sId] = d.status || 'present';
+        }
+      });
+    }
+
     try {
-      const res = await apiClient.post('/attendance/mark', item.payload);
-      if (res.status === 200 || res.status === 201) {
+      await idbUpdateItemStatus(item.id, 'syncing');
+      const isFaceDetection = p._faceDetectionOffline || p.verifiedStudents;
+      const endpoint = isFaceDetection
+        ? `${apiUrl.replace(/\/+$/, '')}/attendance/mark-face-detection`
+        : `${apiUrl.replace(/\/+$/, '')}/attendance/mark`;
+
+      const cleanPayload = { ...p };
+      delete cleanPayload._faceDetectionOffline;
+      const body = isFaceDetection
+        ? { ...cleanPayload, isOfflineSync: true }
+        : { ...cleanPayload, attendanceData: normalizedAttendance, isOfflineSync: true };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-offline-sync': 'true',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.status === 200 || response.status === 201 || response.status === 409) {
+        await idbRemoveItem(item.id);
         syncedCount++;
-        removeOfflineQueueItem(item.id);
+        broadcast({ type: 'ITEM_SYNCED', id: item.id });
+      } else {
+        await idbUpdateItemStatus(item.id, 'failed', `HTTP ${response.status}`);
+        failedCount++;
+        broadcast({ type: 'ITEM_FAILED', id: item.id, error: `HTTP ${response.status}` });
       }
     } catch (err) {
-      // If attendance already exists on server, consider it synced to avoid duplicate errors
-      if (err.response?.data?.message?.includes('already exists') || err.response?.status === 409) {
-        syncedCount++;
-        removeOfflineQueueItem(item.id);
-      } else {
-        failedCount++;
-        // Increment attempts count
-        try {
-          const currentQueue = getOfflineQueue();
-          const targetIndex = currentQueue.findIndex(q => q.id === item.id);
-          if (targetIndex !== -1) {
-            currentQueue[targetIndex].attempts = (currentQueue[targetIndex].attempts || 0) + 1;
-            currentQueue[targetIndex].lastError = err.message || 'Sync failed';
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentQueue));
-          }
-        } catch (e) {}
-      }
+      await idbUpdateItemStatus(item.id, 'failed', err.message);
+      failedCount++;
+      broadcast({ type: 'ITEM_FAILED', id: item.id, error: err.message });
     }
   }
 
-  const remainingCount = getPendingSyncCount();
-  return { syncedCount, failedCount, remainingCount };
+  const remainingCount = await idbGetPendingCount();
+  const summary = { syncedCount, failedCount, remainingCount };
+  broadcast({ type: 'SYNC_COMPLETE', ...summary });
+  return summary;
+}
+
+/**
+ * Terminate background worker and clean up connections.
+ */
+export const terminateWorker = () => {
+  if (syncWorker) {
+    syncWorker.terminate();
+    syncWorker = null;
+  }
+  isInitialized = false;
+};
+
+export {
+  idbClearAll as clearOfflineQueue,
 };

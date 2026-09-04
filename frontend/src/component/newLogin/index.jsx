@@ -1,8 +1,12 @@
 // src/components/newLogin.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
-import { Mail, Lock, ArrowRight, GraduationCap, School, Building2, Users, Link2, Eye, EyeOff } from "lucide-react";
+import { 
+  Mail, Lock, ArrowRight, GraduationCap, School, Building2, 
+  Users, Link2, Eye, EyeOff, ShieldCheck, 
+  ScanFace, Calendar, BadgeCheck, Globe, MessageSquareQuote
+} from "lucide-react";
 import axios from "axios";
 import { logError } from "../../utils/logger";
 
@@ -29,7 +33,7 @@ const NewLogin = ({ onLogin }) => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8011";
 
   // Determine tenant subdomain from the URL (unique login link) or hostname
-  const resolveSubdomain = () => {
+  const resolveSubdomain = useCallback(() => {
     if (urlSubdomain) return urlSubdomain;
     const query = new URLSearchParams(window.location.search).get('subdomain');
     if (query) return query;
@@ -39,7 +43,7 @@ const NewLogin = ({ onLogin }) => {
       return parts[0];
     }
     return '';
-  };
+  }, [urlSubdomain]);
 
   // Whether we arrived via an institution's unique login link
   const resolvedSubdomain = resolveSubdomain();
@@ -58,7 +62,7 @@ const NewLogin = ({ onLogin }) => {
         { key: "super", label: "Super Admin", icon: Building2 },
       ];
 
-  // Fetch tenant branding from subdomain on mount
+  // Fetch tenant branding and custom message from subdomain on mount
   useEffect(() => {
     const subdomain = resolveSubdomain();
     if (!subdomain) return;
@@ -70,21 +74,32 @@ const NewLogin = ({ onLogin }) => {
       .then(res => {
         if (res.data.success && res.data.tenant) {
           const t = res.data.tenant;
+          const b = t.branding || {};
+          const customMsg = b.customMessage || b.welcomeMessage || null;
           setTenantBranding({
-            name: t.name,
-            primaryColor: t.branding?.primaryColor || '#7c3aed',
-            secondaryColor: t.branding?.secondaryColor || '#6366f1',
-            logo: t.branding?.logo || null,
+            name: b.institutionName || t.name,
+            primaryColor: b.primaryColor || '#7c3aed',
+            secondaryColor: b.secondaryColor || '#6366f1',
+            accentColor: b.accentColor || b.primaryColor || '#7c3aed',
+            logo: b.logo || null,
+            customMessage: customMsg ? customMsg.trim() : null,
+            subdomain: t.subdomain || subdomain,
           });
         }
       })
-      .catch(() => {});
-  }, [urlSubdomain, API_URL]);
+      .catch((err) => {
+        logError("Fetch Tenant Info", err);
+      });
+  }, [resolveSubdomain, API_URL]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setMessage("");
   };
+
+  // Dynamic theme colors
+  const primaryColor = tenantBranding?.primaryColor || '#7c3aed';
+  const secondaryColor = tenantBranding?.secondaryColor || '#6366f1';
 
   // Super Admin Login
   const handleSuperAdminLogin = async (e) => {
@@ -99,7 +114,6 @@ const NewLogin = ({ onLogin }) => {
     }
 
     try {
-
       const response = await axios.post(`${API_URL}/auth/super-admin/login`, {
         email: formData.email.toLowerCase().trim(),
         password: formData.password
@@ -132,7 +146,6 @@ const NewLogin = ({ onLogin }) => {
       logError("Super Admin login", error);
       
       let errorMessage = "An error occurred. Please try again.";
-      
       if (error.response) {
         errorMessage = error.response.data.message || `Login failed (${error.response.status})`;
       } else if (error.request) {
@@ -169,7 +182,6 @@ const NewLogin = ({ onLogin }) => {
     }
 
     try {
-      
       const response = await axios.post(`${API_URL}/auth/login`, {
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
@@ -205,11 +217,8 @@ const NewLogin = ({ onLogin }) => {
       logError("Tenant login", error);
       
       let errorMessage = "An error occurred. Please try again.";
-      
       if (error.response) {
         errorMessage = error.response.data.message || `Login failed (${error.response.status})`;
-        
-        // Handle specific error cases
         if (error.response.status === 404) {
           errorMessage = "Institution not found. Please check your subdomain.";
         } else if (error.response.status === 403) {
@@ -227,6 +236,7 @@ const NewLogin = ({ onLogin }) => {
     }
   };
 
+  // Parent Login
   const handleParentLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -289,283 +299,473 @@ const NewLogin = ({ onLogin }) => {
   const handleSubmit = loginType === "super" ? handleSuperAdminLogin : loginType === "parent" ? handleParentLogin : handleTenantLogin;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-purple-50 to-purple-100 text-gray-800 flex flex-col justify-center items-center p-6">
-      <motion.div
-        initial="hidden"
-        animate="visible"
-        variants={fadeIn}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
-      >
-        <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100">
-          {/* Header Section — dynamic branding */}
-          <div
-            className="text-white p-6"
-            style={{
-              background: `linear-gradient(135deg, ${tenantBranding?.primaryColor || '#7c3aed'}, ${tenantBranding?.secondaryColor || '#6366f1'})`
-            }}
+    <div 
+      className="min-h-screen bg-background text-ink relative overflow-hidden flex flex-col justify-between p-4 sm:p-6 lg:p-8"
+      style={{
+        "--theme-primary": primaryColor,
+        "--theme-secondary": secondaryColor,
+      }}
+    >
+      {/* Background Ambient Glows & Grid */}
+      <div className="absolute inset-0 pointer-events-none -z-10">
+        <div 
+          className="absolute -top-40 -left-40 w-96 h-96 rounded-full blur-3xl opacity-20"
+          style={{ backgroundColor: primaryColor }}
+        />
+        <div 
+          className="absolute top-1/2 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20"
+          style={{ backgroundColor: secondaryColor }}
+        />
+        <div 
+          className="absolute -bottom-40 left-1/3 w-96 h-96 rounded-full blur-3xl opacity-10"
+          style={{ backgroundColor: primaryColor }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] opacity-40 dark:opacity-10" />
+      </div>
+
+      {/* Top Navigation Bar */}
+      <header className="max-w-6xl w-full mx-auto flex items-center justify-between py-2">
+        <div 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2.5 cursor-pointer group"
+        >
+          {hasTenantContext && tenantBranding?.logo ? (
+            <img
+              src={tenantBranding.logo}
+              alt={tenantBranding.name || "Logo"}
+              className="h-10 w-10 rounded-xl object-contain border border-line/60 p-1 bg-surface shadow-xs group-hover:scale-105 transition-transform"
+            />
+          ) : (
+            <div 
+              className="w-9 h-9 rounded-xl text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <GraduationCap className="w-5 h-5" />
+            </div>
+          )}
+          <div>
+            <span className="text-base font-black tracking-tight text-ink">
+              {hasTenantContext && tenantBranding?.name ? tenantBranding.name : "AttendEase"}
+            </span>
+            <span 
+              className="text-[10px] uppercase font-bold ml-1.5 px-1.5 py-0.5 rounded border"
+              style={{
+                color: primaryColor,
+                backgroundColor: `${primaryColor}15`,
+                borderColor: `${primaryColor}30`,
+              }}
+            >
+              {hasTenantContext && tenantBranding?.subdomain
+                ? `${tenantBranding.subdomain}.attendease.com`
+                : "ERP Cloud"}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-ink-soft bg-surface border border-line/50 px-3 py-1.5 rounded-full shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-semibold text-ink">System Online</span>
+          </div>
+          <button
+            onClick={() => navigate('/')}
+            className="text-xs font-bold text-ink-soft hover:text-ink hover:underline transition"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  {tenantBranding?.logo && (
-                    <img src={tenantBranding.logo} alt="" className="h-10 w-10 rounded-lg object-contain bg-white/20" />
-                  )}
-                  <div>
-                    <h1 className="text-2xl font-bold">{tenantBranding?.name || "AttendEase ERP"}</h1>
-                    <p className="text-white/80 text-sm">
-                      {tenantBranding?.name ? "Institution Portal" : "Multi-Tenant Education Platform"}
-                    </p>
-                  </div>
+            Platform Overview
+          </button>
+        </div>
+      </header>
+
+      {/* Main 2-Column Hero & Login Section */}
+      <main className="max-w-6xl w-full mx-auto grid lg:grid-cols-12 gap-8 lg:gap-12 items-center my-auto py-8">
+        {/* Left Column: Brand & Value Prop */}
+        <div className="lg:col-span-7 space-y-6">
+          <div className="space-y-3">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-ink tracking-tight leading-tight">
+              {hasTenantContext && tenantBranding?.name ? (
+                <>
+                  Welcome to <span style={{ color: primaryColor }}>{tenantBranding.name}</span>
+                </>
+              ) : (
+                <>
+                  Smart Attendance & <br className="hidden sm:inline" />
+                  <span style={{ color: primaryColor }}>Campus ERP Engine</span>
+                </>
+              )}
+            </h1>
+
+            {/* Custom Notice Message from Tenant Admin (if configured) or Default Description */}
+            {hasTenantContext && tenantBranding?.customMessage ? (
+              <div className="p-4 rounded-2xl bg-surface/90 border border-line/70 shadow-sm relative overflow-hidden backdrop-blur-sm space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider" style={{ color: primaryColor }}>
+                  <MessageSquareQuote className="w-4 h-4" />
+                  <span>Administrative Message</span>
                 </div>
+                <p className="text-sm text-ink leading-relaxed font-medium">
+                  {tenantBranding.customMessage}
+                </p>
               </div>
+            ) : (
+              <p className="text-sm sm:text-base text-ink-soft max-w-xl leading-relaxed">
+                {hasTenantContext && tenantBranding?.name
+                  ? `Sign in to access your course attendance, timetables, academic proofs, and real-time class notifications.`
+                  : `Empower your institution with continuous AI face recognition attendance, timetable scheduling, fee tracking, and multi-tenant administrative control.`}
+              </p>
+            )}
+          </div>
+
+          {/* Feature Highlights Bento */}
+          <div className="grid sm:grid-cols-2 gap-3 pt-2">
+            <div className="p-4 rounded-2xl bg-surface/80 border border-line/50 shadow-xs space-y-2 backdrop-blur-sm">
+              <div 
+                className="w-8 h-8 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+              >
+                <ScanFace className="w-4 h-4" />
+              </div>
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">AI Face Biometrics</h3>
+              <p className="text-xs text-ink-soft">
+                Continuous 5-second auto-marking with anti-spoof liveness detection.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-surface/80 border border-line/50 shadow-xs space-y-2 backdrop-blur-sm">
+              <div 
+                className="w-8 h-8 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+              >
+                <Calendar className="w-4 h-4" />
+              </div>
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">Timetables & Roster</h3>
+              <p className="text-xs text-ink-soft">
+                Live faculty queue, automated schedule conflict detection & proof verification.
+              </p>
             </div>
           </div>
 
-          {/* Login Type Toggle */}
-          <div className="flex border-b border-gray-200">
-            {loginTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setLoginType(tab.key)}
-                className={`flex-1 py-3 text-center font-medium transition ${
-                  loginType === tab.key
-                    ? "text-purple-600 border-b-2 border-purple-600 bg-purple-50"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <tab.icon className="w-4 h-4 inline mr-2" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Main Content */}
-          <div className="p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">
-              {loginType === "super" ? "Super Admin Access" : loginType === "parent" ? "Parent Access" : hasTenantContext ? (tenantBranding?.name ? `Welcome to ${tenantBranding.name}` : "Welcome Back") : "Tenant Admin Access"}
-            </h2>
-            <p className="text-gray-600 mb-6">
-              {loginType === "super" 
-                ? "Platform administrator login" 
-                : loginType === "parent"
-                  ? "Enter the email your institution has linked to your child's record"
-                  : hasTenantContext
-                    ? (tenantBranding?.name ? "Sign in to your institution account" : "Sign in to your institution account")
-                    : "Sign in as an institution administrator. Enter your institution subdomain below."}
-            </p>
-
-            {/* Message display */}
-            {message && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`p-4 rounded-lg mb-6 ${
-                  message.type === "success" 
-                    ? "bg-green-50 border border-green-200 text-green-700" 
-                    : "bg-red-50 border border-red-200 text-red-700"
-                }`}
-              >
-                <div className="flex items-center">
-                  {message.type === "success" ? (
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                  <span>{message.text}</span>
-                </div>
-              </motion.div>
-            )}
-            
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Subdomain Input (only for tenant login) */}
-              {subdomainLocked ? (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-700">
-                  <Link2 className="h-5 w-5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <span className="font-semibold">{formData.subdomain}</span>
-                    <span className="text-purple-600/70"> · unique login link active</span>
-                  </div>
-                </div>
-              ) : loginType === "tenant" && (
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building2 className="h-5 w-5 text-purple-500" />
-                  </div>
-                  <input
-                    type="text"
-                    name="subdomain"
-                    value={formData.subdomain}
-                    onChange={handleChange}
-                    placeholder="Institution Subdomain (e.g., 'myschool')"
-                    className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Or use your institution's unique login link
-                  </p>
-                </div>
-              )}
-              
-              {/* Email Input */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-purple-500" />
-                </div>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Email Address"
-                  required
-                  className="w-full pl-10 pr-4 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                />
-              </div>
-              
-              {/* Password Input */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-purple-500" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Password"
-                  required
-                  className="w-full pl-10 pr-10 py-3 border border-purple-200 rounded-lg bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(prev => !prev)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-purple-600 focus:outline-none transition-colors"
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-
-              {/* Forgot Password Link */}
-              <div className="flex justify-end pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => navigate("/forgot-password", { state: { returnTo: hasTenantContext && formData.subdomain ? `/login/${formData.subdomain}` : "/login" } })}
-                  className="text-xs font-semibold text-purple-600 hover:text-purple-700 transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
-
-              {/* Submit Button */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 px-6 rounded-lg text-white font-medium transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                style={{
-                  background: `linear-gradient(135deg, ${tenantBranding?.primaryColor || '#7c3aed'}, ${tenantBranding?.secondaryColor || '#6366f1'})`,
-                }}
-              >
-                {isLoading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Signing In...
-                  </span>
-                ) : (
-                  <>
-                    <span>{loginType === "super" ? "Super Admin Login" : loginType === "parent" ? "Access Parent Portal" : hasTenantContext ? "Sign In" : "Tenant Admin Login"}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </motion.button>
-            </form>
-            
-            {/* Divider */}
-            {hasTenantContext && loginType === "tenant" && (
-              <>
-                <div className="flex items-center my-6">
-                  <div className="flex-grow border-t border-gray-200"></div>
-                  <span className="flex-shrink mx-4 text-gray-500 text-sm">New here?</span>
-                  <div className="flex-grow border-t border-gray-200"></div>
-                </div>
-
-                {/* Registration options — direct paths, no submenu */}
-                <div className="space-y-3">
-                  <button
-                    onClick={() => navigate("/register", { state: { userType: "student" } })}
-                    className="w-full py-3 px-6 border-2 border-blue-500 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-all duration-200 flex items-center justify-center space-x-2"
-                  >
-                    <GraduationCap className="w-5 h-5" />
-                    <span>Register as Student</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigate("/register", { state: { userType: "teacher" } })}
-                    className="w-full py-3 px-6 border-2 border-purple-500 text-purple-600 hover:bg-purple-50 rounded-lg font-medium transition-all duration-200 flex items-center justify-center space-x-2"
-                  >
-                    <School className="w-5 h-5" />
-                    <span>Activate Teacher Account</span>
-                  </button>
-                </div>
-              </>
-            )}
-            
-            {/* Role Information */}
-            {/* <div className="mt-6 bg-gray-50 border border-gray-100 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-700 mb-3 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                Available Roles
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center text-sm">
-                  <div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
-                  <span className="font-medium text-gray-700">Super Admin:</span>
-                  <span className="text-gray-600 ml-1">Platform-wide access</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
-                  <span className="font-medium text-gray-700">Admin:</span>
-                  <span className="text-gray-600 ml-1">Institution management</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
-                  <span className="font-medium text-gray-700">Teacher:</span>
-                  <span className="text-gray-600 ml-1">Mark attendance, verify tickets</span>
-                </div>
-                <div className="flex items-center text-sm">
-                  <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                  <span className="font-medium text-gray-700">Student:</span>
-                  <span className="text-gray-600 ml-1">Submit tickets, view attendance</span>
-                </div>
-              </div>
-            </div> */}
-          </div>
-
-          {/* Footer */}
-          <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-gray-500">
-                AttendEase Portal &copy; {new Date().getFullYear()}
-              </p>
-              <div className="text-xs text-gray-500">
-                v2.0.0
-              </div>
+          {/* Trust Metric Row */}
+          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-ink-soft pt-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Multi-Tenant Data Isolation</span>
+            </div>
+            <span>•</span>
+            <div className="flex items-center gap-1.5">
+              <BadgeCheck className="w-4 h-4" style={{ color: primaryColor }} />
+              <span>Role-Based Permissions</span>
+            </div>
+            <span>•</span>
+            <div className="flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-sky-600" />
+              <span>Instant Cloud Sync</span>
             </div>
           </div>
         </div>
-      </motion.div>
+
+        {/* Right Column: Interactive Login Card */}
+        <div className="lg:col-span-5 w-full">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={fadeIn}
+            transition={{ duration: 0.4 }}
+            className="w-full"
+          >
+            <div className="bg-surface rounded-3xl overflow-hidden border border-line/60 shadow-xl relative backdrop-blur-md">
+              {/* Accent Top Bar */}
+              <div
+                className="h-1.5 w-full"
+                style={{
+                  background: `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`
+                }}
+              />
+
+              {/* Card Header & Branding */}
+              <div className="p-6 sm:p-7 pb-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {tenantBranding?.logo ? (
+                      <img
+                        src={tenantBranding.logo}
+                        alt={tenantBranding.name || "Logo"}
+                        className="h-11 w-11 rounded-xl object-contain border border-line/50 p-1.5 bg-background shadow-xs"
+                      />
+                    ) : (
+                      <div 
+                        className="w-11 h-11 rounded-xl border flex items-center justify-center shadow-xs"
+                        style={{
+                          backgroundColor: `${primaryColor}15`,
+                          borderColor: `${primaryColor}30`,
+                          color: primaryColor,
+                        }}
+                      >
+                        {loginType === "super" ? (
+                          <Building2 className="w-5 h-5" />
+                        ) : loginType === "parent" ? (
+                          <Users className="w-5 h-5" />
+                        ) : (
+                          <School className="w-5 h-5" />
+                        )}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h2 className="text-base font-bold text-ink tracking-tight truncate">
+                        {tenantBranding?.name || (loginType === "super" ? "Super Admin Portal" : "Campus Admin Access")}
+                      </h2>
+                      <p className="text-xs text-ink-soft truncate">
+                        {loginType === "super"
+                          ? "Master infrastructure authentication"
+                          : loginType === "parent"
+                          ? "Parent progress & attendance access"
+                          : tenantBranding?.customMessage
+                          ? tenantBranding.customMessage
+                          : hasTenantContext
+                          ? "Enter your credentials to continue"
+                          : "Institution administrator sign-in"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Login Type Segmented Toggle */}
+                <div className="flex p-1 rounded-xl bg-background border border-line/50">
+                  {loginTabs.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const isActive = loginType === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setLoginType(tab.key)}
+                        className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          isActive
+                            ? "bg-surface shadow-xs border border-line/60"
+                            : "text-ink-soft hover:text-ink"
+                        }`}
+                        style={isActive ? { color: primaryColor } : undefined}
+                      >
+                        <TabIcon className="w-3.5 h-3.5" />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Card Body / Form */}
+              <div className="px-6 sm:px-7 pb-6 space-y-4">
+                {/* Status Message */}
+                {message && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`p-3.5 rounded-xl text-xs flex items-center gap-2.5 font-medium ${
+                      message.type === "success"
+                        ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600"
+                        : "bg-rose-500/10 border border-rose-500/20 text-rose-600"
+                    }`}
+                  >
+                    <span>{message.text}</span>
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-3.5">
+                  {/* Subdomain Input */}
+                  {subdomainLocked ? (
+                    <div 
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs"
+                      style={{
+                        backgroundColor: `${primaryColor}0c`,
+                        borderColor: `${primaryColor}30`,
+                        color: primaryColor,
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Link2 className="h-4 w-4 shrink-0" />
+                        <span className="font-bold font-mono">{formData.subdomain}</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-600">✓ Connected</span>
+                    </div>
+                  ) : (
+                    loginType === "tenant" && (
+                      <div className="space-y-1">
+                        <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                          Institution Subdomain
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                            <Building2 className="h-4 w-4" />
+                          </div>
+                          <input
+                            type="text"
+                            name="subdomain"
+                            value={formData.subdomain}
+                            onChange={handleChange}
+                            placeholder="e.g., apex-univ"
+                            className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                          />
+                        </div>
+                        <p className="text-[11px] text-ink-faint">
+                          Or sign in directly using your institution's custom link
+                        </p>
+                      </div>
+                    )
+                  )}
+
+                  {/* Email Input */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder={loginType === "super" ? "superadmin@attendease.com" : "admin@institution.edu"}
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        placeholder="••••••••"
+                        required
+                        className="w-full pl-10 pr-10 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-faint hover:text-ink transition cursor-pointer"
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Forgot Password Link */}
+                  <div className="flex justify-end pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate("/forgot-password", {
+                          state: {
+                            returnTo:
+                              hasTenantContext && formData.subdomain
+                                ? `/login/${formData.subdomain}`
+                                : "/login",
+                          },
+                        })
+                      }
+                      className="text-xs font-bold hover:underline transition cursor-pointer"
+                      style={{ color: primaryColor }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-3 px-4 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-md hover:shadow-lg cursor-pointer mt-2"
+                    style={{
+                      background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`
+                    }}
+                  >
+                    {isLoading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>
+                          {loginType === "super"
+                            ? "Authorize Super Admin"
+                            : loginType === "parent"
+                            ? "Access Parent Portal"
+                            : hasTenantContext
+                            ? `Sign In to ${tenantBranding?.name ? tenantBranding.name : "Portal"}`
+                            : "Sign In as Tenant Admin"}
+                        </span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Direct Registration Shortcuts (For Tenant Context) */}
+                {hasTenantContext && loginType === "tenant" && (
+                  <>
+                    <div className="flex items-center gap-3 my-3">
+                      <div className="flex-1 border-t border-line/50"></div>
+                      <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">
+                        New Campus Member?
+                      </span>
+                      <div className="flex-1 border-t border-line/50"></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => navigate("/register", { state: { userType: "student" } })}
+                        className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <GraduationCap className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                        <span>Student Register</span>
+                      </button>
+
+                      <button
+                        onClick={() => navigate("/register", { state: { userType: "teacher" } })}
+                        className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <School className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                        <span>Teacher Activate</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Card Footer */}
+              <div className="bg-background/60 px-6 sm:px-7 py-3 border-t border-line/50 flex justify-between items-center text-[11px] text-ink-faint">
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>256-Bit TLS Secured</span>
+                </span>
+                <span className="font-mono">{tenantBranding?.subdomain ? `${tenantBranding.subdomain}.attendease` : "AttendEase Cloud"}</span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </main>
+
+      {/* Footer Copyright */}
+      <footer className="max-w-6xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-ink-soft py-2 border-t border-line/40 gap-2">
+        <p>&copy; {new Date().getFullYear()} {tenantBranding?.name || "AttendEase Technologies Inc."}. All rights reserved.</p>
+        <div className="flex items-center gap-4 text-xs">
+          <span className="text-ink-faint">Privacy Policy</span>
+          <span>•</span>
+          <span className="text-ink-faint">Terms of Service</span>
+          <span>•</span>
+          <span className="text-ink-faint">Support</span>
+        </div>
+      </footer>
     </div>
   );
 };

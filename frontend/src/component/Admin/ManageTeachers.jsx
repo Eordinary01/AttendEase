@@ -21,7 +21,8 @@ import {
   Building2,
   GraduationCap,
   Loader2,
-  Shield
+  Shield,
+  Upload,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Button from "../common/ui/Button";
@@ -29,15 +30,14 @@ import Modal from "../common/ui/Modal";
 import Table from "../common/ui/Table";
 import Badge from "../common/ui/Badge";
 import Input, { Select, Textarea } from "../common/ui/Input";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
+import Card from "../common/ui/Card";
+import BulkImportModal from "../common/ui/BulkImportModal";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
-import { useTheme } from '../../contexts/ThemeContexts';
-
-import BulkImportModal from "../common/ui/BulkImportModal";
-import { Upload } from "lucide-react";
+import { useTheme } from "../../contexts/ThemeContexts";
 import { useToast } from "../../contexts/ToastContext";
 
 const BULK_TEACHERS_EXAMPLE = `[
@@ -111,14 +111,9 @@ const ManageTeachers = () => {
     joiningDate: "",
   });
 
-
-
-  // Theme colors
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    light: colors?.primary ? `${colors.primary}20` : '#eef2ff',
-    lighter: colors?.primary ? `${colors.primary}10` : '#f5f3ff',
+    primary: colors?.primary || '#7c3aed',
+    secondary: colors?.secondary || '#06b6d4',
   };
 
   useEffect(() => {
@@ -127,8 +122,6 @@ const ManageTeachers = () => {
     fetchRoles();
   }, []);
 
-
-  // Clear messages after 5 seconds
   useEffect(() => {
     if (error || successMessage) {
       const timer = setTimeout(() => {
@@ -158,7 +151,6 @@ const ManageTeachers = () => {
       const teachersList = response.data.data || [];
       setTeachers(teachersList);
       
-      // Extract unique sections from assigned subjects
       const uniqueSections = new Set();
       teachersList.forEach(teacher => {
         if (teacher.teachingSections) {
@@ -304,7 +296,6 @@ const ManageTeachers = () => {
         setSuccessMessage(msg);
         toastSuccess(msg);
         
-        // Reset form
         setFormData({
           name: "",
           email: "",
@@ -357,23 +348,20 @@ const ManageTeachers = () => {
 
   const columns = [
     {
-      header: "Teacher",
+      header: "Faculty Member",
       cell: (row) => (
         <div className="flex items-center gap-3">
           <div 
-            className="w-10 h-10 rounded-full flex items-center justify-center"
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs text-white"
             style={{ 
-              backgroundColor: `${themeColors.primary}20`,
-              color: themeColors.primary
+              backgroundColor: themeColors.primary
             }}
           >
-            <span className="font-semibold">
-              {row.name?.charAt(0)?.toUpperCase()}
-            </span>
+            {row.name?.charAt(0)?.toUpperCase()}
           </div>
           <div>
-            <p className="font-medium text-ink">{row.name}</p>
-            <p className="text-sm text-ink-soft">{row.email}</p>
+            <p className="font-bold text-ink text-xs">{row.name}</p>
+            <p className="text-[11px] text-ink-soft">{row.email}</p>
           </div>
         </div>
       ),
@@ -386,29 +374,25 @@ const ManageTeachers = () => {
             row.teachingSections.map(section => (
               <span 
                 key={section} 
-                className="px-2 py-1 rounded text-xs"
-                style={{ 
-                  backgroundColor: `${themeColors.primary}20`,
-                  color: themeColors.primary
-                }}
+                className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20"
               >
                 {section}
               </span>
             ))
           ) : (
-            <span className="text-ink-faint text-sm">No sections assigned</span>
+            <span className="text-ink-faint text-xs">No sections</span>
           )}
         </div>
       ),
     },
     {
-      header: "Roll No",
+      header: "Teacher ID",
       accessor: "rollNo",
     },
     {
       header: "Assigned Subjects",
       cell: (row) => (
-        <span className="text-sm text-ink-soft">
+        <span className="text-xs text-ink-soft font-semibold">
           {row.assignedSubjects?.length || 0} subjects
         </span>
       ),
@@ -418,12 +402,12 @@ const ManageTeachers = () => {
       cell: (row) => (
         <span className="flex items-center gap-1">
           {row.optimistic ? (
-            <Badge tone="warning" dot>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+            <Badge tone="warning" size="sm" dot>
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
             </Badge>
           ) : (
-            <Badge tone="success" dot>
-              <Check className="w-3.5 h-3.5" /> Active
+            <Badge tone="success" size="sm" dot>
+              Active
             </Badge>
           )}
         </span>
@@ -434,14 +418,9 @@ const ManageTeachers = () => {
       cell: (row) => {
         const assignedCount = row.customRoles?.length || 0;
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
-            style={{
-              backgroundColor: assignedCount > 0 ? `${themeColors.primary}15` : '#f3f4f6',
-              color: assignedCount > 0 ? themeColors.primary : '#9ca3af'
-            }}
-          >
-            <Shield className="w-3 h-3" />
-            {assignedCount > 0 ? `${assignedCount} role${assignedCount > 1 ? 's' : ''}` : 'No roles'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-background border border-line/50 text-ink-soft">
+            <Shield className="w-3 h-3 text-primary" />
+            {assignedCount > 0 ? `${assignedCount} role${assignedCount > 1 ? 's' : ''}` : 'None'}
           </span>
         );
       },
@@ -449,16 +428,16 @@ const ManageTeachers = () => {
     {
       header: "Actions",
       cell: (row) => (
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5 justify-end">
           <button
             onClick={() => viewTeacherDetails(row)}
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
             title="View Details"
           >
-            <Eye className="w-4 h-4 text-ink-soft" />
+            <Eye className="w-4 h-4" />
           </button>
           <button 
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
             title="Edit"
             onClick={() => {
               setFormData({
@@ -477,11 +456,11 @@ const ManageTeachers = () => {
             <Edit className="w-4 h-4 text-primary" />
           </button>
           <button 
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-rose-500/10 rounded-lg text-ink-soft hover:text-rose-600 transition cursor-pointer"
             title="Delete"
             onClick={() => handleDelete(row._id)}
           >
-            <Trash2 className="w-4 h-4 text-red-600" />
+            <Trash2 className="w-4 h-4 text-rose-500" />
           </button>
         </div>
       ),
@@ -489,80 +468,81 @@ const ManageTeachers = () => {
   ];
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Manage Teachers"
-        subtitle={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your institution"}`}
-        icon={Users}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Faculty Directory & Profiles"
+        meta={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your campus"}`}
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="subtle"
+              size="sm"
               leftIcon={Upload}
               onClick={() => setShowBulkModal(true)}
             >
-              Bulk Operations
+              Bulk Import
             </Button>
             <Button
+              variant="primary"
+              size="sm"
               leftIcon={UserPlus}
               onClick={() => setShowForm(true)}
-              style={{
-                background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-              }}
             >
-              Add Teacher
+              Add Faculty
             </Button>
           </div>
         }
       />
 
-
-
-      {/* Filters */}
-      <div>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
+      {/* Filter Toolbar */}
+      <Card padding="md" bordered>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto flex-1">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <input
+                type="text"
+                placeholder="Search by faculty name, email, roll no..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <select
+                value={filterSection}
+                onChange={(e) => setFilterSection(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+              >
+                <option value="">All Sections</option>
+                {sections.map((s) => (
+                  <option key={s} value={s}>
+                    Section {s}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <select
-              value={filterSection}
-              onChange={(e) => setFilterSection(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none"
-            >
-              <option value="">All Sections</option>
-              {sections.map((s) => (
-                <option key={s} value={s}>
-                  Section {s}
-                </option>
-              ))}
-            </select>
+
+          <div className="text-xs text-ink-soft font-semibold self-end sm:self-center">
+            <span>{filteredTeachers.length} faculty registered</span>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Teachers Table */}
-      <Table
-        columns={columns}
-        data={paginatedTeachers}
-        loading={loading}
-        emptyMessage="No teachers found."
-        rowKey="_id"
-        pagination={paginationInfo}
-        onPageChange={setPage}
-      />
+      {/* Teachers Table Card */}
+      <Card padding="none" bordered className="overflow-hidden">
+        <Table
+          columns={columns}
+          data={paginatedTeachers}
+          loading={loading}
+          emptyMessage="No faculty records found matching criteria."
+          rowKey="_id"
+          pagination={paginationInfo}
+          onPageChange={setPage}
+        />
+      </Card>
 
       {/* Add Teacher Modal */}
       <Modal
@@ -571,95 +551,84 @@ const ManageTeachers = () => {
           setShowForm(false);
           setError(null);
         }}
-        title="Add New Teacher"
+        title="Add Faculty Member"
         size="lg"
         error={error}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} required />
-            <Input label="Email *" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
-            <Input label="Teacher Roll No / ID *" name="rollNo" value={formData.rollNo} onChange={handleInputChange} required placeholder="e.g. TCH001" />
+          <div className="grid md:grid-cols-2 gap-3.5">
+            <Input label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Dr. Sarah Jenkins" />
+            <Input label="Institutional Email *" name="email" type="email" value={formData.email} onChange={handleInputChange} required placeholder="sarah@institution.edu" />
+            <Input label="Faculty ID / Roll No *" name="rollNo" value={formData.rollNo} onChange={handleInputChange} required placeholder="e.g. TCH001" />
             <Input label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="e.g. +91 9876543210" />
-            <Input label="Qualification" name="qualification" value={formData.qualification} onChange={handleInputChange} placeholder="e.g. M.Tech, PhD" />
-            <Input label="Specialization" name="specialization" value={formData.specialization} onChange={handleInputChange} placeholder="e.g. Machine Learning, DBMS" />
+            <Input label="Qualification" name="qualification" value={formData.qualification} onChange={handleInputChange} placeholder="e.g. Ph.D, M.Tech" />
+            <Input label="Specialization" name="specialization" value={formData.specialization} onChange={handleInputChange} placeholder="e.g. Artificial Intelligence, Networks" />
             <Input label="Joining Date" name="joiningDate" type="date" value={formData.joiningDate} onChange={handleInputChange} />
           </div>
-          <Textarea label="Address" name="address" rows={2} value={formData.address} onChange={handleInputChange} placeholder="Enter teacher address..." />
-          <div className="flex justify-end pt-4 gap-3">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+          <Textarea label="Address" name="address" rows={2} value={formData.address} onChange={handleInputChange} placeholder="Office room / address..." className="resize-none" />
+          <div className="flex justify-end pt-3 gap-2.5 border-t border-line/50">
+            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={submitting}>
-              Create Teacher
+            <Button type="submit" variant="primary" size="sm" loading={submitting}>
+              Create Faculty Profile
             </Button>
           </div>
         </form>
       </Modal>
 
       {/* Details Modal */}
-      <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Teacher Details" size="lg">
+      <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Faculty Profile" size="lg">
         {selectedTeacher && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
+          <div className="space-y-5">
+            <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-background border border-line/50">
               <div 
-                className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner"
+                className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-xs"
                 style={{ 
-                  backgroundColor: `${themeColors.primary}15`,
-                  color: themeColors.primary
+                  backgroundColor: themeColors.primary,
                 }}
               >
-                <span className="text-3xl font-bold">
-                  {selectedTeacher.name?.charAt(0)?.toUpperCase()}
-                </span>
+                {selectedTeacher.name?.charAt(0)?.toUpperCase()}
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-ink tracking-tight">
+                <h2 className="text-base font-bold text-ink tracking-tight">
                   {selectedTeacher.name}
                 </h2>
-                <p className="text-ink-soft font-medium">{selectedTeacher.email}</p>
-                <p className="text-sm font-bold text-ink-faint mt-1 uppercase tracking-wider">Roll No: {selectedTeacher.rollNo}</p>
+                <p className="text-xs text-ink-soft">{selectedTeacher.email}</p>
+                <p className="text-[11px] font-bold text-primary font-mono mt-0.5">ID: {selectedTeacher.rollNo}</p>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="p-5 bg-background rounded-2xl border border-line">
-                <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3">Teaching Sections</p>
-                <div className="flex flex-wrap gap-2">
+              <div className="p-4 bg-background rounded-2xl border border-line/50">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5">Teaching Sections</p>
+                <div className="flex flex-wrap gap-1.5">
                   {selectedTeacher.teachingSections?.length > 0 ? (
                     selectedTeacher.teachingSections.map(section => (
                       <span 
                         key={section} 
-                        className="px-3 py-1 rounded-lg text-sm font-semibold"
-                        style={{ 
-                          backgroundColor: `${themeColors.primary}15`,
-                          color: themeColors.primary
-                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20"
                       >
                         Section {section}
                       </span>
                     ))
                   ) : (
-                    <p className="text-ink-soft text-sm font-medium">No sections assigned</p>
+                    <p className="text-ink-soft text-xs">No sections assigned</p>
                   )}
                 </div>
               </div>
-              <div className="p-5 bg-background rounded-2xl border border-line">
-                <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3">Assigned Subjects</p>
-                <div className="space-y-3">
+              <div className="p-4 bg-background rounded-2xl border border-line/50">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5">Assigned Subjects</p>
+                <div className="space-y-2">
                   {selectedTeacher.assignmentsBySection ? (
                     Object.entries(selectedTeacher.assignmentsBySection).map(([section, subjects]) => (
                       <div key={section}>
-                        <p className="text-sm font-bold text-ink-soft mb-1">Section {section}</p>
-                        <div className="flex flex-wrap gap-2">
+                        <p className="text-xs font-bold text-ink mb-1">Section {section}</p>
+                        <div className="flex flex-wrap gap-1.5">
                           {subjects.map(subject => (
                             <span 
                               key={subject.subjectId} 
-                              className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                              style={{ 
-                                backgroundColor: `${themeColors.primary}10`,
-                                color: themeColors.primary
-                              }}
+                              className="text-[11px] px-2 py-0.5 rounded-lg font-semibold bg-surface border border-line/50 text-ink"
                             >
                               {subject.subjectName}
                             </span>
@@ -668,71 +637,68 @@ const ManageTeachers = () => {
                       </div>
                     ))
                   ) : (
-                    <p className="text-ink-soft text-sm font-medium">No subjects assigned</p>
+                    <p className="text-ink-soft text-xs">No subjects assigned</p>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="p-5 bg-background rounded-2xl border border-line">
-              <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                Assigned Roles
+            <div className="p-4 bg-background rounded-2xl border border-line/50">
+              <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-primary" />
+                Administrative Roles
               </p>
               {teacherRoles.length > 0 ? (
-                <div className="space-y-2 mb-3">
+                <div className="space-y-1.5 mb-3">
                   {teacherRoles.map(tr => (
-                    <div key={tr._id} className="flex items-center justify-between p-2 bg-surface rounded-lg border border-line">
+                    <div key={tr._id} className="flex items-center justify-between p-2 bg-surface rounded-xl border border-line/50">
                       <div>
-                        <p className="text-sm font-semibold text-ink">{tr.roleId?.name || "Unknown Role"}</p>
-                        {tr.roleId?.description && <p className="text-xs text-ink-soft">{tr.roleId.description}</p>}
+                        <p className="text-xs font-bold text-ink">{tr.roleId?.name || "Role"}</p>
+                        {tr.roleId?.description && <p className="text-[11px] text-ink-soft">{tr.roleId.description}</p>}
                       </div>
-                      <button onClick={() => handleUnassignRole(tr.roleId?._id)} className="p-1 hover:bg-red-50 rounded transition" title="Remove role">
-                        <X className="w-4 h-4 text-red-500" />
+                      <button onClick={() => handleUnassignRole(tr.roleId?._id)} className="p-1 hover:bg-rose-500/10 text-rose-500 rounded-lg transition cursor-pointer" title="Remove role">
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-ink-soft mb-3">No roles assigned</p>
+                <p className="text-xs text-ink-soft mb-3">No additional administrative roles assigned.</p>
               )}
               {availableRoles.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-ink-faint mb-2">Assign a role:</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-[11px] font-bold text-ink-faint uppercase mb-1.5">Assign Role:</p>
+                  <div className="flex flex-wrap gap-1.5">
                     {availableRoles.filter(r => !teacherRoles.some(tr => tr.roleId?._id === r._id)).map(role => (
                       <button key={role._id} onClick={() => handleAssignRole(role._id)}
-                        className="px-3 py-1.5 bg-surface border border-primary/40 text-primary-dark rounded-lg text-xs font-medium hover:bg-primary-soft transition"
+                        className="px-2.5 py-1 bg-surface border border-primary/30 text-primary hover:bg-primary/10 rounded-lg text-xs font-bold transition cursor-pointer"
                       >
                         + {role.name}
                       </button>
                     ))}
-                    {availableRoles.filter(r => !teacherRoles.some(tr => tr.roleId?._id === r._id)).length === 0 && (
-                      <span className="text-xs text-ink-faint">All roles assigned</span>
-                    )}
                   </div>
                 </div>
               )}
             </div>
 
             {(selectedTeacher.phone || selectedTeacher.qualification || selectedTeacher.specialization) && (
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-3 gap-3">
                 {selectedTeacher.phone && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Phone</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.phone}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Phone</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.phone}</p>
                   </div>
                 )}
                 {selectedTeacher.qualification && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Qualification</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.qualification}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Qualification</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.qualification}</p>
                   </div>
                 )}
                 {selectedTeacher.specialization && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Specialization</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.specialization}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Specialization</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.specialization}</p>
                   </div>
                 )}
               </div>
@@ -760,7 +726,7 @@ const ManageTeachers = () => {
         {...modalProps}
         currentPlanCode={tenantInfo?.subscription?.plan}
       />
-    </motion.div>
+    </div>
   );
 };
 

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
 import { Award, FileText, TrendingUp, AlertTriangle } from "lucide-react";
 import api from "../utils/api";
 import Card from "./common/ui/Card";
 import Badge from "./common/ui/Badge";
-import PageHeader from "./common/ui/PageHeader";
+import DashboardHeader from "./common/ui/DashboardHeader";
 import EmptyState from "./common/ui/EmptyState";
 import Table from "./common/ui/Table";
 import { Select } from "./common/ui/Input";
+import { formatDateDMY } from "../utils/dateUtils";
 
 const gradeTone = (percentage) => {
   if (percentage >= 75) return "success";
@@ -18,7 +18,7 @@ const gradeTone = (percentage) => {
 const gradeColor = (percentage) => {
   if (percentage >= 75) return "text-emerald-600";
   if (percentage >= 40) return "text-amber-600";
-  return "text-red-600";
+  return "text-rose-600";
 };
 
 const statusTone = (status) => {
@@ -42,6 +42,8 @@ const ResultsView = ({ role }) => {
   const [results, setResults] = useState([]);
   const [gradeReport, setGradeReport] = useState({ subjects: [], semesters: [], cgpa: null, hasBack: false, backlogs: [] });
   const [examTypes, setExamTypes] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState("report");
@@ -49,17 +51,32 @@ const ResultsView = ({ role }) => {
   const [semesterFilter, setSemesterFilter] = useState("all");
 
   const isParent = role === "parent";
+  const isStaff = role === "admin" || role === "teacher";
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isStaff) {
+      api.get("/users/students").then((res) => {
+        const list = Array.isArray(res.data?.data) ? res.data.data : [];
+        setStudents(list);
+        if (list.length > 0 && !selectedStudentId) {
+          setSelectedStudentId(list[0]._id);
+          fetchData(list[0]._id);
+        } else {
+          fetchData("");
+        }
+      }).catch(() => fetchData(""));
+    } else {
+      fetchData("");
+    }
+  }, [role]);
 
-  const fetchData = async () => {
+  const fetchData = async (stuId = selectedStudentId) => {
     try {
       setLoading(true);
+      const studentQuery = isStaff && stuId ? `?studentId=${stuId}` : "";
       const [resultsRes, reportRes, structRes] = await Promise.all([
-        api.get("/exams/my-results").catch(() => ({ data: { data: [] } })),
-        api.get("/exams/grade-report").catch(() => ({ data: { data: { subjects: [], semesters: [], cgpa: null, hasBack: false, backlogs: [] } } })),
+        api.get(`/exams/my-results${studentQuery}`).catch(() => ({ data: { data: [] } })),
+        api.get(`/exams/grade-report${studentQuery}`).catch(() => ({ data: { data: { subjects: [], semesters: [], cgpa: null, hasBack: false, backlogs: [] } } })),
         api.get("/exams/structure").catch(() => ({ data: {} })),
       ]);
       setResults(resultsRes.data.data || []);
@@ -77,6 +94,11 @@ const ResultsView = ({ role }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStudentChange = (id) => {
+    setSelectedStudentId(id);
+    fetchData(id);
   };
 
   // Map of examTypeCode -> display name (used for grid column headers).
@@ -146,7 +168,7 @@ const ResultsView = ({ role }) => {
     { header: "Type", cell: (r) => (
       <Badge tone={r.examId?.isBacklog ? "danger" : "info"}>{r.examId?.isBacklog ? "Supplementary" : typeNameFor(r.examId, examTypeMap)}</Badge>
     ) },
-    { header: "Date", cell: (r) => r.examId?.date ? new Date(r.examId.date).toLocaleDateString() : "—" },
+    { header: "Date", cell: (r) => r.examId?.date ? formatDateDMY(r.examId.date) : "—" },
     { header: "Marks", cell: (r) => (
       <span className="font-semibold">
         {r.marksObtained}<span className="text-ink-faint">/{r.maxMarks}</span>
@@ -163,20 +185,19 @@ const ResultsView = ({ role }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        icon={Award}
-        title={isParent ? "Exam Results" : "My Results"}
-        subtitle={isParent ? "SGPA / CGPA and published exam results" : "Your SGPA / CGPA, grade report and published results"}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting={isParent ? "Academic Grade Sheet & Results" : "My Grade Card & Assessment Results"}
+        meta={isParent ? "SGPA / CGPA analysis and published exam performance" : "Cumulative grade point averages, transcript marks, and semester results"}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-xl border border-line overflow-hidden shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-xl border border-line/60 overflow-hidden shadow-sm bg-surface p-0.5">
               {[
                 { key: "report", label: "Grade Report", icon: TrendingUp },
                 { key: "results", label: "All Results", icon: FileText },
@@ -184,18 +205,22 @@ const ResultsView = ({ role }) => {
                 <button
                   key={tab.key}
                   onClick={() => setViewMode(tab.key)}
-                  className={`px-4 py-2 flex items-center gap-2 text-sm font-semibold transition-colors ${viewMode === tab.key ? "bg-primary text-white" : "bg-surface text-ink-soft hover:text-ink"}`}
+                  className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${viewMode === tab.key ? "bg-primary text-white" : "text-ink-soft hover:text-ink"}`}
                 >
-                  <tab.icon className="w-4 h-4" />
+                  <tab.icon className="w-3.5 h-3.5" />
                   {tab.label}
                 </button>
               ))}
             </div>
             {semesterOptions.length > 1 && (
-              <Select value={semesterFilter} onChange={e => setSemesterFilter(e.target.value)} className="w-44">
+              <select
+                value={semesterFilter}
+                onChange={e => setSemesterFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+              >
                 <option value="all">All Semesters</option>
                 {semesterOptions.map(s => <option key={s} value={s}>Semester {s}</option>)}
-              </Select>
+              </select>
             )}
           </div>
         }
@@ -205,6 +230,31 @@ const ResultsView = ({ role }) => {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
           {error}
         </div>
+      )}
+
+      {/* Staff Student Selector */}
+      {isStaff && (
+        <Card padding="md" className="bg-primary-soft/30 border border-primary/20">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h4 className="font-semibold text-ink text-sm">Select Student Transcript</h4>
+              <p className="text-xs text-ink-soft">Inspect student SGPA/CGPA, official grade cards, and published results.</p>
+            </div>
+            <div className="w-full sm:w-80">
+              <Select
+                value={selectedStudentId}
+                onChange={(e) => handleStudentChange(e.target.value)}
+              >
+                <option value="">Choose a student...</option>
+                {students.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.name} ({s.rollNo || "No Roll"}) • Sec {s.section || "—"}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        </Card>
       )}
 
       {viewMode === "report" && (
@@ -354,7 +404,7 @@ const ResultsView = ({ role }) => {
           />
         </Card>
       )}
-    </motion.div>
+    </div>
   );
 };
 

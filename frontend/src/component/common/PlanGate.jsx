@@ -10,7 +10,12 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const moduleLabels = {
+  attendance: "Attendance Management",
+  biometricAttendance: "AI Biometric Face Attendance",
+  faceAttendance: "AI Biometric Face Attendance",
   examManagement: "Exam Management",
+  examStructure: "Exam Structure Configuration",
+  examSeating: "Exam Seating & Hall Tickets",
   financeManagement: "Fee Management",
   libraryManagement: "Library Management",
   hrManagement: "HR Management",
@@ -78,7 +83,18 @@ const PlanGate = ({ requiredModule, children }) => {
     return children;
   }
 
-  if (planModules && !planModules[requiredModule]) {
+  const isModuleActive = (modules, mod) => {
+    if (!modules || !mod) return true;
+    if (modules[mod] === true) return true;
+    if ((mod === "biometricAttendance" || mod === "faceAttendance") && (modules.biometricAttendance || modules.biometric_attendance || modules.faceAttendance || modules.face_attendance)) return true;
+    if (mod === "examManagement" && modules.exam_management) return true;
+    if (mod === "financeManagement" && modules.finance_management) return true;
+    if (mod === "parentPortal" && modules.parent_portal) return true;
+    if (mod === "academicStructure" && modules.academic_structure) return true;
+    return Boolean(modules[mod]);
+  };
+
+  if (planModules && !isModuleActive(planModules, requiredModule)) {
     const label = moduleLabels[requiredModule] || requiredModule;
     return (
       <motion.div

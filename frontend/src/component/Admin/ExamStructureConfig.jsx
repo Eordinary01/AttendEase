@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Settings, Plus, Trash2, Save } from "lucide-react";
+import { Settings, Plus, Trash2, Save, Layers, Clock, CalendarRange } from "lucide-react";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
 import Input from "../common/ui/Input";
@@ -108,93 +107,119 @@ const ExamStructureContent = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-16 h-16 border-4 border-primary-soft border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Exam Configuration"
-        subtitle="Configure exam types, shifts, and periods for your institution"
-        icon={Settings}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Examination Structure & Period Architecture"
+        meta="Configure standard exam types, multi-shift timings, and active evaluation period windows"
       />
 
       {/* Exam Types */}
-      <Card padding="lg" className="space-y-4">
+      <Card padding="lg" bordered className="space-y-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-ink">Exam Types</h3>
-            <p className="text-sm text-ink-soft">Define the types of exams your institution administers</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-xs text-ink uppercase tracking-wider">Exam Evaluation Types</h3>
+              <p className="text-xs text-ink-soft">Standard evaluation categories (e.g. Midterms, End-Semesters, Quizzes)</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" leftIcon={Plus} onClick={addExamType}>Add Type</Button>
+          <Button variant="subtle" size="sm" leftIcon={Plus} onClick={addExamType}>Add Type</Button>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {examTypes.map((type, idx) => (
-            <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-background border border-line">
+            <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line/50">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
                 <Input label="Name" value={type.name} onChange={(e) => updateExamType(idx, "name", e.target.value)} placeholder="e.g. In-Term 1" />
                 <Input label="Code" value={type.code} onChange={(e) => updateExamType(idx, "code", e.target.value)} placeholder="e.g. inTerm1" />
                 <Input label="Default Duration (min)" type="number" value={type.defaultDuration} onChange={(e) => updateExamType(idx, "defaultDuration", parseInt(e.target.value) || 0)} />
                 <Input label="Default Max Marks" type="number" value={type.defaultMaxMarks || ""} onChange={(e) => updateExamType(idx, "defaultMaxMarks", parseInt(e.target.value) || null)} />
               </div>
-              <button onClick={() => removeExamType(idx)} className="mt-6 p-2 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
+              <button onClick={() => removeExamType(idx)} className="p-2 text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           ))}
         </div>
-        <Button onClick={handleSaveExamTypes} leftIcon={Save} loading={saving}>Save Exam Types</Button>
+        <div className="flex justify-end pt-2">
+          <Button variant="primary" size="sm" onClick={handleSaveExamTypes} leftIcon={Save} loading={saving}>Save Exam Types</Button>
+        </div>
       </Card>
 
       {/* Shifts */}
-      <Card padding="lg" className="space-y-4">
+      <Card padding="lg" bordered className="space-y-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-ink">Shifts</h3>
-            <p className="text-sm text-ink-soft">Define time shifts for exam scheduling (e.g., morning/afternoon)</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-xs text-ink uppercase tracking-wider">Exam Shifts & Timings</h3>
+              <p className="text-xs text-ink-soft">Session time windows (e.g. Shift I: 09:00 - 10:15, Shift II: 11:00 - 12:15)</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" leftIcon={Plus} onClick={addShift}>Add Shift</Button>
+          <Button variant="subtle" size="sm" leftIcon={Plus} onClick={addShift}>Add Shift</Button>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {shifts.map((shift, idx) => (
-            <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line">
+            <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line/50">
               <div className="grid grid-cols-3 gap-3 flex-1">
                 <Input label="Shift Name" value={shift.name} onChange={(e) => updateShift(idx, "name", e.target.value)} placeholder="e.g. I, II, III" />
                 <Input label="Start Time" type="time" value={shift.startTime} onChange={(e) => updateShift(idx, "startTime", e.target.value)} />
                 <Input label="End Time" type="time" value={shift.endTime} onChange={(e) => updateShift(idx, "endTime", e.target.value)} />
               </div>
-              <button onClick={() => removeShift(idx)} className="p-2 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
+              <button onClick={() => removeShift(idx)} className="p-2 text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           ))}
         </div>
-        <Button onClick={handleSaveShifts} leftIcon={Save} loading={saving}>Save Shifts</Button>
+        <div className="flex justify-end pt-2">
+          <Button variant="primary" size="sm" onClick={handleSaveShifts} leftIcon={Save} loading={saving}>Save Shifts</Button>
+        </div>
       </Card>
 
       {/* Exam Periods */}
-      <Card padding="lg" className="space-y-4">
+      <Card padding="lg" bordered className="space-y-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-ink">Exam Periods</h3>
-            <p className="text-sm text-ink-soft">Define time windows for exam scheduling (e.g., Mid-Semester, End-Semester)</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+              <CalendarRange className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-xs text-ink uppercase tracking-wider">Evaluation Period Windows</h3>
+              <p className="text-xs text-ink-soft">Calendar date ranges for exam schedules (e.g. Mid-Sem 1, Term End Dec 2026)</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" leftIcon={Plus} onClick={addPeriod}>Add Period</Button>
+          <Button variant="subtle" size="sm" leftIcon={Plus} onClick={addPeriod}>Add Period</Button>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {periods.map((period, idx) => (
-            <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line">
+            <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line/50">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
                 <Input label="Period Name" value={period.name} onChange={(e) => updatePeriod(idx, "name", e.target.value)} placeholder="e.g. Mid-Sem 1" />
                 <Input label="Start Date" type="date" value={period.startDate?.split("T")[0] || ""} onChange={(e) => updatePeriod(idx, "startDate", e.target.value)} />
                 <Input label="End Date" type="date" value={period.endDate?.split("T")[0] || ""} onChange={(e) => updatePeriod(idx, "endDate", e.target.value)} />
                 <Input label="Exam Type Code" value={period.examTypeCode || ""} onChange={(e) => updatePeriod(idx, "examTypeCode", e.target.value)} placeholder="e.g. inTerm1" />
               </div>
-              <button onClick={() => removePeriod(idx)} className="p-2 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
+              <button onClick={() => removePeriod(idx)} className="p-2 text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           ))}
         </div>
-        <Button onClick={handleSavePeriods} leftIcon={Save} loading={saving}>Save Periods</Button>
+        <div className="flex justify-end pt-2">
+          <Button variant="primary" size="sm" onClick={handleSavePeriods} leftIcon={Save} loading={saving}>Save Periods</Button>
+        </div>
       </Card>
-    </motion.div>
+    </div>
   );
 };
 

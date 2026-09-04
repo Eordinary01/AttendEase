@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticateToken, adminAuth } = require("../middleware/auth");
 const { featureGuard } = require("../middleware/featureGuard");
 const { require2FA } = require("../middleware/require2FA");
+const { cacheMiddleware } = require("../middleware/cache");
 const validate = require("../middleware/validate");
 const {
   createRole,
@@ -27,8 +28,8 @@ const {
 router.use(authenticateToken);
 router.use(featureGuard("custom_roles"));
 
-router.get("/my-permissions", getMyPermissions);
-router.get("/my-roles", getMyRoles);
+router.get("/my-permissions", cacheMiddleware('roles', 60), getMyPermissions);
+router.get("/my-roles", cacheMiddleware('roles', 60), getMyRoles);
 
 router.get("/teachers/:teacherId", adminAuth, getTeacherRoles);
 

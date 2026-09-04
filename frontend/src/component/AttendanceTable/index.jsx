@@ -33,7 +33,7 @@ import {
 import { Tooltip } from 'react-tooltip';
 import 'react-tooltip/dist/react-tooltip.css';
 import { useTheme } from '../../contexts/ThemeContexts';
-import PageHeader from '../common/ui/PageHeader';
+import DashboardHeader from '../common/ui/DashboardHeader';
 import Card from '../common/ui/Card';
 import StatCard from '../common/ui/StatCard';
 import Badge from '../common/ui/Badge';
@@ -334,12 +334,11 @@ const AttendanceOverview = () => {
 
   return (
     <div className="space-y-6" style={cssVars}>
-      <PageHeader
-        icon={BookOpen}
-        title="Attendance Overview"
-        subtitle={teacherInfo ? `Welcome back, ${teacherInfo.name} (${teacherInfo.email}).` : 'Track and analyze attendance across your class sessions.'}
+      <DashboardHeader
+        greeting="Cohort Attendance Register"
+        meta={teacherInfo ? `${teacherInfo.name} (${teacherInfo.email}) • Real-time attendance audit, session registers, and records` : 'Track, export, and audit attendance across classroom cohorts'}
         actions={userRole === 'teacher' ? (
-          <Button variant="secondary" size="sm" leftIcon={Download} onClick={exportToCSV}>
+          <Button variant="subtle" size="sm" leftIcon={Download} onClick={exportToCSV}>
             Export CSV
           </Button>
         ) : null}

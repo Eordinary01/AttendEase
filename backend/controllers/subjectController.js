@@ -3,6 +3,7 @@ const Subject = require("../models/Subject");
 const Course = require("../models/Course");
 const User = require("../models/User");
 const Enrollment = require("../models/Enrollment");
+const cache = require("../middleware/cache");
 const logger = require("../utils/logger");
 require("dotenv").config();
 
@@ -12,6 +13,91 @@ const calculateSubjectYear = (semesterStr, semestersPerYear = 2) => {
   if (isNaN(semNum) || semNum <= 0) return null;
   const sPerYear = Number(semestersPerYear) === 1 ? 1 : 2;
   return sPerYear === 1 ? semNum : Math.ceil(semNum / 2);
+};
+
+const BRANCH_ALIASES = {
+  "CSE": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "CS": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE & ENGINEERING": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "COMPUTER SCIENCE AND ENGINEERING": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
+  "IT": ["IT", "INFORMATION TECHNOLOGY"],
+  "INFORMATION TECHNOLOGY": ["IT", "INFORMATION TECHNOLOGY"],
+  "ECE": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION", "ELECTRONICS & COMMUNICATION ENGINEERING", "ELECTRONICS AND COMMUNICATION ENGINEERING"],
+  "ELECTRONICS": ["ECE", "ELECTRONICS", "ELECTRONICS & COMMUNICATION", "ELECTRONICS & COMMUNICATION ENGINEERING", "ELECTRONICS AND COMMUNICATION ENGINEERING"],
+  "EEE": ["EEE", "ELECTRICAL", "ELECTRICAL & ELECTRONICS", "ELECTRICAL & ELECTRONICS ENGINEERING"],
+  "ELECTRICAL": ["EEE", "ELECTRICAL", "ELECTRICAL & ELECTRONICS", "ELECTRICAL & ELECTRONICS ENGINEERING"],
+  "ME": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "MECHANICAL": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "MECHANICAL ENGINEERING": ["ME", "MECHANICAL", "MECHANICAL ENGINEERING"],
+  "CIVIL": ["CIVIL", "CIVIL ENGINEERING", "CE"],
+  "CE": ["CIVIL", "CIVIL ENGINEERING", "CE"],
+  "CIVIL ENGINEERING": ["CIVIL", "CIVIL ENGINEERING", "CE"],
+  "CHEM": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "CHEMISTRY": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "CHEMICAL": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "CHEMICAL ENGINEERING": ["CHEM", "CHEMISTRY", "CHEMICAL", "CHEMICAL ENGINEERING"],
+  "AIML": ["AIML", "AI & ML", "AI/ML", "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING", "ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING"],
+  "AI & ML": ["AIML", "AI & ML", "AI/ML", "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING", "ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING"],
+  "AI/ML": ["AIML", "AI & ML", "AI/ML", "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING", "ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING"],
+  "AIDS": ["AIDS", "AI & DS", "AI/DS", "ARTIFICIAL INTELLIGENCE & DATA SCIENCE", "ARTIFICIAL INTELLIGENCE AND DATA SCIENCE"],
+  "DS": ["DS", "DATA SCIENCE"],
+  "DATA SCIENCE": ["DS", "DATA SCIENCE"],
+};
+
+const isBranchMatch = (subjBranch, studentBranch, branchCodeToName, branchNameToCode) => {
+  if (!subjBranch) return true; // Generic/common subject for the course
+  if (!studentBranch) return true; // Student branch not specified
+
+  const sUpper = String(subjBranch).trim().toUpperCase();
+  const uUpper = String(studentBranch).trim().toUpperCase();
+
+  if (sUpper === uUpper) return true;
+
+  const aliasesS = BRANCH_ALIASES[sUpper] || [sUpper];
+  const aliasesU = BRANCH_ALIASES[uUpper] || [uUpper];
+
+  if (aliasesS.includes(uUpper) || aliasesU.includes(sUpper) || aliasesS.some((a) => aliasesU.includes(a))) {
+    return true;
+  }
+
+  if (branchCodeToName) {
+    const sLower = sUpper.toLowerCase();
+    const uLower = uUpper.toLowerCase();
+    const mappedNameS = branchCodeToName.get(sLower);
+    if (mappedNameS && (mappedNameS === uLower || (BRANCH_ALIASES[mappedNameS.toUpperCase()] || []).includes(uUpper))) return true;
+    const mappedCodeS = branchNameToCode?.get(sLower);
+    if (mappedCodeS && (mappedCodeS === uLower || (BRANCH_ALIASES[mappedCodeS.toUpperCase()] || []).includes(uUpper))) return true;
+  }
+
+  return false;
+};
+
+const isSemesterMatch = (subjSem, studentSem) => {
+  if (!subjSem || !studentSem) return true;
+  const sStr = String(subjSem).trim().toLowerCase();
+  const uStr = String(studentSem).trim().toLowerCase();
+  if (sStr === uStr) return true;
+
+  const sNum = parseInt(sStr.replace(/\D/g, ""), 10);
+  const uNum = parseInt(uStr.replace(/\D/g, ""), 10);
+  if (!isNaN(sNum) && !isNaN(uNum) && sNum === uNum) return true;
+
+  return false;
+};
+
+const isCourseMatch = (subjCourseId, studentCourseId, subjCourseCode, studentCourseCode) => {
+  if (!studentCourseId && !studentCourseCode) return true;
+  if (subjCourseId && studentCourseId) {
+    if (String(subjCourseId) === String(studentCourseId)) return true;
+  }
+  if (studentCourseCode && (subjCourseCode || subjCourseId)) {
+    const sCode = String(subjCourseCode || "").trim().toUpperCase();
+    const uCode = String(studentCourseCode).trim().toUpperCase();
+    if (sCode && sCode === uCode) return true;
+  }
+  if (subjCourseId || subjCourseCode) return false;
+  return true;
 };
 
 /**
@@ -144,6 +230,7 @@ const createSubject = async (req, res) => {
     });
 
     await newSubject.save();
+    await cache.delPattern(`subjects:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(201).json({
       message: "Subject created successfully",
@@ -359,7 +446,7 @@ const getAllSubjects = async (req, res) => {
       };
     }
 
-    // STUDENT & PARENT VIEW - See subjects for their section, course, branch & semester
+    // STUDENT & PARENT VIEW - See subjects strictly for their course, branch, semester & section
     else if (user.role === "student" || user.role === "parent" || req.user.accessMode === "parent") {
       // Find student's enrollment with fallback to email/rollNo
       const enrollment = await Enrollment.findOne({
@@ -372,69 +459,27 @@ const getAllSubjects = async (req, res) => {
       }).lean();
 
       // Determine student academic context (fallback gracefully to user profile)
-      const studentCourseId = (user.courseId || enrollment?.courseId)?.toString();
+      let studentCourseId = (user.courseId || enrollment?.courseId)?.toString() || null;
+      let studentCourseCode = (user.courseCode || enrollment?.courseCode || user.courseName || enrollment?.courseName || "")?.toString().trim();
       const rawStudentBranch = user.branch || enrollment?.branch || "";
-      const studentBranch = String(rawStudentBranch).trim().toLowerCase();
+      const studentBranch = String(rawStudentBranch).trim();
       const studentSemester = String(user.semester || enrollment?.semester || "").trim();
       const studentSection = String(enrollment?.section || user.section || "").trim().toUpperCase();
 
-      // Step 1: Find all assigned teachers and subjects for this section
-      const teacherMap = new Map();
-      const explicitlyAssignedSubjectsMap = new Map();
-
-      if (studentSection) {
-        const sectionRegex = new RegExp(`^${studentSection}$`, "i");
-        const teachersForSection = await User.find({
-          role: "teacher",
+      // If studentCourseId is missing but studentCourseCode is present, resolve from Course collection
+      if (!studentCourseId && studentCourseCode) {
+        const foundCourse = await Course.findOne({
           tenantId: req.user.tenantId,
-          "assignedSubjects.section": sectionRegex,
-        }).populate("assignedSubjects.subjectId").lean();
-
-        teachersForSection.forEach((teacher) => {
-          (teacher.assignedSubjects || []).forEach((assignment) => {
-            if (
-              assignment.section &&
-              assignment.section.trim().toUpperCase() === studentSection &&
-              assignment.subjectId
-            ) {
-              const subjObj = assignment.subjectId;
-              const sId = (subjObj._id || subjObj).toString();
-              teacherMap.set(sId, {
-                teacher: {
-                  id: teacher._id,
-                  name: teacher.name,
-                  email: teacher.email,
-                },
-                section: assignment.section,
-                assignedDate: assignment.assignedDate,
-              });
-
-              if (subjObj._id) {
-                explicitlyAssignedSubjectsMap.set(sId, subjObj);
-              }
-            }
-          });
-        });
-      }
-
-      // Step 2: Query active subjects for student's course
-      let subjectQuery = {
-        tenantId: req.user.tenantId,
-        isActive: true,
-      };
-
-      if (studentCourseId) {
-        if (mongoose.Types.ObjectId.isValid(studentCourseId)) {
-          subjectQuery.$or = [
-            { courseId: studentCourseId },
-            { courseId: new mongoose.Types.ObjectId(studentCourseId) },
-          ];
-        } else {
-          subjectQuery.courseId = studentCourseId;
+          $or: [
+            { code: studentCourseCode.toUpperCase() },
+            { name: { $regex: new RegExp(`^${studentCourseCode}$`, "i") } },
+          ],
+        }).lean();
+        if (foundCourse) {
+          studentCourseId = foundCourse._id.toString();
+          studentCourseCode = foundCourse.code;
         }
       }
-
-      const allTenantSubjects = await Subject.find(subjectQuery).lean();
 
       // Pre-fetch course details for branch code <-> name resolution
       const branchCodeToName = new Map();
@@ -451,68 +496,82 @@ const getAllSubjects = async (req, res) => {
         }
       }
 
-      // Helper to check if a subject's branch matches the student's branch
-      const matchesBranch = (subjBranch) => {
-        if (!subjBranch || !studentBranch) return true;
-        const normalizedSubj = String(subjBranch).trim().toLowerCase();
-        if (normalizedSubj === studentBranch) return true;
-
-        const mappedName = branchCodeToName.get(normalizedSubj);
-        if (mappedName && mappedName === studentBranch) return true;
-
-        const mappedCode = branchNameToCode.get(normalizedSubj);
-        if (mappedCode && mappedCode === studentBranch) return true;
-
-        return false;
+      // Step 1: Query active subjects for student's course
+      let subjectQuery = {
+        tenantId: req.user.tenantId,
+        isActive: true,
       };
 
-      // Helper to check if subject semester matches student semester
-      const matchesSemester = (subjSem) => {
-        if (!subjSem || !studentSemester) return true;
-        const normSubjSem = String(subjSem).trim().toLowerCase();
-        const normStudentSem = String(studentSemester).trim().toLowerCase();
-        if (normSubjSem === normStudentSem) return true;
-
-        const subjNum = normSubjSem.match(/\d+/)?.[0];
-        const studentNum = normStudentSem.match(/\d+/)?.[0];
-        if (subjNum && studentNum && subjNum === studentNum) return true;
-
-        return false;
-      };
-
-      // Filter subjects for student's branch & semester
-      const studentCurriculumSubjects = allTenantSubjects.filter((s) => {
-        return matchesBranch(s.branch) && matchesSemester(s.semester);
-      });
-
-      // Step 3: Combine curriculum subjects + explicitly section-assigned subjects
-      const combinedSubjectsMap = new Map();
-
-      studentCurriculumSubjects.forEach((s) => {
-        combinedSubjectsMap.set(s._id.toString(), s);
-      });
-
-      explicitlyAssignedSubjectsMap.forEach((subj, sId) => {
-        if (!combinedSubjectsMap.has(sId) && subj.isActive !== false) {
-          combinedSubjectsMap.set(sId, subj);
+      if (studentCourseId) {
+        if (mongoose.Types.ObjectId.isValid(studentCourseId)) {
+          subjectQuery.$or = [
+            { courseId: studentCourseId },
+            { courseId: new mongoose.Types.ObjectId(studentCourseId) },
+            ...(studentCourseCode ? [{ courseCode: new RegExp(`^${studentCourseCode}$`, "i") }] : []),
+          ];
+        } else {
+          subjectQuery.courseId = studentCourseId;
         }
+      }
+
+      const allTenantSubjects = await Subject.find(subjectQuery).lean();
+
+      // Step 2: Strictly filter subjects for student's course, branch & semester
+      const studentCurriculumSubjects = allTenantSubjects.filter((s) => {
+        // Course check
+        const courseMatch = !studentCourseId || isCourseMatch(s.courseId, studentCourseId, s.courseCode, studentCourseCode);
+        if (!courseMatch) return false;
+
+        // Branch check
+        const branchMatch = isBranchMatch(s.branch, studentBranch, branchCodeToName, branchNameToCode);
+        if (!branchMatch) return false;
+
+        // Semester check
+        const semesterMatch = isSemesterMatch(s.semester, studentSemester);
+        if (!semesterMatch) return false;
+
+        return true;
       });
 
-      // Also include any assigned subject IDs in teacherMap that were not in allTenantSubjects
-      const missingSubjectIds = Array.from(teacherMap.keys()).filter((sId) => !combinedSubjectsMap.has(sId));
-      if (missingSubjectIds.length > 0) {
-        const missingSubjects = await Subject.find({
-          _id: { $in: missingSubjectIds },
+      // Step 3: Find teacher assignments ONLY for these valid student subjects in studentSection
+      const validSubjectIds = new Set(studentCurriculumSubjects.map((s) => s._id.toString()));
+      const teacherMap = new Map();
+
+      if (studentSection && validSubjectIds.size > 0) {
+        const sectionRegex = new RegExp(`^${studentSection}$`, "i");
+        const teachersForSection = await User.find({
+          role: "teacher",
           tenantId: req.user.tenantId,
-          isActive: true,
+          "assignedSubjects.section": sectionRegex,
+          "assignedSubjects.subjectId": { $in: Array.from(validSubjectIds).map((id) => new mongoose.Types.ObjectId(id)) },
         }).lean();
-        missingSubjects.forEach((s) => {
-          combinedSubjectsMap.set(s._id.toString(), s);
+
+        teachersForSection.forEach((teacher) => {
+          (teacher.assignedSubjects || []).forEach((assignment) => {
+            if (
+              assignment.section &&
+              assignment.section.trim().toUpperCase() === studentSection &&
+              assignment.subjectId
+            ) {
+              const sId = assignment.subjectId.toString();
+              if (validSubjectIds.has(sId)) {
+                teacherMap.set(sId, {
+                  teacher: {
+                    id: teacher._id,
+                    name: teacher.name,
+                    email: teacher.email,
+                  },
+                  section: assignment.section,
+                  assignedDate: assignment.assignedDate,
+                });
+              }
+            }
+          });
         });
       }
 
-      // Step 4: Map final subjects with teacher info
-      const subjectsWithTeachers = Array.from(combinedSubjectsMap.values()).map((subject) => {
+      // Step 4: Map final subjects with teacher info (ONLY from verified curriculum subjects)
+      const subjectsWithTeachers = studentCurriculumSubjects.map((subject) => {
         const teacherInfo = teacherMap.get(subject._id.toString());
         return {
           id: subject._id,
@@ -522,6 +581,7 @@ const getAllSubjects = async (req, res) => {
           semester: subject.semester,
           credits: subject.credits,
           courseId: subject.courseId,
+          courseCode: subject.courseCode,
           branch: subject.branch,
           subject: {
             id: subject._id,
@@ -531,6 +591,7 @@ const getAllSubjects = async (req, res) => {
             credits: subject.credits,
             description: subject.description,
             courseId: subject.courseId,
+            courseCode: subject.courseCode,
             branch: subject.branch,
           },
           teacher: teacherInfo ? teacherInfo.teacher : null,
@@ -703,37 +764,46 @@ const getSubjectById = async (req, res) => {
       }
     }
 
-    // STUDENT - Can see only if in their section
-    else if (user.role === "student") {
+    // STUDENT - Can see only if matching course, branch, and in their section
+    else if (user.role === "student" || user.role === "parent" || req.user.accessMode === "parent") {
       const enrollment = await Enrollment.findOne({
-        userId: user._id,
+        $or: [
+          { userId: user._id },
+          ...(user.email ? [{ email: user.email.toLowerCase().trim() }] : []),
+          ...(user.rollNo ? [{ enrollmentNumber: user.rollNo.trim() }, { rollNo: user.rollNo.trim() }] : []),
+        ],
         tenantId: req.user.tenantId,
-      });
+      }).lean();
 
-      if (!enrollment) {
-        return res.status(404).json({
-          message: "Enrollment not found",
+      let studentCourseId = (user.courseId || enrollment?.courseId)?.toString() || null;
+      let studentCourseCode = (user.courseCode || enrollment?.courseCode || user.courseName || enrollment?.courseName || "")?.toString().trim();
+      const studentBranch = String(user.branch || enrollment?.branch || "").trim();
+      const studentSection = String(enrollment?.section || user.section || "").trim().toUpperCase();
+
+      if (studentCourseId && !isCourseMatch(subject.courseId, studentCourseId, subject.courseCode, studentCourseCode)) {
+        return res.status(403).json({
+          message: "This subject is not part of your enrolled course",
         });
       }
 
-      // Find teacher teaching this subject in student's section-- updated to include tenantId
+      if (subject.branch && !isBranchMatch(subject.branch, studentBranch)) {
+        return res.status(403).json({
+          message: "This subject is not part of your enrolled branch / specialization",
+        });
+      }
+
+      // Find teacher teaching this subject in student's section
       const teacher = await User.findOne({
         role: "teacher",
         "assignedSubjects.subjectId": subject._id,
-        "assignedSubjects.section": enrollment.section,
+        "assignedSubjects.section": new RegExp(`^${studentSection}$`, "i"),
         tenantId: req.user.tenantId,
       }).select("name email assignedSubjects.$");
 
-      if (!teacher) {
-        return res.status(403).json({
-          message: "This subject is not available in your section",
-        });
-      }
-
-      const assignment = teacher.assignedSubjects.find(
+      const assignment = teacher?.assignedSubjects?.find(
         (a) =>
           a.subjectId.toString() === subject._id.toString() &&
-          a.section === enrollment.section,
+          String(a.section).trim().toUpperCase() === studentSection,
       );
 
       response = {
@@ -745,14 +815,17 @@ const getSubjectById = async (req, res) => {
           semester: subject.semester,
           credits: subject.credits,
           description: subject.description,
+          courseId: subject.courseId,
+          courseCode: subject.courseCode,
+          branch: subject.branch,
         },
-        teacher: {
+        teacher: teacher ? {
           id: teacher._id,
           name: teacher.name,
           email: teacher.email,
-        },
-        section: assignment.section,
-        assignedDate: assignment.assignedDate,
+        } : null,
+        section: studentSection,
+        assignedDate: assignment ? assignment.assignedDate : null,
       };
     }
 
@@ -836,102 +909,101 @@ const getSubjectsBySemester = async (req, res) => {
     }
 
     // STUDENT - Only subjects in their section for this semester, scoped by course & branch
-    else if (user.role === "student") {
+    else if (user.role === "student" || user.role === "parent" || req.user.accessMode === "parent") {
       const enrollment = await Enrollment.findOne({
-        userId: user._id,
+        $or: [
+          { userId: user._id },
+          ...(user.email ? [{ email: user.email.toLowerCase().trim() }] : []),
+          ...(user.rollNo ? [{ enrollmentNumber: user.rollNo.trim() }, { rollNo: user.rollNo.trim() }] : []),
+        ],
         tenantId: req.user.tenantId,
+      }).lean();
+
+      let studentCourseId = (user.courseId || enrollment?.courseId)?.toString() || null;
+      let studentCourseCode = (user.courseCode || enrollment?.courseCode || user.courseName || enrollment?.courseName || "")?.toString().trim();
+      const studentBranch = String(user.branch || enrollment?.branch || "").trim();
+      const studentSection = String(enrollment?.section || user.section || "").trim().toUpperCase();
+
+      // Find active subjects for student's course in this semester
+      const subjectQuery = {
+        semester: String(semester).trim(),
+        tenantId: req.user.tenantId,
+        isActive: true,
+      };
+      if (studentCourseId) {
+        if (mongoose.Types.ObjectId.isValid(studentCourseId)) {
+          subjectQuery.$or = [
+            { courseId: studentCourseId },
+            { courseId: new mongoose.Types.ObjectId(studentCourseId) },
+            ...(studentCourseCode ? [{ courseCode: new RegExp(`^${studentCourseCode}$`, "i") }] : []),
+          ];
+        } else {
+          subjectQuery.courseId = studentCourseId;
+        }
+      }
+
+      const rawSubjects = await Subject.find(subjectQuery).lean();
+
+      const matchedSubjects = rawSubjects.filter((s) => {
+        const courseMatch = !studentCourseId || isCourseMatch(s.courseId, studentCourseId, s.courseCode, studentCourseCode);
+        if (!courseMatch) return false;
+        return isBranchMatch(s.branch, studentBranch);
       });
 
-      if (!enrollment) {
-        return res.status(404).json({
-          message: "Enrollment not found",
+      const validSubjectIds = new Set(matchedSubjects.map((s) => s._id.toString()));
+      const teacherMap = new Map();
+
+      if (studentSection && validSubjectIds.size > 0) {
+        const sectionRegex = new RegExp(`^${studentSection}$`, "i");
+        const teachers = await User.find({
+          role: "teacher",
+          tenantId: req.user.tenantId,
+          "assignedSubjects.section": sectionRegex,
+          "assignedSubjects.subjectId": { $in: Array.from(validSubjectIds).map((id) => new mongoose.Types.ObjectId(id)) },
+        }).lean();
+
+        teachers.forEach((t) => {
+          (t.assignedSubjects || []).forEach((a) => {
+            if (a.section && String(a.section).trim().toUpperCase() === studentSection && a.subjectId) {
+              const sId = a.subjectId.toString();
+              if (validSubjectIds.has(sId)) {
+                teacherMap.set(sId, {
+                  id: t._id,
+                  name: t.name,
+                  email: t.email,
+                  assignedDate: a.assignedDate,
+                });
+              }
+            }
+          });
         });
       }
 
-      const studentCourseId = (user.courseId || enrollment.courseId)?.toString() || null;
-      const studentBranch = String(user.branch || enrollment.branch || "").trim().toLowerCase();
-
-      // Find all teachers teaching this section
-      const teachers = await User.find({
-        role: "teacher",
-        "assignedSubjects.section": enrollment.section,
-        tenantId: req.user.tenantId,
-      }).populate("assignedSubjects.subjectId");
-
-      // Filter subjects by semester, course, and branch
-      const subjectsInSemester = [];
-
-      // Pre-resolve branch CODE→NAME for subjects
-      const branchCache2 = new Map();
-      const resolveBranch2 = async (code, cId) => {
-        const key = `${cId || ""}:${code}`;
-        if (branchCache2.has(key)) return branchCache2.get(key);
-        let name = code;
-        const q = cId ? { _id: cId, tenantId: req.user.tenantId } : { tenantId: req.user.tenantId, isActive: true, "branches.code": code };
-        const courses = await Course.find(q).lean();
-        for (const c of courses) {
-          const m = (c.branches || []).find((b) => String(b.code || "").toLowerCase() === String(code).toLowerCase());
-          if (m) { name = m.name; break; }
-        }
-        branchCache2.set(key, name);
-        return name;
-      };
-      for (const t of teachers) {
-        for (const a of t.assignedSubjects) {
-          if (a.section === enrollment.section && a.subjectId?.branch && a.subjectId?.semester === semester.trim()) {
-            await resolveBranch2(a.subjectId.branch, a.subjectId.courseId);
-          }
-        }
-      }
-
-      teachers.forEach((teacher) => {
-        teacher.assignedSubjects.forEach((assignment) => {
-          if (
-            assignment.section === enrollment.section &&
-            assignment.subjectId &&
-            assignment.subjectId.isActive !== false &&
-            assignment.subjectId.semester === semester.trim()
-          ) {
-            const subject = assignment.subjectId;
-
-            // Course filter: a course-specific subject must match the student's course;
-            // exclude if the student's course is unknown (prevents cross-course leaks)
-            if (subject.courseId) {
-              if (!studentCourseId || subject.courseId.toString() !== studentCourseId) return;
-            }
-
-            // Branch filter: resolve CODE→NAME, then compare
-            if (subject.branch) {
-              const resolvedName = branchCache2.get(`${subject.courseId || ""}:${subject.branch}`) || subject.branch;
-              if (!studentBranch || String(resolvedName).trim().toLowerCase() !== studentBranch) return;
-            }
-
-            subjectsInSemester.push({
-              subject: {
-                id: subject._id,
-                subjectCode: subject.subjectCode,
-                subjectName: subject.subjectName,
-                semester: subject.semester,
-                credits: subject.credits,
-                description: subject.description,
-              },
-              teacher: {
-                id: teacher._id,
-                name: teacher.name,
-                email: teacher.email,
-              },
-              section: assignment.section,
-              assignedDate: assignment.assignedDate,
-            });
-          }
-        });
+      const subjectsInSemester = matchedSubjects.map((subject) => {
+        const teacher = teacherMap.get(subject._id.toString());
+        return {
+          subject: {
+            id: subject._id,
+            subjectCode: subject.subjectCode,
+            subjectName: subject.subjectName,
+            semester: subject.semester,
+            credits: subject.credits,
+            description: subject.description,
+            courseId: subject.courseId,
+            courseCode: subject.courseCode,
+            branch: subject.branch,
+          },
+          teacher: teacher || null,
+          section: studentSection,
+          assignedDate: teacher?.assignedDate || null,
+        };
       });
 
       response = {
         message: `Your subjects for semester ${semester} retrieved successfully`,
         count: subjectsInSemester.length,
         semester,
-        section: enrollment.section,
+        section: studentSection,
         subjects: subjectsInSemester,
       };
     }
@@ -960,10 +1032,12 @@ const getTeacherSubjects = async (req, res) => {
   }
 
   try {
-    const requester = await User.findById(req.user._id);
+    const requesterRole = req.user?.role;
+    const requesterId = String(req.user?._id || "");
+    const tenantId = req.user?.tenantId || req.tenantId;
 
     // Check permissions
-    if (requester.role !== "admin" && requester._id.toString() !== teacherId) {
+    if (requesterRole !== "admin" && requesterRole !== "super_admin" && requesterId !== String(teacherId)) {
       return res.status(403).json({
         message: "You do not have permission to view this information",
       });
@@ -971,12 +1045,15 @@ const getTeacherSubjects = async (req, res) => {
 
     const teacher = await User.findOne({
       _id: teacherId,
-      tenantId: req.user.tenantId,
+      tenantId: tenantId,
     }).populate("assignedSubjects.subjectId");
 
-    if (!teacher || teacher.role !== "teacher") {
-      return res.status(404).json({
+    if (!teacher) {
+      return res.status(200).json({
+        success: true,
         message: "Teacher not found",
+        subjects: [],
+        data: [],
       });
     }
 
@@ -1012,13 +1089,24 @@ const getTeacherSubjects = async (req, res) => {
           assignmentId: assignment._id,
           subject: {
             id: subject._id,
+            _id: subject._id,
             subjectCode: subject.subjectCode,
             subjectName: subject.subjectName,
             semester: subject.semester,
             credits: subject.credits,
             description: subject.description,
             isActive: subject.isActive,
+            courseId: subject.courseId,
+            courseCode: subject.courseCode,
+            branch: subject.branch,
           },
+          subjectId: subject._id,
+          subjectCode: subject.subjectCode,
+          subjectName: subject.subjectName,
+          semester: subject.semester,
+          courseId: subject.courseId,
+          courseCode: subject.courseCode,
+          branch: subject.branch,
           section: assignment.section,
           assignedDate: assignment.assignedDate,
           stats: {
@@ -1168,61 +1256,102 @@ const searchSubjects = async (req, res) => {
       };
     }
 
-    // STUDENT - Search only subjects in their section
-    else if (user.role === "student") {
+    // STUDENT - Search only subjects in their course, branch, and section
+    else if (user.role === "student" || user.role === "parent" || req.user.accessMode === "parent") {
       const enrollment = await Enrollment.findOne({
-        userId: user._id,
+        $or: [
+          { userId: user._id },
+          ...(user.email ? [{ email: user.email.toLowerCase().trim() }] : []),
+          ...(user.rollNo ? [{ enrollmentNumber: user.rollNo.trim() }, { rollNo: user.rollNo.trim() }] : []),
+        ],
         tenantId: req.user.tenantId,
+      }).lean();
+
+      let studentCourseId = (user.courseId || enrollment?.courseId)?.toString() || null;
+      let studentCourseCode = (user.courseCode || enrollment?.courseCode || user.courseName || enrollment?.courseName || "")?.toString().trim();
+      const studentBranch = String(user.branch || enrollment?.branch || "").trim();
+      const studentSection = String(enrollment?.section || user.section || "").trim().toUpperCase();
+
+      // Find all matching active subjects for the student's course & branch
+      const searchSubjQuery = {
+        tenantId: req.user.tenantId,
+        isActive: true,
+        $or: [{ subjectCode: searchRegex }, { subjectName: searchRegex }],
+      };
+      if (studentCourseId) {
+        if (mongoose.Types.ObjectId.isValid(studentCourseId)) {
+          searchSubjQuery.$and = [
+            {
+              $or: [
+                { courseId: studentCourseId },
+                { courseId: new mongoose.Types.ObjectId(studentCourseId) },
+                ...(studentCourseCode ? [{ courseCode: new RegExp(`^${studentCourseCode}$`, "i") }] : []),
+              ],
+            },
+          ];
+        } else {
+          searchSubjQuery.courseId = studentCourseId;
+        }
+      }
+
+      const rawSubjects = await Subject.find(searchSubjQuery).lean();
+
+      const matchedSubjects = rawSubjects.filter((s) => {
+        const courseMatch = !studentCourseId || isCourseMatch(s.courseId, studentCourseId, s.courseCode, studentCourseCode);
+        if (!courseMatch) return false;
+        return isBranchMatch(s.branch, studentBranch);
       });
 
-      if (!enrollment) {
-        return res.status(404).json({
-          message: "Enrollment not found",
+      const validSubjectIds = new Set(matchedSubjects.map((s) => s._id.toString()));
+      const teacherMap = new Map();
+
+      if (studentSection && validSubjectIds.size > 0) {
+        const sectionRegex = new RegExp(`^${studentSection}$`, "i");
+        const teachers = await User.find({
+          role: "teacher",
+          tenantId: req.user.tenantId,
+          "assignedSubjects.section": sectionRegex,
+          "assignedSubjects.subjectId": { $in: Array.from(validSubjectIds).map((id) => new mongoose.Types.ObjectId(id)) },
+        }).lean();
+
+        teachers.forEach((t) => {
+          (t.assignedSubjects || []).forEach((a) => {
+            if (a.section && String(a.section).trim().toUpperCase() === studentSection && a.subjectId) {
+              const sId = a.subjectId.toString();
+              if (validSubjectIds.has(sId)) {
+                teacherMap.set(sId, {
+                  id: t._id,
+                  name: t.name,
+                  email: t.email,
+                  assignedDate: a.assignedDate,
+                });
+              }
+            }
+          });
         });
       }
 
-      // Find all teachers teaching this section
-      const teachers = await User.find({
-        role: "teacher",
-        "assignedSubjects.section": enrollment.section,
-        tenantId:req.user.tenantId
-      }).populate({
-        path: "assignedSubjects.subjectId",
-        match: {
-          $or: [{ subjectCode: searchRegex }, { subjectName: searchRegex }],
-        },
-      });
-
-      const matchingSubjects = [];
-
-      teachers.forEach((teacher) => {
-        teacher.assignedSubjects.forEach((assignment) => {
-          if (
-            assignment.section === enrollment.section &&
-            assignment.subjectId
-          ) {
-            matchingSubjects.push({
-              subject: {
-                id: assignment.subjectId._id,
-                subjectCode: assignment.subjectId.subjectCode,
-                subjectName: assignment.subjectId.subjectName,
-                semester: assignment.subjectId.semester,
-                credits: assignment.subjectId.credits,
-              },
-              teacher: {
-                id: teacher._id,
-                name: teacher.name,
-                email: teacher.email,
-              },
-              section: assignment.section,
-              assignedDate: assignment.assignedDate,
-            });
-          }
-        });
+      const matchingSubjects = matchedSubjects.map((subject) => {
+        const teacher = teacherMap.get(subject._id.toString());
+        return {
+          subject: {
+            id: subject._id,
+            subjectCode: subject.subjectCode,
+            subjectName: subject.subjectName,
+            semester: subject.semester,
+            credits: subject.credits,
+            courseId: subject.courseId,
+            courseCode: subject.courseCode,
+            branch: subject.branch,
+          },
+          teacher: teacher || null,
+          section: studentSection,
+          assignedDate: teacher?.assignedDate || null,
+        };
       });
 
       response = {
-        message: `Found ${matchingSubjects.length} subject(s) in your section matching "${query}"`,
+        message: `Found ${matchingSubjects.length} subject(s) in your course and branch matching "${query}"`,
         query,
         count: matchingSubjects.length,
         subjects: matchingSubjects,
@@ -1279,6 +1408,7 @@ const updateSubject = async (req, res) => {
     if (branch !== undefined) subject.branch = branch.trim();
 
     await subject.save();
+    await cache.delPattern(`subjects:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ message: "Subject updated successfully", subject });
   } catch (error) {
@@ -1298,6 +1428,7 @@ const deactivateSubject = async (req, res) => {
 
     subject.isActive = false;
     await subject.save();
+    await cache.delPattern(`subjects:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ message: "Subject deactivated successfully", subject });
   } catch (error) {
@@ -1321,6 +1452,7 @@ const deleteSubject = async (req, res) => {
     );
 
     await subject.deleteOne();
+    await cache.delPattern(`subjects:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(200).json({ message: "Subject deleted successfully" });
   } catch (error) {

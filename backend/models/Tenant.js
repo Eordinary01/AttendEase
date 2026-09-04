@@ -57,8 +57,12 @@ const tenantSchema = new mongoose.Schema({
     logo: String,
     primaryColor: { type: String, default: '#6366f1' },
     secondaryColor: { type: String, default: '#8b5cf6' },
+    accentColor: { type: String, default: '#6366f1' },
     institutionName: String,
     welcomeMessage: String,
+    customMessage: String,
+    bannerImage: String,
+    favicon: String,
   },
 
   // College Compliance & Accreditation (Item 12)

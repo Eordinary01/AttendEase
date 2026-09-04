@@ -1,51 +1,34 @@
-// src/components/StudentDashboard.jsx
-import React, { useEffect, useState, useCallback } from "react";
+// src/component/Dashboard/index.jsx (Revamped Student Workspace — Bento Grid)
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
+  Calendar,
+  CalendarDays,
+  Clock,
   Ticket,
-  GraduationCap,
-  Bell,
-  User,
-  TrendingUp,
-  BookOpen,
-  Award,
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  ChevronRight,
-  Download,
+  Plus,
+  RefreshCw,
+  FileText,
   Eye,
-  ClipboardCheck,
+  Download,
+  Megaphone,
+  CheckCircle2,
+  AlertCircle,
+  BookOpen,
 } from "lucide-react";
-import AttendanceHistory from "../AttendanceHistory";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-import { Tab } from "@headlessui/react";
-import { Fragment } from "react";
+
 import api from "../../utils/api";
+import { logError } from "../../utils/logger";
 import { useTheme } from "../../contexts/ThemeContexts";
+import DashboardHeader from "../common/ui/DashboardHeader";
+import StatValue from "../common/ui/StatValue";
 import Button from "../common/ui/Button";
-import Card from "../common/ui/Card";
-import Modal from "../common/ui/Modal";
 import Badge from "../common/ui/Badge";
-import Table from "../common/ui/Table";
 import EmptyState from "../common/ui/EmptyState";
-import StatCard from "../common/ui/StatCard";
+import Modal from "../common/ui/Modal";
+import { Input, Select, Textarea } from "../common/ui/Input";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-/** Hex → "R G B" string, used to build rgba() values from a CSS variable. */
 function hexToRgbStr(hex = "#6366f1") {
   const h = hex.replace("#", "");
   const r = parseInt(h.substring(0, 2), 16);
@@ -54,13 +37,10 @@ function hexToRgbStr(hex = "#6366f1") {
   return `${r} ${g} ${b}`;
 }
 
-
-
 export default function StudentDashboard({ userId, userName, userEmail }) {
   const { colors } = useTheme();
-
-  const primary = colors?.primary || "#6366f1";
-  const secondary = colors?.secondary || primary;
+  const primary = colors?.primary || "#1d4ed8";
+  const secondary = colors?.secondary || "#4f46e5";
 
   const cssVars = {
     "--theme-primary": primary,
@@ -68,565 +48,923 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
     "--theme-primary-rgb": hexToRgbStr(primary),
   };
 
-  const [tickets, setTickets] = useState([]);
-  const [attendanceData, setAttendanceData] = useState(null);
-  const [announcements, setAnnouncements] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileContent, setFileContent] = useState(null);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
-
-  const API_URL = process.env.REACT_APP_API_URL;
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // ── data fetching ──────────────────────────────────────────────────────────
+  // ── States ─────────────────────────────────────────────────────────────────
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    if (!token) {
-      setError("No authentication token found");
-      setLoading(false);
-      return;
-    }
+  // Data states
+  const [profile, setProfile] = useState(null);
+  const [attendance, setAttendance] = useState(null);
+  const [subjectStats, setSubjectStats] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [timetable, setTimetable] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [enrolledSubjects, setEnrolledSubjects] = useState([]);
+
+  // Modals
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+  const [selectedNotice, setSelectedNotice] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileContent, setFileContent] = useState(null);
+
+  // Ticket creation form
+  const [ticketForm, setTicketForm] = useState({
+    subjectId: "",
+    reasonDescription: "",
+    absenceDate: new Date().toISOString().split("T")[0],
+    files: [],
+  });
+  const [submittingTicket, setSubmittingTicket] = useState(false);
+
+  // ── Fetch All Data ─────────────────────────────────────────────────────────
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!token) return;
     try {
-      setLoading(true);
-      const [ticketsRes, attendanceRes, announcementsRes] = await Promise.allSettled([
-        api.get('/tickets/student'),
-        api.get('/attendance/records'),
-        api.get('/alerts'),
-      ]);
+      if (!isSilent) setLoading(true);
+      else setRefreshing(true);
 
-      if (ticketsRes.status === "fulfilled") {
-        const tData = ticketsRes.value.data;
-        setTickets(Array.isArray(tData) ? tData : (tData?.data || []));
-      } else {
-        setTickets([]);
+      const [profRes, attRes, tickRes, alertRes, calRes, subRes] =
+        await Promise.allSettled([
+          api.get("/users/profile"),
+          api.get("/attendance/student/stats").catch(() => api.get("/attendance/stats")),
+          api.get("/tickets/student").catch(() => api.get("/tickets/my-tickets")),
+          api.get("/alerts"),
+          api.get("/calendar").catch(() => ({ data: { data: [] } })),
+          api.get("/subjects/student/enrolled").catch(() => api.get("/subjects/all")),
+        ]);
+
+      let userSec = "A";
+      if (profRes.status === "fulfilled") {
+        const u = profRes.value.data?.user || profRes.value.data?.data || profRes.value.data;
+        setProfile(u);
+        if (u?.section) userSec = u.section;
       }
 
-      if (attendanceRes.status === "fulfilled") {
-        setAttendanceData(attendanceRes.value.data);
-        setError(null);
-      } else {
-        const msg = attendanceRes.reason?.response?.data?.message || "Failed to load attendance records";
-        setError(msg);
+      if (attRes.status === "fulfilled") {
+        const d = attRes.value.data?.data || attRes.value.data || {};
+        setAttendance(d.overall || d.overallStats || d);
+        const statsList =
+          d.subjectWiseStats ||
+          d.bySubject ||
+          d.subjectStats ||
+          [];
+        setSubjectStats(Array.isArray(statsList) ? statsList : []);
       }
 
-      if (announcementsRes.status === "fulfilled") {
-        const aData = announcementsRes.value.data;
-        const list = Array.isArray(aData) ? aData : (aData?.data || aData?.alerts || []);
-        setAnnouncements(Array.isArray(list) ? list : []);
-      } else {
-        setAnnouncements([]);
+      if (tickRes.status === "fulfilled") {
+        const tData = tickRes.value.data;
+        setTickets(
+          Array.isArray(tData?.tickets)
+            ? tData.tickets
+            : Array.isArray(tData?.data)
+            ? tData.data
+            : Array.isArray(tData)
+            ? tData
+            : []
+        );
+      }
+
+      if (alertRes.status === "fulfilled") {
+        const aList = alertRes.value.data?.data || alertRes.value.data || [];
+        setAlerts(Array.isArray(aList) ? aList : []);
+      }
+
+      if (calRes.status === "fulfilled") {
+        const cList = calRes.value.data?.data || calRes.value.data || [];
+        setHolidays(Array.isArray(cList) ? cList : []);
+      }
+
+      if (subRes.status === "fulfilled") {
+        const sList =
+          subRes.value.data?.subjects ||
+          subRes.value.data?.data?.subjects ||
+          subRes.value.data?.data ||
+          subRes.value.data ||
+          [];
+        setEnrolledSubjects(Array.isArray(sList) ? sList : []);
+      }
+
+      // Fetch timetable for today's schedule
+      try {
+        const ttRes = await api.get(`/timetable/section/${userSec}`);
+        const ttList = ttRes.data?.data || ttRes.data?.timetable || ttRes.data || [];
+        setTimetable(Array.isArray(ttList) ? ttList : []);
+      } catch {
+        setTimetable([]);
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to load dashboard data");
+      logError("Student Dashboard fetch", err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [token, API_URL]);
+  }, [token]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ── file preview ───────────────────────────────────────────────────────────
+  // ── Derived Data ───────────────────────────────────────────────────────────
+  const currentDayName = useMemo(() => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[new Date().getDay()];
+  }, []);
 
-  const handleFilePreview = async (ticketId, fileName) => {
-    try {
-      const response = await fetch(`${API_URL}/tickets/${ticketId}/file`, {
-        headers: { Authorization: `Bearer ${token}` },
+  const timeOfDay = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "morning";
+    if (hour < 17) return "afternoon";
+    return "evening";
+  }, []);
+
+  const todaySchedule = useMemo(() => {
+    return timetable.filter((item) => {
+      const d = item.day || item.dayOfWeek || "";
+      return d.toLowerCase() === currentDayName.toLowerCase();
+    });
+  }, [timetable, currentDayName]);
+
+  const totalClasses = attendance?.totalClasses ?? attendance?.total ?? 0;
+  const attendedClasses = attendance?.attendedClasses ?? attendance?.presentCount ?? attendance?.present ?? attendance?.attendedCount ?? 0;
+  const absentClasses = attendance?.absentClasses ?? attendance?.absentCount ?? attendance?.absent ?? Math.max(0, totalClasses - attendedClasses);
+
+  const overallPercent = useMemo(() => {
+    if (totalClasses > 0) {
+      return Math.round((attendedClasses / totalClasses) * 1000) / 10;
+    }
+    const p =
+      attendance?.overallPercentage ??
+      attendance?.percentage ??
+      attendance?.compliancePercentage ??
+      attendance?.attendancePercentage;
+    if (typeof p === "number" && p > 0) return Math.round(p * 10) / 10;
+    return null;
+  }, [attendance, totalClasses, attendedClasses]);
+
+  const displaySubjects = useMemo(() => {
+    if (enrolledSubjects && enrolledSubjects.length > 0) {
+      return enrolledSubjects.map((sub) => {
+        const subId = String(sub._id || sub.id || "");
+        const subCode = String(sub.subjectCode || "").toUpperCase();
+
+        const stat = subjectStats.find(
+          (s) =>
+            (s.subjectId && String(s.subjectId) === subId) ||
+            (s._id && String(s._id) === subId) ||
+            (s.subjectCode && String(s.subjectCode).toUpperCase() === subCode)
+        );
+
+        const present = stat ? (stat.presentClasses ?? stat.presentCount ?? stat.attendedClasses ?? 0) : 0;
+        const total = stat ? (stat.totalClasses ?? stat.total ?? 0) : 0;
+        const absent = stat ? (stat.absentClasses ?? stat.absentCount ?? Math.max(0, total - present)) : 0;
+        const hasAttendance = total > 0;
+
+        const pct = hasAttendance
+          ? (typeof stat?.percentage === "number"
+              ? Math.round(stat.percentage * 10) / 10
+              : Math.round((present / total) * 1000) / 10)
+          : null;
+
+        return {
+          id: subId || subCode,
+          subjectCode: sub.subjectCode || stat?.subjectCode || "SUB",
+          subjectName: sub.subjectName || stat?.subjectName || "Course Subject",
+          percentage: pct,
+          present,
+          total,
+          absent,
+          hasAttendance,
+        };
       });
-      if (!response.ok) throw new Error("Failed to fetch file");
-      const blob = await response.blob();
-      const fileType = response.headers.get("content-type");
-      const url = URL.createObjectURL(blob);
+    }
+
+    if (subjectStats && subjectStats.length > 0) {
+      return subjectStats.map((sub, idx) => {
+        const present = sub.presentClasses ?? sub.presentCount ?? sub.attendedClasses ?? 0;
+        const total = sub.totalClasses ?? sub.total ?? 0;
+        const absent = sub.absentClasses ?? sub.absentCount ?? Math.max(0, total - present);
+        const hasAttendance = total > 0;
+        const pct = hasAttendance
+          ? (typeof sub.percentage === "number"
+              ? Math.round(sub.percentage * 10) / 10
+              : Math.round((present / total) * 1000) / 10)
+          : null;
+
+        return {
+          id: sub.subjectId || sub._id || idx,
+          subjectCode: sub.subjectCode || "SUB",
+          subjectName: sub.subjectName || "Subject Name",
+          percentage: pct,
+          present,
+          total,
+          absent,
+          hasAttendance,
+        };
+      });
+    }
+
+    return [];
+  }, [enrolledSubjects, subjectStats]);
+
+  const activeSubjectsCount = useMemo(() => {
+    return displaySubjects.filter((s) => s.hasAttendance).length;
+  }, [displaySubjects]);
+
+  const safeSubjectsCount = useMemo(() => {
+    return displaySubjects.filter((s) => s.hasAttendance && s.percentage >= 75).length;
+  }, [displaySubjects]);
+
+  const pendingTicketsCount = useMemo(() => {
+    return tickets.filter((t) => (t.verificationStatus || t.status) === "pending").length;
+  }, [tickets]);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const handleFileClick = async (ticketId, file) => {
+    try {
+      const fileId = file.id || file._id;
+      const res = await api.get(`/tickets/${ticketId}/files/${fileId}`, {
+        responseType: "blob",
+      });
+      const fileType = res.headers["content-type"] || "";
+      const url = URL.createObjectURL(res.data);
       if (fileType.startsWith("image/")) {
         setFileContent({ type: "image", content: url });
       } else if (fileType === "application/pdf") {
         setFileContent({ type: "pdf", content: url });
       } else {
-        setFileContent({ type: "download", content: url, fileName });
+        setFileContent({
+          type: "download",
+          content: url,
+          fileName: file.originalName || file.filename || "document",
+        });
       }
-      setSelectedFile({ ticketId, fileName });
+      setSelectedFile({ ticketId, file });
     } catch {
-      setFileContent({ type: "error", content: "Error loading file" });
+      setFileContent({ type: "error", content: "Error loading proof preview." });
     }
   };
 
-  // ── derived data ───────────────────────────────────────────────────────────
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    if (!ticketForm.subjectId || !ticketForm.reasonDescription.trim()) {
+      alert("Please select a subject and describe the reason.");
+      return;
+    }
 
-  const stats = attendanceData?.stats || {
-    totalClasses: 0,
-    presentCount: 0,
-    absentCount: 0,
-    leaveCount: 0,
-    attendancePercentage: "0",
-    bySubject: [],
+    try {
+      setSubmittingTicket(true);
+      const formData = new FormData();
+      formData.append("subjectId", ticketForm.subjectId);
+      formData.append("reasonDescription", ticketForm.reasonDescription);
+      formData.append("absenceDate", ticketForm.absenceDate);
+      if (ticketForm.files && ticketForm.files.length > 0) {
+        for (let i = 0; i < ticketForm.files.length; i++) {
+          formData.append("files", ticketForm.files[i]);
+        }
+      }
+
+      await api.post("/tickets", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setIsProofModalOpen(false);
+      setTicketForm({
+        subjectId: "",
+        reasonDescription: "",
+        absenceDate: new Date().toISOString().split("T")[0],
+        files: [],
+      });
+      fetchData(true);
+    } catch (err) {
+      alert(err.response?.data?.message || "Error submitting absence proof.");
+    } finally {
+      setSubmittingTicket(false);
+    }
   };
 
-  const studentInfo = attendanceData?.student || {
-    name: userName,
-    rollNo: "N/A",
-    section: "N/A",
-    courseName: "",
-    branch: "",
-    semester: null,
-    admissionYear: null,
-  };
-
-  const pieData = [
-    { name: "Present", value: stats.presentCount, color: "#10b981" },
-    { name: "Absent", value: stats.absentCount, color: "#ef4444" },
-    { name: "Leave", value: stats.leaveCount, color: "#f59e0b" },
-  ].filter((item) => item.value > 0);
-
-  // ── loading / error states ─────────────────────────────────────────────────
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center space-y-3">
           <div
-            className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mx-auto mb-4"
-            style={{ borderColor: `${primary}40`, borderTopColor: primary }}
+            className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto"
+            style={{ borderColor: `${primary}30`, borderTopColor: primary }}
           />
-          <p className="text-ink-soft">Loading your dashboard…</p>
+          <p className="text-xs font-semibold text-ink-soft tracking-wider uppercase">
+            Loading Workspace...
+          </p>
         </div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <Card padding="xl" className="max-w-md w-full text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-ink mb-2">Error</h2>
-          <p className="text-ink-soft mb-6">{error}</p>
-          <Button onClick={fetchData} variant="primary">Try Again</Button>
-        </Card>
-      </div>
-    );
-  }
-
-  // ── render ─────────────────────────────────────────────────────────────────
+  const studentName = profile?.name || userName || localStorage.getItem("userName") || "Student";
+  const firstName = studentName.split(" ")[0];
+  const branch = profile?.branch || profile?.course || "CSE";
+  const section = profile?.section || "A";
+  const semester = profile?.semester || 1;
+  const rollNo = profile?.rollNo || "N/A";
 
   return (
-    // cssVars injected here — all descendants read var(--theme-primary) freely
-    <div className="space-y-6" style={cssVars}>
-      {/* Welcome Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl p-6 text-white"
-        style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
-      >
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">
-              Welcome back, {studentInfo.name || userName}!
-            </h1>
-            <p className="text-white/80">Track your academic progress here</p>
-          </div>
-          <div className="mt-4 md:mt-0 flex flex-wrap gap-2 md:gap-3 text-xs md:text-sm">
-            {studentInfo.rollNo && studentInfo.rollNo !== "N/A" && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <User className="w-4 h-4 text-white/90" />
-                <span className="font-medium">{studentInfo.rollNo}</span>
-              </div>
-            )}
-            {studentInfo.courseName && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <BookOpen className="w-4 h-4 text-white/90" />
-                <span className="font-medium">{studentInfo.courseName}</span>
-              </div>
-            )}
-            {studentInfo.branch && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <Award className="w-4 h-4 text-white/90" />
-                <span className="font-medium">{studentInfo.branch}</span>
-              </div>
-            )}
-            {studentInfo.semester && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <GraduationCap className="w-4 h-4 text-white/90" />
-                <span className="font-medium">Sem {studentInfo.semester}</span>
-              </div>
-            )}
-            {studentInfo.section && studentInfo.section !== "N/A" && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <GraduationCap className="w-4 h-4 text-white/90" />
-                <span className="font-medium">Sec {studentInfo.section}</span>
-              </div>
-            )}
-            {studentInfo.admissionYear && (
-              <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg">
-                <span className="font-medium">Batch {studentInfo.admissionYear}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
+    <div style={cssVars} className="min-h-screen bg-background text-ink pb-12">
+      {/* Shared Dashboard Header Strip */}
+      <DashboardHeader
+        greeting={`Good ${timeOfDay}, ${firstName}`}
+        meta={`${branch} • Section ${section} • Semester ${semester} • Roll: ${rollNo}`}
+        highlightAction={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setIsProofModalOpen(true)}
+            leftIcon={Plus}
+          >
+            Submit Leave Proof
+          </Button>
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchData(true)}
+            loading={refreshing}
+            leftIcon={RefreshCw}
+          >
+            Sync
+          </Button>
+        }
+      />
 
-      {/* Stat Cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-      >
-        <StatCard label="Total Classes" value={stats.totalClasses} icon={BookOpen} tone="primary" />
-        <StatCard label="Classes Attended" value={stats.presentCount} icon={CheckCircle} tone="success" />
-        <StatCard label="Classes Missed" value={stats.absentCount + stats.leaveCount} icon={XCircle} tone="danger" />
-        <StatCard label="Attendance" value={`${stats.attendancePercentage}%`} icon={TrendingUp} tone="warning" />
-      </motion.div>
-
-      {/* Announcements */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Bell className="w-6 h-6 theme-text" />
-          <h2 className="text-xl font-semibold text-ink">Announcements</h2>
-          <span className="theme-bg text-white text-xs px-2 py-1 rounded-full">
-            {announcements.length}
-          </span>
-        </div>
-
-        {announcements.length === 0 ? (
-          <EmptyState
-            icon={Bell}
-            title="No announcements at the moment"
-            description="Check back later for updates."
-          />
-        ) : (
-          <div className="grid gap-4">
-            {announcements.map((announcement, idx) => (
-              <motion.div
-                key={announcement._id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
+      {/* Main Container */}
+      <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+        {/* ── Row 1: Primary Bento (Attendance Hero [2/3] + Today's Schedule [1/3]) ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Attendance Hero Card — 2/3 width, the page's priority */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="lg:col-span-2 rounded-2xl bg-surface border border-line/70 p-5 shadow-sm space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                Attendance Compliance
+              </span>
+              <Badge
+                tone={
+                  overallPercent === null
+                    ? "primary"
+                    : overallPercent >= 75
+                    ? "success"
+                    : "danger"
+                }
+                size="sm"
               >
-                <Card
-                  padding="md"
-                  hoverable
-                  className="theme-border-l"
-                  onClick={() => setSelectedAnnouncement(announcement)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <AlertCircle className="w-5 h-5 theme-text" />
-                        <span className="text-xs text-ink-faint">
-                          {new Date(announcement.createdAt).toLocaleDateString("en-US", {
-                            year: "numeric", month: "long", day: "numeric",
-                          })}
+                {overallPercent === null
+                  ? "Enrolled"
+                  : overallPercent >= 75
+                  ? "Good Standing"
+                  : "Shortage Warning"}
+              </Badge>
+            </div>
+
+            <StatValue
+              value={overallPercent !== null ? `${overallPercent}%` : "--"}
+              subtitle="/ 75% minimum required"
+              progress={overallPercent ?? 0}
+              progressColor={
+                overallPercent === null
+                  ? "primary"
+                  : overallPercent >= 75
+                  ? "green"
+                  : "red"
+              }
+              variant="hero"
+              accent
+            />
+
+            <div className="flex items-center justify-between text-xs text-ink-soft pt-3 border-t border-line/50">
+              <span>
+                Attended: <strong className="text-ink font-bold">{attendedClasses}</strong> classes
+              </span>
+              <span>
+                Absent: <strong className="text-ink font-bold">{absentClasses}</strong> classes
+              </span>
+              <span>
+                Total: <strong className="text-ink font-bold">{totalClasses}</strong> classes
+              </span>
+            </div>
+          </motion.div>
+
+          {/* Today's Schedule — 1/3 width */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="lg:col-span-1 rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                  Today — {currentDayName}
+                </span>
+                <span className="text-xs font-semibold text-primary">
+                  {todaySchedule.length} classes
+                </span>
+              </div>
+
+              {todaySchedule.length === 0 ? (
+                <EmptyState
+                  icon={<Clock className="w-5 h-5 text-ink-faint" />}
+                  title="No classes scheduled today"
+                  description="Enjoy your day off or review upcoming lectures."
+                  className="py-4"
+                />
+              ) : (
+                <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                  {todaySchedule.map((slot, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-xl bg-background border border-line/50 flex items-center justify-between text-xs"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-mono font-bold text-primary block truncate">
+                          {slot.subjectCode || slot.subject?.subjectCode || "COURSE"}
                         </span>
-                        {announcement.createdBy?.name && (
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                            By {announcement.createdBy.name} ({announcement.createdBy.role === "teacher" ? "Teacher" : "Admin"})
-                          </span>
-                        )}
+                        <span className="text-[11px] text-ink-soft truncate block">
+                          {slot.room ? `Room ${slot.room}` : "Main Hall"}
+                        </span>
                       </div>
-                      {announcement.title && <h4 className="font-semibold text-ink mb-1">{announcement.title}</h4>}
-                      <p className="text-ink line-clamp-2">{announcement.message}</p>
+                      <span className="shrink-0 text-[11px] font-semibold text-ink font-mono">
+                        {slot.time || `${slot.startTime || "09:00"} - ${slot.endTime || "10:00"}`}
+                      </span>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-ink-faint flex-shrink-0 ml-4" />
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => navigate("/timetable")}
+              className="text-xs text-primary font-semibold hover:underline text-left pt-2 border-t border-line/40 flex items-center justify-between"
+            >
+              <span>View full weekly timetable</span>
+              <span>→</span>
+            </button>
+          </motion.div>
+        </div>
+
+        {/* ── Row 2: Subject Breakdown (Full-Width Medium Card) ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-2xl bg-surface border border-line/50 p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-ink">Course-wise Attendance</h3>
+            <button
+              onClick={() => navigate("/student/subjects")}
+              className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
+            >
+              <span>View All Subjects ({displaySubjects.length})</span>
+              <span>→</span>
+            </button>
           </div>
-        )}
-      </motion.div>
 
-      {/* Tabs */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <Tab.Group selectedIndex={activeTab} onChange={setActiveTab}>
-          <Tab.List className="flex space-x-2 bg-surface rounded-xl p-1 shadow-card border border-line mb-6">
-            {[
-              { label: "Subject-wise Attendance", icon: <Award className="w-5 h-5" /> },
-              { label: "Attendance Log", icon: <ClipboardCheck className="w-5 h-5" /> },
-              { label: "Analytics", icon: <TrendingUp className="w-5 h-5" /> },
-              { label: `My Tickets (${tickets.length})`, icon: <Ticket className="w-5 h-5" /> },
-            ].map(({ label, icon }, i) => (
-              <Tab key={label} as={Fragment}>
-                {({ selected }) => (
-                  <button
-                    className={`flex-1 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                      selected
-                        ? "text-white shadow-md"
-                        : "text-ink-soft hover:bg-background"
-                    }`}
-                    style={selected ? { backgroundColor: primary } : {}}
+          {displaySubjects.length === 0 ? (
+            <EmptyState
+              icon={<BookOpen className="w-6 h-6 text-primary" />}
+              title="No enrolled subjects found"
+              description="Your semester courses and attendance will populate here once enrolled."
+              className="py-8"
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {displaySubjects.slice(0, 4).map((sub) => {
+                const isSafe = sub.hasAttendance ? sub.percentage >= 75 : true;
+
+                return (
+                  <div
+                    key={sub.id}
+                    className="p-4 rounded-xl bg-background border border-line/50 space-y-2 hover:border-primary/40 transition"
                   >
-                    {icon}
-                    <span>{label}</span>
-                  </button>
-                )}
-              </Tab>
-            ))}
-          </Tab.List>
-
-          <Tab.Panels>
-            {/* ── Tab 1: Subject-wise Attendance ── */}
-            <Tab.Panel>
-              <Card>
-                {stats.bySubject.length === 0 ? (
-                  <EmptyState
-                    icon={BookOpen}
-                    title="No attendance records found"
-                    description="Your attendance by subject will appear here once recorded."
-                  />
-                ) : (
-                  <Table
-                    columns={[
-                      { header: "Subject", accessor: "subjectName" },
-                      { header: "Subject Code", accessor: "subjectCode" },
-                      { header: "Attended / Total", cell: (row) => `${row.present} / ${row.total}` },
-                      {
-                        header: "Attendance %",
-                        cell: (row) => {
-                          const pct = parseFloat(row.attendancePercentage);
-                          const barColor = pct >= 75 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
-                          const textColor = pct >= 75 ? "text-emerald-600" : pct >= 60 ? "text-amber-600" : "text-red-600";
-                          return (
-                            <div className="flex items-center gap-3 min-w-[150px]">
-                              <div className="flex-1 bg-line rounded-full h-2">
-                                <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <span className={`text-sm font-medium ${textColor}`}>
-                                {row.attendancePercentage}%
-                              </span>
-                            </div>
-                          );
-                        },
-                      },
-                    ]}
-                    data={stats.bySubject}
-                    rowKey="subjectCode"
-                  />
-                )}
-              </Card>
-            </Tab.Panel>
-
-            {/* ── Tab 2: Full Attendance History Log ── */}
-            <Tab.Panel>
-              <AttendanceHistory role="student" />
-            </Tab.Panel>
-
-            {/* ── Tab 2: Analytics ── */}
-            <Tab.Panel>
-              <Card>
-                {stats.bySubject.length === 0 ? (
-                  <EmptyState
-                    icon={TrendingUp}
-                    title="No data available for analytics"
-                    description="Charts will appear here once attendance is recorded."
-                  />
-                ) : (
-                  <div className="grid lg:grid-cols-2 gap-8">
-                    <div>
-                      <h3 className="text-lg font-semibold text-ink mb-4">Subject-wise Attendance</h3>
-                      <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={stats.bySubject.map((s) => ({
-                              name: s.subjectCode,
-                              attendance: parseFloat(s.attendancePercentage),
-                            }))}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis domain={[0, 100]} />
-                            <Tooltip formatter={(v) => [`${v}%`, "Attendance"]} />
-                            <Legend />
-                            <Line type="monotone" dataKey="attendance" stroke={primary} strokeWidth={2} name="Attendance %" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                    <span className="text-[10px] font-mono font-bold text-primary block">
+                      {sub.subjectCode}
+                    </span>
+                    <h4 className="text-xs font-bold text-ink truncate" title={sub.subjectName}>
+                      {sub.subjectName}
+                    </h4>
+                    <StatValue
+                      value={sub.hasAttendance ? `${sub.percentage}%` : "--"}
+                      progress={sub.hasAttendance ? sub.percentage : 0}
+                      progressColor={!sub.hasAttendance ? "primary" : isSafe ? "green" : "red"}
+                      variant="compact"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-ink-soft pt-1">
+                      <span>
+                        {sub.hasAttendance ? `${sub.present}/${sub.total} attended` : "No sessions held"}
+                      </span>
+                      {sub.hasAttendance ? (
+                        <span className={sub.absent > 3 ? "text-rose-600 font-semibold" : ""}>
+                          {sub.absent} absent
+                        </span>
+                      ) : (
+                        <span className="text-ink-faint">Upcoming</span>
+                      )}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-                    {pieData.length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-ink mb-4">Attendance Distribution</h3>
-                        <div className="h-80">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={pieData}
-                                cx="50%" cy="50%"
-                                innerRadius={60} outerRadius={100}
-                                paddingAngle={5} dataKey="value"
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                              >
-                                {pieData.map((entry, i) => (
-                                  <Cell key={i} fill={entry.color} />
-                                ))}
-                              </Pie>
-                              <Tooltip />
-                              <Legend />
-                            </PieChart>
-                          </ResponsiveContainer>
+          {displaySubjects.length > 0 && (
+            <div className="flex items-center justify-between pt-2 border-t border-line/40 text-xs text-ink-soft flex-wrap gap-2">
+              <p>
+                {activeSubjectsCount > 0 ? (
+                  <>
+                    <strong>{safeSubjectsCount}</strong> of <strong>{activeSubjectsCount}</strong> active {activeSubjectsCount === 1 ? "course is" : "courses are"} in compliance (≥ 75% attendance).
+                  </>
+                ) : (
+                  <>
+                    <strong>{displaySubjects.length}</strong> enrolled {displaySubjects.length === 1 ? "subject" : "subjects"} registered for this semester.
+                  </>
+                )}
+              </p>
+              <button
+                onClick={() => navigate("/attendance-history")}
+                className="text-primary font-bold hover:underline shrink-0 flex items-center gap-1 ml-auto"
+              >
+                <span>View full attendance breakdown</span>
+                <span>→</span>
+              </button>
+            </div>
+          )}
+        </motion.div>
+
+        {/* ── Row 3: 3-Card Row (Academic Calendar [1/3] + Notices [1/3] + Leave Proofs [1/3]) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* 1. Academic Calendar & Holidays */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4 text-primary" /> Academic Calendar
+                </h3>
+                <span className="text-[11px] font-semibold text-ink-faint">
+                  {holidays.length} Events
+                </span>
+              </div>
+
+              {holidays.length === 0 ? (
+                <EmptyState
+                  icon={<CalendarDays className="w-6 h-6 text-primary" />}
+                  title="No upcoming events"
+                  description="University calendar schedule will appear here."
+                  className="py-8"
+                />
+              ) : (
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {holidays.slice(0, 5).map((h, idx) => {
+                    const dateObj = new Date(h.date || h.startDate);
+                    const monthStr = dateObj.toLocaleDateString("en-US", { month: "short" });
+                    const dayNum = dateObj.toLocaleDateString("en-US", { day: "2-digit" });
+                    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+
+                    return (
+                      <div
+                        key={h._id || idx}
+                        className="p-2.5 rounded-xl bg-background border border-line/50 flex items-center gap-3 hover:border-primary/40 transition"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex flex-col items-center justify-center text-primary shrink-0">
+                          <span className="text-[9px] font-bold uppercase leading-none">{monthStr}</span>
+                          <span className="text-xs font-black leading-tight">{dayNum}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-ink truncate">{h.title}</h4>
+                          <div className="flex items-center gap-1.5 text-[10px] text-ink-soft mt-0.5">
+                            <span>{dayName}</span>
+                            <span>•</span>
+                            <span className="capitalize font-semibold text-primary">{h.type || "Holiday"}</span>
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            </Tab.Panel>
-
-            {/* ── Tab 3: Tickets ── */}
-            <Tab.Panel>
-              <Card>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-semibold text-ink">My Tickets</h2>
-                  <Button
-                    onClick={() => (window.location.href = "/tickets")}
-                    variant="primary"
-                    size="sm"
-                  >
-                    + New Ticket
-                  </Button>
+                    );
+                  })}
                 </div>
+              )}
+            </div>
 
-                {tickets.length === 0 ? (
-                  <EmptyState
-                    icon={Ticket}
-                    title="No tickets submitted yet"
-                    description="Create a support ticket whenever you need help."
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {tickets.map((ticket) => (
-                      <TicketCard
-                        key={ticket._id}
-                        ticket={ticket}
-                        primary={primary}
-                        onPreview={handleFilePreview}
-                      />
-                    ))}
-                  </div>
-                )}
-              </Card>
-            </Tab.Panel>
-          </Tab.Panels>
-        </Tab.Group>
-      </motion.div>
+            {holidays.length > 5 && (
+              <button
+                onClick={() => navigate("/calendar")}
+                className="text-xs text-primary font-semibold hover:underline text-left pt-2 border-t border-line/40"
+              >
+                View full academic schedule →
+              </button>
+            )}
+          </motion.div>
 
-      {/* Announcement Modal */}
+          {/* 2. Notices & Circulars Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <Megaphone className="w-4 h-4 text-primary" /> Notices & Circulars
+                </h3>
+                <span className="text-[11px] font-semibold text-ink-faint">
+                  {alerts.length} Published
+                </span>
+              </div>
+
+              {alerts.length === 0 ? (
+                <EmptyState
+                  icon={<Megaphone className="w-6 h-6 text-primary" />}
+                  title="No active announcements"
+                  description="Institution notices and circulars will be broadcast here."
+                  className="py-8"
+                />
+              ) : (
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {alerts.slice(0, 4).map((a, idx) => (
+                    <div
+                      key={a._id || idx}
+                      onClick={() => setSelectedNotice(a)}
+                      className="p-3 rounded-xl bg-background border border-line/50 hover:border-primary/40 transition cursor-pointer space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <h4 className="text-xs font-bold text-ink truncate">
+                          {a.title || "Institution Notice"}
+                        </h4>
+                        <span className="text-[10px] text-ink-faint shrink-0">
+                          {a.createdAt
+                            ? new Date(a.createdAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "Recent"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-ink-soft line-clamp-2 leading-relaxed">
+                        {a.message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {alerts.length > 4 && (
+              <button
+                onClick={() => setSelectedNotice(alerts[0])}
+                className="text-xs text-primary font-semibold hover:underline text-left pt-2 border-t border-line/40"
+              >
+                View all {alerts.length} notices →
+              </button>
+            )}
+          </motion.div>
+
+          {/* 3. Absence Proofs Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="rounded-2xl bg-surface border border-line/50 p-5 space-y-3 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <Ticket className="w-4 h-4 text-primary" /> Absence Proofs
+                </h3>
+                <span
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                    pendingTicketsCount > 0
+                      ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                      : "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                  }`}
+                >
+                  {pendingTicketsCount > 0 ? `${pendingTicketsCount} In Review` : "All Verified"}
+                </span>
+              </div>
+
+              {tickets.length === 0 ? (
+                <EmptyState
+                  icon={<Ticket className="w-6 h-6 text-primary" />}
+                  title="No absence proof tickets raised"
+                  description="Submit medical certificates or duty leaves to maintain attendance compliance."
+                  action={{
+                    label: "+ New Proof",
+                    onClick: () => setIsProofModalOpen(true),
+                  }}
+                  className="py-8"
+                />
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {tickets.map((t, idx) => {
+                    const status = t.verificationStatus || t.status || "pending";
+                    const tone =
+                      status === "approved" || status === "verified"
+                        ? "success"
+                        : status === "rejected"
+                        ? "danger"
+                        : "warning";
+
+                    return (
+                      <div
+                        key={t._id || t.id || idx}
+                        className="p-3 rounded-xl bg-background border border-line/50 space-y-1.5 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-ink-faint font-bold">
+                            #{t._id ? t._id.slice(-6).toUpperCase() : `TICK-${idx + 1}`}
+                          </span>
+                          <Badge tone={tone} size="sm" className="capitalize">
+                            {status}
+                          </Badge>
+                        </div>
+                        <p className="text-ink font-semibold truncate">
+                          {t.subject?.subjectName || t.subject?.subjectCode || t.reasonDescription || "Leave Request"}
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-ink-soft">
+                          <span>
+                            {t.absentDate
+                              ? new Date(t.absentDate).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : "Date specified"}
+                          </span>
+                          {t.proofDocuments && t.proofDocuments.length > 0 && (
+                            <button
+                              onClick={() => handleFileClick(t._id || t.id, t.proofDocuments[0])}
+                              className="text-primary font-bold hover:underline inline-flex items-center gap-1"
+                            >
+                              <FileText className="w-3 h-3" />
+                              View Doc
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {tickets.length > 0 && (
+              <button
+                onClick={() => setIsProofModalOpen(true)}
+                className="w-full text-xs font-semibold text-ink hover:text-primary border border-line/50 rounded-xl py-2 transition hover:bg-background"
+              >
+                + Submit Another Proof
+              </button>
+            )}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* ── Proof Request Submission Modal ── */}
       <Modal
-        isOpen={!!selectedAnnouncement}
-        onClose={() => setSelectedAnnouncement(null)}
-        title={selectedAnnouncement?.title || "Announcement"}
-        subtitle={
-          selectedAnnouncement?.createdAt
-            ? `${new Date(selectedAnnouncement.createdAt).toLocaleString()}${
-                selectedAnnouncement?.createdBy?.name
-                  ? ` • Posted by ${selectedAnnouncement.createdBy.name} (${selectedAnnouncement.createdBy.role === "teacher" ? "Teacher" : "Admin"})`
-                  : ""
-              }`
-            : undefined
-        }
-      >
-        {selectedAnnouncement?.createdBy?.name && (
-          <div className="mb-4 p-3 bg-surface rounded-xl border border-line flex items-center justify-between text-xs">
-            <span className="text-ink-faint font-medium">Sent By</span>
-            <span className="font-semibold text-ink">
-              {selectedAnnouncement.createdBy.name} ({selectedAnnouncement.createdBy.role === "teacher" ? "Teacher" : "Admin"})
-            </span>
-          </div>
-        )}
-        <p className="text-ink leading-relaxed whitespace-pre-wrap">{selectedAnnouncement?.message}</p>
-      </Modal>
-
-      {/* File Preview Modal */}
-      <Modal
-        isOpen={!!selectedFile}
-        onClose={() => { setSelectedFile(null); setFileContent(null); }}
-        title={selectedFile?.fileName ?? "File Preview"}
+        isOpen={isProofModalOpen}
+        onClose={() => setIsProofModalOpen(false)}
+        title="Submit Absence / Medical Proof"
         size="lg"
       >
+        <form onSubmit={handleCreateTicket} className="space-y-4">
+          <Select
+            label="Subject / Course"
+            value={ticketForm.subjectId}
+            onChange={(e) => setTicketForm((f) => ({ ...f, subjectId: e.target.value }))}
+            required
+          >
+            <option value="">-- Choose Subject --</option>
+            {enrolledSubjects.map((s) => (
+              <option key={s.id || s._id} value={s.id || s._id}>
+                {s.subjectName} ({s.subjectCode})
+              </option>
+            ))}
+          </Select>
+
+          <Input
+            label="Absence Date"
+            type="date"
+            value={ticketForm.absenceDate}
+            onChange={(e) => setTicketForm((f) => ({ ...f, absenceDate: e.target.value }))}
+            required
+          />
+
+          <Textarea
+            label="Reason for Absence"
+            value={ticketForm.reasonDescription}
+            onChange={(e) => setTicketForm((f) => ({ ...f, reasonDescription: e.target.value }))}
+            placeholder="Explain the reason (e.g. Medical emergency, University sports event, etc.)"
+            rows={3}
+            required
+          />
+
+          <div>
+            <label className="text-xs font-semibold text-ink-soft block mb-1.5">
+              Attach Supporting Documents (Doctor's Note, Certificates)
+            </label>
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setTicketForm((f) => ({ ...f, files: Array.from(e.target.files) }))}
+              className="w-full text-xs text-ink file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setIsProofModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" type="submit" loading={submittingTicket}>
+              Submit to Faculty
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Notice Inspection Modal */}
+      <Modal
+        isOpen={!!selectedNotice}
+        onClose={() => setSelectedNotice(null)}
+        title={selectedNotice?.title || "Notice Details"}
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-ink-faint">
+            Published on{" "}
+            {selectedNotice?.createdAt ? new Date(selectedNotice.createdAt).toLocaleString() : ""}
+          </p>
+          <div className="p-4 bg-background rounded-2xl border border-line text-xs text-ink leading-relaxed whitespace-pre-wrap">
+            {selectedNotice?.message}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Document Preview Modal */}
+      <Modal
+        isOpen={!!selectedFile}
+        onClose={() => {
+          setSelectedFile(null);
+          setFileContent(null);
+        }}
+        title="Document Preview"
+        size="xl"
+      >
         {fileContent?.type === "image" && (
-          <img src={fileContent.content} alt="Preview" className="max-w-full h-auto rounded-lg" />
+          <div className="flex justify-center p-2 bg-background rounded-2xl border border-line">
+            <img
+              src={fileContent.content}
+              alt="Preview"
+              className="max-w-full max-h-[70vh] object-contain rounded-xl"
+            />
+          </div>
         )}
         {fileContent?.type === "pdf" && (
-          <iframe src={fileContent.content} title="PDF Viewer" className="w-full h-96 rounded-lg" />
+          <iframe
+            src={fileContent.content}
+            title="PDF Viewer"
+            className="w-full h-[70vh] rounded-2xl border border-line"
+          />
         )}
         {fileContent?.type === "download" && (
-          <div className="text-center py-8">
-            <p className="text-ink-soft mb-4">This file type cannot be previewed</p>
+          <div className="text-center py-10">
+            <Download className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="text-xs font-semibold text-ink mb-4">
+              Preview not supported directly in browser.
+            </p>
             <a
               href={fileContent.content}
               download={fileContent.fileName}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-semibold rounded-xl hover:opacity-90 transition"
             >
-              <Download className="w-4 h-4" />
-              Download File
+              <Download className="w-3.5 h-3.5" />
+              Download Document
             </a>
           </div>
         )}
         {fileContent?.type === "error" && (
-          <p className="text-red-500 text-center py-4">{fileContent.content}</p>
+          <div className="p-6 text-center text-red-500 text-xs">
+            <p>{fileContent.content}</p>
+          </div>
         )}
       </Modal>
-
-      {/* Global styles for utility classes that read CSS variables */}
-      <style>{`
-        .theme-text  { color: var(--theme-primary); }
-        .theme-bg    { background-color: var(--theme-primary); }
-        .theme-border-l { border-left: 4px solid var(--theme-primary); }
-      `}</style>
     </div>
-  );
-}
-
-// ─── sub-components ──────────────────────────────────────────────────────────
-
-function TicketCard({ ticket, primary, onPreview }) {
-  const statusTone = {
-    approved: "success",
-    rejected: "danger",
-  };
-  const tone = statusTone[ticket.status] ?? "warning";
-
-  return (
-    <Card padding="md">
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <p className="text-xs text-ink-faint mb-1">Ticket #{ticket._id?.slice(-8)}</p>
-          <p className="font-medium text-ink">{ticket.section || "General Inquiry"}</p>
-        </div>
-        <Badge tone={tone}>{ticket.status || "pending"}</Badge>
-      </div>
-
-      <p className="text-ink-soft mb-3">{ticket.document}</p>
-
-      {ticket.response && (
-        <div className="bg-primary-soft border border-primary-surface rounded-lg p-3 mb-3">
-          <p className="text-xs font-medium text-primary-dark mb-1">Response:</p>
-          <p className="text-sm text-ink">{ticket.response}</p>
-        </div>
-      )}
-
-      {ticket.file && (
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={Eye}
-          onClick={() => onPreview(ticket._id, ticket.file)}
-        >
-          View Attachment
-        </Button>
-      )}
-    </Card>
   );
 }

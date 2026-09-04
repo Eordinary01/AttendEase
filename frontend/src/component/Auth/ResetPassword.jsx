@@ -72,7 +72,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-purple-50 to-purple-100 text-gray-800 flex flex-col justify-center items-center p-6">
+    <div className="min-h-screen bg-background text-ink flex flex-col justify-center items-center p-6">
       <motion.div
         initial="hidden"
         animate="visible"
@@ -80,38 +80,38 @@ export default function ResetPassword() {
         transition={{ duration: 0.4 }}
         className="w-full max-w-md"
       >
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-line/50 p-8 shadow-sm overflow-hidden space-y-6">
           {/* Header */}
-          <div className="p-8 pb-4 text-center">
-            <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg text-white bg-gradient-to-br from-purple-600 to-indigo-600">
-              <KeyRound className="w-7 h-7" />
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center text-primary bg-primary/10 border border-primary/20">
+              <KeyRound className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Set New Password</h1>
-            <p className="text-sm text-gray-500 mt-1.5">
+            <h1 className="text-xl font-bold text-ink tracking-tight">Set New Password</h1>
+            <p className="text-xs text-ink-soft">
               Choose a strong, secure password for your AttendEase account
             </p>
           </div>
 
-          <div className="p-8 pt-4">
+          <div className="space-y-4">
             {isSuccess ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-4 space-y-4"
               >
-                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-9 h-9" />
+                <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Password Reset Successful!</h3>
-                  <p className="text-sm text-gray-600 mt-1">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-ink">Password Reset Successful!</h3>
+                  <p className="text-xs text-ink-soft">
                     Your password has been updated. You can now log in with your new credentials.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => navigate("/login")}
-                  className="w-full py-3 px-6 rounded-xl text-white font-medium bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md flex items-center justify-center gap-2 text-sm"
+                  className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Proceed to Sign In</span>
                   <ArrowRight className="w-4 h-4" />
@@ -121,20 +121,20 @@ export default function ResetPassword() {
               <>
                 {error && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-xl mb-5 flex items-start gap-3 text-sm bg-red-50 border border-red-200 text-red-700"
+                    className="p-3.5 rounded-xl flex items-start gap-2.5 text-xs bg-rose-500/10 border border-rose-500/20 text-rose-600 font-medium"
                   >
-                    <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    <p className="font-medium">{error}</p>
+                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <p>{error}</p>
                   </motion.div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {/* Token input fallback if not in URL */}
                   {!tokenFromUrl && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                         Reset Token
                       </label>
                       <input
@@ -143,19 +143,19 @@ export default function ResetPassword() {
                         onChange={(e) => setToken(e.target.value)}
                         placeholder="Paste your reset token"
                         required
-                        className="w-full px-4 py-3 border border-purple-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-mono"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-line/50 bg-background text-ink text-xs font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
                     </div>
                   )}
 
                   {/* New Password */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       New Password
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <Lock className="h-5 w-5 text-purple-500" />
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                        <Lock className="h-4 w-4" />
                       </div>
                       <input
                         type={showPassword ? "text" : "password"}
@@ -163,14 +163,14 @@ export default function ResetPassword() {
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="Enter new password"
                         required
-                        className="w-full pl-11 pr-11 py-3 border border-purple-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-line/50 bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-purple-600 transition-colors"
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-faint hover:text-ink transition cursor-pointer"
                       >
-                        {showPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
@@ -179,13 +179,13 @@ export default function ResetPassword() {
                   <PasswordRequirements password={newPassword} />
 
                   {/* Confirm Password */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       Confirm New Password
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <Lock className="h-5 w-5 text-purple-500" />
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                        <Lock className="h-4 w-4" />
                       </div>
                       <input
                         type={showConfirmPassword ? "text" : "password"}
@@ -193,46 +193,41 @@ export default function ResetPassword() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Re-enter new password"
                         required
-                        className="w-full pl-11 pr-11 py-3 border border-purple-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-line/50 bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword((prev) => !prev)}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-purple-600 transition-colors"
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-faint hover:text-ink transition cursor-pointer"
                       >
-                        {showConfirmPassword ? <EyeOff className="h-5 w-5 text-purple-600" /> : <Eye className="h-5 w-5" />}
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
 
-                  <motion.button
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                  <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 px-6 rounded-xl text-white font-medium bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-sm mt-2"
+                    className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer mt-2"
                   >
                     {isLoading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Resetting Password...
-                      </span>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
                         <span>Reset Password</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </form>
 
-                <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+                <div className="text-center pt-2">
                   <Link
                     to="/login"
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline transition"
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Back to Sign In</span>
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Login</span>
                   </Link>
                 </div>
               </>

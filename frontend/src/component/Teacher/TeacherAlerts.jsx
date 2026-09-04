@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Megaphone, Clock, Trash2, CheckSquare, Square } from "lucide-react";
+import { Megaphone, Clock, Trash2, CheckSquare, Square, Plus } from "lucide-react";
 import api from "../../utils/api";
 import { useToast } from "../../contexts/ToastContext";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
 import Badge from "../common/ui/Badge";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Modal from "../common/ui/Modal";
 import { Input, Select, Textarea } from "../common/ui/Input";
@@ -137,55 +137,54 @@ const TeacherAlerts = () => {
     if (p === "urgent") return "danger";
     if (p === "high") return "warning";
     if (p === "low") return "info";
-    return "default";
+    return "neutral";
   };
 
-  const getTypeTone = (t) => (t === "short_term" ? "warning" : "info");
+  const getTypeTone = (t) => (t === "short_term" ? "warning" : "primary");
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={Megaphone}
-        title="Announcements"
-        subtitle="Send announcements to students in your assigned sections"
+      <DashboardHeader
+        greeting="Classroom Broadcasts & Section Notices"
+        meta={`Publish announcements and schedule notices to students in your assigned teaching sections (${announcements.length} broadcasts active)`}
         actions={
-          <Button leftIcon={Megaphone} onClick={() => setShowForm(true)}>
+          <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => setShowForm(true)}>
             New Announcement
           </Button>
         }
       />
 
       {announcements.length === 0 ? (
-        <Card>
+        <Card padding="lg" bordered>
           <EmptyState
             icon={Megaphone}
             title="No Announcements Yet"
-            description="Create your first announcement for your students."
-            action={<Button leftIcon={Megaphone} onClick={() => setShowForm(true)}>New Announcement</Button>}
+            description="Create your first announcement for your students across assigned sections."
+            action={<Button variant="primary" size="sm" leftIcon={Plus} onClick={() => setShowForm(true)}>New Announcement</Button>}
           />
         </Card>
       ) : (
         <div className="space-y-3">
           {announcements.map((a) => (
-            <Card key={a._id} className={`p-4 ${isExpired(a) ? "opacity-50" : ""}`}>
+            <Card key={a._id} padding="md" bordered className={`transition hover:border-primary/30 ${isExpired(a) ? "opacity-60" : ""}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold text-ink">{a.title || "Announcement"}</h3>
-                    <Badge variant={getTypeTone(a.type)}>{a.type === "short_term" ? "Short-term" : "Announcement"}</Badge>
-                    <Badge variant={getPriorityTone(a.priority)}>{a.priority}</Badge>
-                    {isExpired(a) && <Badge variant="danger">Expired</Badge>}
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <Badge tone={getTypeTone(a.type)} size="sm">{a.type === "short_term" ? "Flash Alert" : "Announcement"}</Badge>
+                    <Badge tone={getPriorityTone(a.priority)} size="sm" className="capitalize">{a.priority}</Badge>
+                    {isExpired(a) && <Badge tone="neutral" size="sm">Expired</Badge>}
                   </div>
-                  <p className="text-sm text-ink-soft whitespace-pre-wrap">{a.message}</p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-ink-faint flex-wrap">
+                  <h3 className="font-bold text-sm text-ink">{a.title || "Announcement"}</h3>
+                  <p className="text-xs text-ink-soft mt-1 whitespace-pre-wrap leading-relaxed">{a.message}</p>
+                  <div className="flex items-center gap-3 mt-2.5 text-[11px] text-ink-faint flex-wrap font-medium">
                     {a.createdBy?.name && (
                       <span className="font-semibold text-primary">
                         By {a.createdBy.name} ({a.createdBy.role})
@@ -194,12 +193,9 @@ const TeacherAlerts = () => {
                     {a.targetSections?.length > 0 && (
                       <span>Sections: {a.targetSections.join(", ")}</span>
                     )}
-                    {a.targetRoles?.length > 0 && (
-                      <span>To: {a.targetRoles.join(", ")}</span>
-                    )}
                     {a.expiryDate && (
                       <span className="flex items-center gap-1">
-                        <Clock size={12} />
+                        <Clock size={12} className="text-primary" />
                         {getTimeLeft(a)}
                       </span>
                     )}
@@ -208,8 +204,8 @@ const TeacherAlerts = () => {
                 </div>
                 <button
                   onClick={() => handleDelete(a._id)}
-                  className="p-1.5 rounded-lg hover:bg-red-500/10 text-ink-faint hover:text-red-500 transition-colors"
-                  title="Delete"
+                  className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
+                  title="Delete Announcement"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -219,60 +215,58 @@ const TeacherAlerts = () => {
         </div>
       )}
 
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="New Announcement" size="md">
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="New Classroom Announcement" size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <Select
-            label="Type"
+            label="Announcement Type"
             value={formData.type}
             onChange={(e) => setFormData((p) => ({ ...p, type: e.target.value }))}
-            options={[
-              { value: "announcement", label: "Announcement (7 days)" },
-              { value: "short_term", label: "Short-term Alert (6 hours)" },
-            ]}
-          />
+          >
+            <option value="announcement">Standard Announcement (7 days)</option>
+            <option value="short_term">Short-term Flash Alert (6 hours)</option>
+          </Select>
           <Input
-            label="Title"
+            label="Subject Title"
             value={formData.title}
             onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
             required
-            placeholder="e.g. Exam Schedule Update"
+            placeholder="e.g. Test Schedule Next Week, Lab Class Venue"
           />
           <Select
-            label="Priority"
+            label="Priority Level"
             value={formData.priority}
             onChange={(e) => setFormData((p) => ({ ...p, priority: e.target.value }))}
-            options={[
-              { value: "low", label: "Low" },
-              { value: "normal", label: "Normal" },
-              { value: "high", label: "High" },
-              { value: "urgent", label: "Urgent" },
-            ]}
-          />
+          >
+            <option value="low">Low Priority</option>
+            <option value="normal">Normal Priority</option>
+            <option value="high">High Priority</option>
+            <option value="urgent">Urgent / Critical</option>
+          </Select>
           <div>
-            <label className="block text-sm font-medium text-ink mb-1">Send to sections</label>
-            <p className="text-xs text-ink-faint mb-2">Select which of your assigned sections should receive this announcement</p>
+            <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">Target Sections</label>
+            <p className="text-[11px] text-ink-soft mb-2">Select which of your assigned sections should receive this announcement</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={toggleAllSections}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-sm hover:bg-surface transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line/60 text-xs font-semibold hover:bg-surface transition cursor-pointer"
               >
                 {selectedSections.length === assignedSections.length ? (
                   <CheckSquare size={14} className="text-primary" />
                 ) : (
                   <Square size={14} className="text-ink-faint" />
                 )}
-                All
+                All Assigned
               </button>
               {assignedSections.map((sec) => (
                 <button
                   key={sec}
                   type="button"
                   onClick={() => toggleSection(sec)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                     selectedSections.includes(sec)
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-line text-ink-soft hover:bg-surface"
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-line/60 text-ink-soft hover:bg-surface"
                   }`}
                 >
                   {selectedSections.includes(sec) ? (
@@ -285,22 +279,22 @@ const TeacherAlerts = () => {
               ))}
             </div>
             {assignedSections.length === 0 && (
-              <p className="text-xs text-red-500 mt-1">No sections assigned. Contact your admin to assign subjects.</p>
+              <p className="text-xs text-rose-500 mt-1">No sections currently assigned to your profile.</p>
             )}
           </div>
           <Textarea
-            label="Message"
+            label="Announcement Message"
             value={formData.message}
             onChange={(e) => setFormData((p) => ({ ...p, message: e.target.value }))}
             required
             rows={4}
-            placeholder="Write your announcement here..."
+            placeholder="Compose your message to students..."
           />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" type="button" onClick={() => setShowForm(false)}>
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-line/50">
+            <Button variant="subtle" size="sm" type="button" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button type="submit">Send Announcement</Button>
+            <Button variant="primary" size="sm" type="submit">Publish Announcement</Button>
           </div>
         </form>
       </Modal>

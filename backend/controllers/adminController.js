@@ -1096,6 +1096,155 @@ const updateSubjectAssignment = async (req, res) => {
 };
 
 /**
+ * GET DASHBOARD STATS (Fast Aggregation for Tenant Admin Dashboard)
+ */
+const getDashboardStats = async (req, res) => {
+  try {
+    const rawTenantId = req.tenantId || req.user?.tenantId || req.tenant?._id;
+    const tenantId = toObjectId(rawTenantId);
+
+    const [
+      totalTeachers,
+      totalStudents,
+      totalSubjects,
+      totalEnrollments,
+      sectionsAgg,
+      statusAgg,
+      recentEnrollments,
+      calendarEvents,
+    ] = await Promise.all([
+      User.countDocuments({ tenantId, role: "teacher", isActive: true }),
+      User.countDocuments({ tenantId, role: "student", isActive: true }),
+      Subject.countDocuments({ tenantId, isActive: true }),
+      Enrollment.countDocuments({ tenantId }),
+      Enrollment.aggregate([
+        { $match: { tenantId } },
+        { $group: { _id: "$section", count: { $sum: 1 } } },
+      ]),
+      Enrollment.aggregate([
+        { $match: { tenantId } },
+        { $group: { _id: "$isRegistered", count: { $sum: 1 } } },
+      ]),
+      Enrollment.find({ tenantId })
+        .populate({
+          path: "userId",
+          select: "name email role faceDescriptor faceRegistered isFaceRegistered faceImageUrl",
+        })
+        .select("firstName lastName rollNo enrollmentNumber section courseName branch semester isRegistered userId createdAt")
+        .sort({ createdAt: -1 })
+        .limit(25)
+        .lean(),
+      CalendarEvent.find({ tenantId, isActive: true })
+        .sort({ date: 1, startDate: 1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    const bySection = {};
+    (sectionsAgg || []).forEach((item) => {
+      if (item._id) bySection[String(item._id).toUpperCase()] = item.count;
+    });
+
+    // If Enrollment collection had no section grouping, fallback to Student Users
+    if (Object.keys(bySection).length === 0) {
+      const userSections = await User.aggregate([
+        { $match: { tenantId, role: "student" } },
+        { $group: { _id: "$section", count: { $sum: 1 } } },
+      ]);
+      (userSections || []).forEach((item) => {
+        if (item._id) bySection[String(item._id).toUpperCase()] = item.count;
+      });
+    }
+
+    let registered = 0;
+    let pending = 0;
+    (statusAgg || []).forEach((item) => {
+      if (item._id === true) registered = item.count;
+      else pending = item.count;
+    });
+
+    if (registered === 0 && pending === 0 && totalStudents > 0) {
+      registered = totalStudents;
+    }
+
+    let transformedRecent = (recentEnrollments || []).map((en) => {
+      const user = en.userId;
+      const hasFace = Boolean(
+        user?.faceRegistered ||
+        user?.isFaceRegistered ||
+        (user?.faceDescriptor && user.faceDescriptor.length > 0) ||
+        user?.faceImageUrl
+      );
+      return {
+        ...en,
+        rollNo: en.enrollmentNumber || en.rollNo || "N/A",
+        fullName: `${en.firstName || ""} ${en.lastName || ""}`.trim() || en.name || "Student",
+        faceRegistered: hasFace,
+        isFaceRegistered: hasFace,
+        faceDescriptor: user?.faceDescriptor || null,
+        faceImageUrl: user?.faceImageUrl || null,
+      };
+    });
+
+    // If recentEnrollments was empty, fallback to recently created student users
+    if (transformedRecent.length === 0 && totalStudents > 0) {
+      const recentUsers = await User.find({ tenantId, role: "student" })
+        .select("name firstName lastName email rollNo section courseName semester faceRegistered isFaceRegistered faceDescriptor faceImageUrl isRegistered isActive createdAt")
+        .sort({ createdAt: -1 })
+        .limit(25)
+        .lean();
+
+      transformedRecent = recentUsers.map((u) => {
+        const hasFace = Boolean(
+          u.faceRegistered ||
+          u.isFaceRegistered ||
+          (u.faceDescriptor && u.faceDescriptor.length > 0) ||
+          u.faceImageUrl
+        );
+        return {
+          _id: u._id,
+          firstName: u.name?.split(" ")[0] || u.firstName || u.name,
+          lastName: u.name?.split(" ").slice(1).join(" ") || u.lastName || "",
+          fullName: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+          email: u.email,
+          rollNo: u.rollNo || "N/A",
+          enrollmentNumber: u.rollNo || u.enrollmentNumber || "N/A",
+          section: u.section || "A",
+          isRegistered: u.isRegistered ?? u.isActive ?? true,
+          faceRegistered: hasFace,
+          isFaceRegistered: hasFace,
+          createdAt: u.createdAt,
+        };
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalTeachers,
+        totalStudents,
+        totalSubjects,
+        totalEnrollments: Math.max(totalEnrollments, totalStudents),
+        activeSubjects: totalSubjects,
+        pendingRegistrations: pending,
+        totalSections: Object.keys(bySection).length,
+        bySection,
+        byStatus: { registered, pending },
+        recentEnrollments: transformedRecent,
+        calendar: calendarEvents || [],
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching admin dashboard stats", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard statistics",
+      error: error.message,
+    });
+  }
+};
+
+/**
  * GET ALL TEACHERS (within tenant)
  */
 const getAllTeachers = async (req, res) => {
@@ -1167,6 +1316,7 @@ const getAllSubjects = async (req, res) => {
       const courseMapByCode = new Map(tenantCourses.map(c => [String(c.code).toUpperCase(), c]));
       const courseMapByName = new Map(tenantCourses.map(c => [String(c.name).toUpperCase(), c]));
 
+      const bulkOps = [];
       for (let subject of subjects) {
         let matchedCourse = null;
 
@@ -1177,8 +1327,6 @@ const getAllSubjects = async (req, res) => {
           const codeUpper = String(subject.courseCode).toUpperCase();
           matchedCourse = courseMapByCode.get(codeUpper) || courseMapByName.get(codeUpper);
         }
-        // Do NOT fall back to tenantCourses[0] or attempt fuzzy subject-name matching.
-        // Unmatched subjects keep their existing courseId/courseCode untouched.
 
         if (matchedCourse) {
           const calculatedYear = calculateSubjectYear(subject.semester, matchedCourse.semestersPerYear || 2);
@@ -1186,19 +1334,13 @@ const getAllSubjects = async (req, res) => {
           if (Array.isArray(matchedCourse.branches) && matchedCourse.branches.length > 0) {
             const activeBranches = matchedCourse.branches.filter(b => b.isActive !== false);
             if (activeBranches.length > 0 && inferredBranch) {
-              // Only normalize if the subject already has a branch — try to match it
-              // against course branches (exact name or exact code match only).
               const matchedB = activeBranches.find(b =>
                 String(b.name || "").toLowerCase() === String(inferredBranch).toLowerCase() ||
                 String(b.code || "").toLowerCase() === String(inferredBranch).toLowerCase()
               );
               inferredBranch = matchedB ? matchedB.code : "";
             }
-            // If subject has no branch (!inferredBranch) — leave it empty.
-            // Do NOT default to first active branch; that causes wrong branch
-            // assignment and breaks branch-level filtering.
           } else {
-            // Course has no branches defined — clear any stale branch value
             inferredBranch = "";
           }
 
@@ -1214,18 +1356,31 @@ const getAllSubjects = async (req, res) => {
           subject.branch = inferredBranch;
 
           if (needUpdate) {
-            await Subject.updateOne(
-              { _id: subject._id },
-              { $set: { courseId: matchedCourse._id, courseCode: matchedCourse.code, year: calculatedYear, branch: inferredBranch } }
-            );
+            bulkOps.push({
+              updateOne: {
+                filter: { _id: subject._id },
+                update: { $set: { courseId: matchedCourse._id, courseCode: matchedCourse.code, year: calculatedYear, branch: inferredBranch } },
+              },
+            });
           }
         } else {
           const calculatedYear = calculateSubjectYear(subject.semester, 2);
           if (calculatedYear && subject.year !== calculatedYear) {
             subject.year = calculatedYear;
-            await Subject.updateOne({ _id: subject._id }, { $set: { year: calculatedYear } });
+            bulkOps.push({
+              updateOne: {
+                filter: { _id: subject._id },
+                update: { $set: { year: calculatedYear } },
+              },
+            });
           }
         }
+      }
+
+      if (bulkOps.length > 0) {
+        Subject.bulkWrite(bulkOps).catch((err) =>
+          logger.warn("Subject background sync warning", { error: err.message })
+        );
       }
     }
 
@@ -1249,8 +1404,8 @@ const getAllSubjects = async (req, res) => {
  */
 const getAllEnrollments = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const skip = (page - 1) * limit;
 
     let filter = { tenantId: req.user.tenantId };
@@ -1258,44 +1413,93 @@ const getAllEnrollments = async (req, res) => {
     if (req.query.isRegistered !== undefined)
       filter.isRegistered = req.query.isRegistered === "true";
 
-    const total = await Enrollment.countDocuments(filter);
-    const enrollments = await Enrollment.find(filter)
-      .populate({ path: "userId", select: "name email role" })
-      .populate({ path: "uploadedBy", select: "name email" })
-      .populate({
-        path: "subjects.subjectId",
-        select: "subjectName subjectCode semester credits",
-      })
-      .populate({ path: "subjects.teacherId", select: "name email" })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    let total = await Enrollment.countDocuments(filter);
+    let enrollments = [];
+    let transformedEnrollments = [];
 
-    const transformedEnrollments = await Promise.all(
-      enrollments.map(async (enrollment) => {
-        let subjectsList = enrollment.subjects;
-        if (!subjectsList || subjectsList.length === 0) {
-          subjectsList = await syncEnrollmentSubjects(enrollment);
-        }
-        const obj = enrollment.toObject();
-        obj.subjects = subjectsList;
+    if (total > 0) {
+      enrollments = await Enrollment.find(filter)
+        .populate({ path: "userId", select: "name email role faceDescriptor faceRegistered isFaceRegistered faceImageUrl" })
+        .populate({ path: "uploadedBy", select: "name email" })
+        .populate({
+          path: "subjects.subjectId",
+          select: "subjectName subjectCode semester credits",
+        })
+        .populate({ path: "subjects.teacherId", select: "name email" })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      transformedEnrollments = enrollments.map((enrollment) => {
+        const subjectsList = enrollment.subjects || [];
+        const user = enrollment.userId;
+        const hasFace = Boolean(
+          user?.faceRegistered ||
+          user?.isFaceRegistered ||
+          (user?.faceDescriptor && user.faceDescriptor.length > 0) ||
+          user?.faceImageUrl
+        );
 
         return {
-          ...obj,
+          ...enrollment,
+          rollNo: enrollment.enrollmentNumber || enrollment.rollNo || "N/A",
           fullName: `${enrollment.firstName} ${enrollment.lastName}`,
-          registeredUser: enrollment.userId
+          faceRegistered: hasFace,
+          isFaceRegistered: hasFace,
+          faceDescriptor: user?.faceDescriptor || null,
+          faceImageUrl: user?.faceImageUrl || null,
+          registeredUser: user
             ? {
-                id: enrollment.userId._id,
-                name: enrollment.userId.name,
-                email: enrollment.userId.email,
-                role: enrollment.userId.role,
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                faceRegistered: hasFace,
+                isFaceRegistered: hasFace,
               }
             : null,
           subjectCount: subjectsList?.length || 0,
           activeSubjectCount: subjectsList?.filter((s) => s.isActive).length || 0,
         };
-      })
-    );
+      });
+    } else {
+      // Fallback: query student users directly
+      const userFilter = { tenantId: req.user.tenantId, role: "student" };
+      if (req.query.section) userFilter.section = req.query.section;
+      total = await User.countDocuments(userFilter);
+      const studentUsers = await User.find(userFilter)
+        .select("name firstName lastName email rollNo section courseName semester faceRegistered isFaceRegistered faceDescriptor faceImageUrl isRegistered isActive createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      transformedEnrollments = studentUsers.map((u) => {
+        const hasFace = Boolean(
+          u.faceRegistered ||
+          u.isFaceRegistered ||
+          (u.faceDescriptor && u.faceDescriptor.length > 0) ||
+          u.faceImageUrl
+        );
+        return {
+          _id: u._id,
+          firstName: u.name?.split(" ")[0] || u.firstName || u.name,
+          lastName: u.name?.split(" ").slice(1).join(" ") || u.lastName || "",
+          fullName: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+          email: u.email,
+          rollNo: u.rollNo || "N/A",
+          enrollmentNumber: u.rollNo || "N/A",
+          section: u.section || "A",
+          isRegistered: u.isRegistered ?? u.isActive ?? true,
+          faceRegistered: hasFace,
+          isFaceRegistered: hasFace,
+          faceDescriptor: u.faceDescriptor || null,
+          faceImageUrl: u.faceImageUrl || null,
+          createdAt: u.createdAt,
+        };
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -2493,6 +2697,7 @@ const bulkCreateSubjects = async (req, res) => {
     await Tenant.findByIdAndUpdate(tenantId, {
       $inc: { "stats.totalSubjects": createdDocs.length },
     });
+    await cache.delPattern(`subjects:${tenantId}:*`).catch(() => {});
 
     logActivity({
       tenantId,
@@ -2913,6 +3118,7 @@ const getActiveSections = async (req, res) => {
 };
 
 module.exports = {
+  getDashboardStats,
   uploadEnrollments,
   createTeacher,
   createSubject,

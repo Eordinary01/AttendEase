@@ -23,7 +23,7 @@ import Modal from "../common/ui/Modal";
 import Badge from "../common/ui/Badge";
 import Input from "../common/ui/Input";
 import EmptyState from "../common/ui/EmptyState";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 
 const TenantList = () => {
   const navigate = useNavigate();
@@ -129,7 +129,6 @@ const TenantList = () => {
       case "trial":
         return "warning";
       case "suspended":
-        return "danger";
       case "expired":
         return "danger";
       default:
@@ -175,23 +174,17 @@ const TenantList = () => {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-32 bg-surface rounded-3xl shadow-card border border-line p-8 flex flex-col justify-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-line via-background to-line animate-pulse"></div>
-        </div>
-        <div className="h-16 w-full bg-surface rounded-2xl shadow-card animate-pulse border border-line"></div>
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="bg-surface rounded-2xl p-5 shadow-card border border-line flex items-center justify-between">
+        <div className="h-20 bg-surface rounded-2xl border border-line/50 p-5 animate-pulse" />
+        <div className="h-14 w-full bg-surface rounded-2xl border border-line/50 animate-pulse" />
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-surface rounded-2xl p-5 border border-line/50 flex items-center justify-between animate-pulse">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-background rounded-xl animate-pulse"></div>
-                <div className="space-y-3">
-                  <div className="h-4 w-48 bg-line rounded animate-pulse"></div>
-                  <div className="h-3 w-64 bg-background rounded animate-pulse"></div>
+                <div className="w-10 h-10 bg-background rounded-xl"></div>
+                <div className="space-y-2">
+                  <div className="h-4 w-40 bg-background rounded"></div>
+                  <div className="h-3 w-56 bg-background rounded"></div>
                 </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="h-8 w-20 bg-background rounded-full animate-pulse"></div>
-                <div className="h-8 w-32 bg-background rounded-lg animate-pulse"></div>
               </div>
             </div>
           ))}
@@ -203,17 +196,14 @@ const TenantList = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center p-6 min-h-[60vh]">
-        <div className="bg-surface rounded-2xl shadow-pop p-8 max-w-md w-full text-center border border-line">
-          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-10 h-10 text-red-500" />
+        <div className="bg-surface rounded-2xl border border-line/50 p-8 max-w-md w-full text-center shadow-sm">
+          <div className="w-14 h-14 bg-rose-500/10 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
+            <AlertCircle className="w-7 h-7" />
           </div>
-          <h2 className="text-2xl font-bold text-ink mb-2">Error</h2>
-          <p className="text-ink-soft mb-6">{error}</p>
-          <Button
-            onClick={fetchTenants}
-            variant="primary"
-          >
-            Retry
+          <h2 className="text-lg font-bold text-ink mb-1">Failed to Load Tenants</h2>
+          <p className="text-xs text-ink-soft mb-6">{error}</p>
+          <Button onClick={fetchTenants} variant="primary" size="sm">
+            Retry Connection
           </Button>
         </div>
       </div>
@@ -222,14 +212,14 @@ const TenantList = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="All Tenants"
-        subtitle={`Showing ${filteredTenants.length} of ${tenants.length} institutions`}
-        icon={Building2}
+      <DashboardHeader
+        greeting="Institution Tenant Directory"
+        meta={`Managing ${filteredTenants.length} of ${tenants.length} provisioned campus instances`}
         actions={
           <Button
             onClick={fetchTenants}
-            variant="outline"
+            variant="subtle"
+            size="sm"
             leftIcon={RefreshCw}
           >
             Refresh

@@ -99,6 +99,7 @@ const userSchema = mongoose.Schema(
     emailVerificationExpires: Date,
     tokenVersion: { type: Number, default: 0 },
     profileComplete: { type: Boolean, default: false },
+    avatar: { type: String, trim: true, default: null },
 
     // Custom roles assigned to teachers
     customRoles: [{
@@ -119,11 +120,25 @@ const userSchema = mongoose.Schema(
       type: [Number],
       default: null,
     },
+    faceRegistered: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isFaceRegistered: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     // URL to the registered face image (stored in backend/uploads/face-attendance/).
     // Optional — kept for audit/debugging, not used for recognition at runtime.
     faceImageUrl: {
       type: String,
       trim: true,
+      default: null,
+    },
+    faceUpdatedAt: {
+      type: Date,
       default: null,
     },
 

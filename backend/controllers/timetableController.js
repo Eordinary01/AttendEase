@@ -3,6 +3,7 @@ const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Subject = require("../models/Subject");
 const Enrollment = require("../models/Enrollment");
+const cache = require("../middleware/cache");
 const logger = require("../utils/logger");
 const { toObjectId } = require("../utils/sanitize");
 const { validateSectionsExist } = require("../utils/sectionHelper");
@@ -385,6 +386,7 @@ const createEntry = async (req, res) => {
       ...entry,
       createdBy: req.user._id,
     });
+    await cache.delPattern(`timetable:${req.user.tenantId}:*`).catch(() => {});
 
     return res.status(201).json({ success: true, data: created });
   } catch (error) {
@@ -542,6 +544,7 @@ const bulkCreate = async (req, res) => {
       }));
 
     const created = await Timetable.insertMany(enriched, { ordered: false });
+    await cache.delPattern(`timetable:${req.user.tenantId}:*`).catch(() => {});
     return res.status(201).json({ success: true, message: `${created.length} entries created`, data: created });
   } catch (error) {
     logger.error("Error bulk creating timetable", { error: error.message });
@@ -804,7 +807,13 @@ const getBySection = async (req, res) => {
 
 const getByTeacher = async (req, res) => {
   try {
-    const teacherId = req.params.teacherId || req.user._id;
+    const rawTeacherId = req.params.teacherId || req.user?._id || req.user?.id;
+    const teacherId = toObjectId(rawTeacherId);
+    const tenantId = toObjectId(req.user?.tenantId || req.tenantId || req.tenant?._id);
+
+    if (!teacherId || !tenantId) {
+      return res.status(200).json({ success: true, data: [], grouped: {} });
+    }
 
     // Retrieve teacher's assigned subjects list for fallback matching
     const teacher = await User.findById(teacherId).select("assignedSubjects").lean();
@@ -812,17 +821,19 @@ const getByTeacher = async (req, res) => {
     const assignedPairs = (teacher?.assignedSubjects || [])
       .filter((a) => a.subjectId && a.section)
       .map((a) => ({
-        subjectId: a.subjectId,
+        subjectId: toObjectId(a.subjectId?._id || a.subjectId),
         section: a.section,
       }));
 
-    const orConditions = [{ teacherId: new mongoose.Types.ObjectId(teacherId) }];
+    const orConditions = [{ teacherId: teacherId }];
     assignedPairs.forEach((p) => {
-      orConditions.push({ subjectId: p.subjectId, section: p.section });
+      if (p.subjectId) {
+        orConditions.push({ subjectId: p.subjectId, section: p.section });
+      }
     });
 
     const query = {
-      tenantId: req.user.tenantId,
+      tenantId: tenantId,
       isActive: true,
       $or: orConditions,
     };
@@ -852,10 +863,10 @@ const getByTeacher = async (req, res) => {
       if (grouped[e.day]) grouped[e.day].push(e);
     });
 
-    return res.status(200).json({ success: true, data: grouped });
+    return res.status(200).json({ success: true, data: enrichedEntries, grouped });
   } catch (error) {
     logger.error("Error fetching teacher timetable", { error: error.message });
-    return res.status(500).json({ success: false, message: "Failed to fetch teacher timetable" });
+    return res.status(200).json({ success: true, data: [], grouped: {}, error: error.message });
   }
 };
 
@@ -931,6 +942,7 @@ const updateEntry = async (req, res) => {
 
     Object.assign(entry, next);
     await entry.save();
+    await cache.delPattern(`timetable:${req.user.tenantId}:*`).catch(() => {});
     return res.status(200).json({ success: true, data: entry });
   } catch (error) {
     logger.error("Error updating timetable entry", { error: error.message });
@@ -946,6 +958,7 @@ const deleteEntry = async (req, res) => {
     }
     entry.isActive = false;
     await entry.save();
+    await cache.delPattern(`timetable:${req.user.tenantId}:*`).catch(() => {});
     return res.status(200).json({ success: true, message: "Entry deleted" });
   } catch (error) {
     logger.error("Error deleting timetable entry", { error: error.message });

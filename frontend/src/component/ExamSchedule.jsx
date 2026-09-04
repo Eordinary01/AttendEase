@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
 import { FileText, Calendar, Clock, MapPin, Timer, GraduationCap, Layers } from "lucide-react";
 import api from "../utils/api";
 import Card from "./common/ui/Card";
 import Badge from "./common/ui/Badge";
-import PageHeader from "./common/ui/PageHeader";
+import DashboardHeader from "./common/ui/DashboardHeader";
 import EmptyState from "./common/ui/EmptyState";
 import { Select } from "./common/ui/Input";
+import { formatDateReadable, formatDateDMY } from "../utils/dateUtils";
 
 const ExamSchedule = ({ role }) => {
   const [exams, setExams] = useState([]);
@@ -79,124 +79,139 @@ const ExamSchedule = ({ role }) => {
   const getTypeTone = (typeCode) => {
     if (typeCode === "endTerm" || typeCode === "final") return "danger";
     if (typeCode === "midterm" || typeCode?.startsWith("inTerm")) return "warning";
-    return "info";
+    return "primary";
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Exam Schedule"
-        subtitle="Upcoming exams and assessments"
-        icon={FileText}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Examination Timetable & Venues"
+        meta={`Upcoming academic assessments, shift timings, and hall allocations (${filtered.length} exams registered)`}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {role !== "student" && courseOptions.length > 0 && (
-              <Select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} className="w-44">
+              <select
+                value={courseFilter}
+                onChange={(e) => setCourseFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+              >
                 <option value="">All Courses</option>
                 {courseOptions.map((c) => (
                   <option key={c.id} value={c.id}>{c.code}</option>
                 ))}
-              </Select>
+              </select>
             )}
             {role !== "student" && semesterOptions.length > 0 && (
-              <Select value={semesterFilter} onChange={(e) => setSemesterFilter(e.target.value)} className="w-36">
+              <select
+                value={semesterFilter}
+                onChange={(e) => setSemesterFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+              >
                 <option value="all">All Semesters</option>
                 {semesterOptions.map((s) => (
                   <option key={s} value={s}>Semester {s}</option>
                 ))}
-              </Select>
+              </select>
             )}
-            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-44">
-              <option value="all">All Types</option>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+            >
+              <option value="all">All Exam Types</option>
               {examTypes.map((t) => (
                 <option key={t.code} value={t.code}>{t.name}</option>
               ))}
-            </Select>
+            </select>
           </div>
         }
       />
 
       {filtered.length === 0 ? (
-        <EmptyState
-          title="No Upcoming Exams"
-          description="No upcoming exams match your filters"
-          icon={FileText}
-        />
+        <Card padding="lg" bordered>
+          <EmptyState
+            title="No Upcoming Exams"
+            description="No upcoming exams match your selected filters"
+            icon={FileText}
+          />
+        </Card>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {filtered.map((exam) => {
             const courseCode = exam.courseId?.code || exam.courseCode || "";
             const typeCode = exam.examTypeCode || exam.type;
             const typeName = getTypeName(exam);
 
             return (
-              <Card key={exam._id} padding="lg" hoverable>
-                <div className="flex items-start justify-between mb-3">
-                  <Badge tone={getTypeTone(typeCode)} className="capitalize">
+              <Card key={exam._id} padding="md" bordered className="transition hover:border-primary/40 space-y-3">
+                <div className="flex items-start justify-between">
+                  <Badge tone={getTypeTone(typeCode)} size="sm" className="capitalize">
                     {typeName}
                   </Badge>
-                  <span className="text-xs text-ink-faint">{exam.subjectCode}</span>
+                  <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">{exam.subjectCode}</span>
                 </div>
-                <h3 className="font-semibold text-ink mb-1">{exam.title}</h3>
-                <p className="text-sm text-primary font-medium mb-1">{exam.subjectName}</p>
+                <div>
+                  <h3 className="font-bold text-ink text-sm truncate">{exam.title}</h3>
+                  <p className="text-xs text-ink-soft font-medium mt-0.5 truncate">{exam.subjectName}</p>
+                </div>
 
-                <div className="flex items-center gap-3 mb-3 text-xs text-ink-soft">
+                <div className="flex items-center gap-3 text-xs text-ink-faint">
                   {courseCode && (
-                    <div className="flex items-center gap-1">
-                      <GraduationCap className="w-3.5 h-3.5" />
-                      <span className="font-semibold">{courseCode}</span>
+                    <div className="flex items-center gap-1 font-semibold text-ink">
+                      <GraduationCap className="w-3.5 h-3.5 text-primary" />
+                      <span>{courseCode}</span>
                     </div>
                   )}
                   {exam.semester && (
                     <div className="flex items-center gap-1">
-                      <Layers className="w-3.5 h-3.5" />
+                      <Layers className="w-3.5 h-3.5 text-primary" />
                       <span>Sem {exam.semester}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-1.5 text-sm text-ink-soft">
+                <div className="space-y-1.5 text-xs text-ink-soft py-2 border-y border-line/50">
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    {new Date(exam.date).toLocaleDateString("en-US", {
-                      weekday: "long", year: "numeric", month: "long", day: "numeric",
-                    })}
+                    <Calendar className="w-3.5 h-3.5 text-primary" />
+                    <span>{formatDateReadable(exam.date, true)} ({formatDateDMY(exam.date)})</span>
                   </div>
                   {exam.shift && (
                     <div className="flex items-center gap-2">
-                      <Timer className="w-4 h-4" />Shift {exam.shift}
+                      <Timer className="w-3.5 h-3.5 text-primary" />
+                      <span>Shift {exam.shift}</span>
                     </div>
                   )}
                   {exam.startTime && (
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      {exam.startTime}{exam.endTime ? ` - ${exam.endTime}` : ""}
+                      <Clock className="w-3.5 h-3.5 text-primary" />
+                      <span>{exam.startTime}{exam.endTime ? ` - ${exam.endTime}` : ""}</span>
                     </div>
                   )}
                   {exam.room && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4" />{exam.room}
+                    <div className="flex items-center gap-2 font-semibold text-ink">
+                      <MapPin className="w-3.5 h-3.5 text-primary" />
+                      <span>Hall {exam.room}</span>
                     </div>
                   )}
                 </div>
-                <div className="mt-3 pt-3 border-t border-line flex justify-between text-sm">
-                  <span className="text-ink-soft">Section {exam.section}</span>
-                  <span className="font-semibold text-ink">Max: {exam.maxMarks}</span>
+                <div className="flex justify-between items-center text-xs pt-1">
+                  <span className="text-ink-soft font-medium">Section {exam.section}</span>
+                  <span className="font-bold text-ink">Max: {exam.maxMarks} Marks</span>
                 </div>
               </Card>
             );
           })}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 };
 

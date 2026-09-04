@@ -5,9 +5,13 @@ const path = require("path");
 const crypto = require("crypto");
 const faceController = require("../controllers/faceController");
 const { authenticateToken } = require("../middleware/auth");
+const { featureGuard } = require("../middleware/featureGuard");
 const logger = require("../utils/logger");
 
 const faceRoutes = express.Router();
+
+faceRoutes.use(authenticateToken);
+faceRoutes.use(featureGuard("biometric_attendance"));
 
 // ------------------------------------------------------------------
 // Multer configuration for face image uploads
@@ -54,54 +58,79 @@ const uploadFaceImage = multer({
 }).single("image");
 
 // ------------------------------------------------------------------
-// Rate limiters
+// Rate limiters (Per-User Keyed with Structured Production Logging)
 // ------------------------------------------------------------------
-const faceLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { success: false, message: "Too many face attendance requests. Try again in 15 minutes." },
+const faceReadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 min window
+  max: 600, // Generous read capacity for loading class rosters and descriptor batches
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.user?._id?.toString() || req.ip,
+  validate: { keyGeneratorIpFallback: false },
+  handler: (req, res) => {
+    logger.warn("Face descriptor read rate limit exceeded", {
+      userId: req.user?._id,
+      tenantId: req.user?.tenantId,
+      ip: req.ip,
+      path: req.originalUrl,
+    });
+    res.status(429).json({
+      success: false,
+      message: "Too many face descriptor requests. Please wait a moment before trying again.",
+      retryAfterSeconds: 30,
+    });
+  },
+});
+
+const faceWriteLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 150, // Capacity for marking and enrolling
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?._id?.toString() || req.ip,
+  validate: { keyGeneratorIpFallback: false },
+  handler: (req, res) => {
+    logger.warn("Face attendance write rate limit exceeded", {
+      userId: req.user?._id,
+      tenantId: req.user?.tenantId,
+      ip: req.ip,
+      path: req.originalUrl,
+    });
+    res.status(429).json({
+      success: false,
+      message: "Too many face attendance submissions. Please wait a moment before trying again.",
+      retryAfterSeconds: 30,
+    });
+  },
 });
 
 // ------------------------------------------------------------------
 // POST /api/faces/register — register a student's face descriptor
-// Multer processes the uploaded image before the controller runs.
+// 100% Vector-Only (Zero raw photo storage)
 // ------------------------------------------------------------------
 faceRoutes.post(
   "/register",
   authenticateToken,
-  faceLimiter,
-  (req, res, next) => {
-    // Run multer first; pass errors to Express error handler.
-    uploadFaceImage(req, res, (err) => {
-      if (err) {
-        logger.warn("Face image upload rejected", { err: err?.message, studentId: req.body?.studentId });
-        return res.status(400).json({
-          success: false,
-          message: err?.message || "Image upload failed",
-        });
-      }
-      next();
-    });
-  },
+  faceWriteLimiter,
   faceController.registerFace
 );
 
 // ------------------------------------------------------------------
+// GET /api/faces/section/:section — retrieve all face descriptors for a section
+// ------------------------------------------------------------------
+faceRoutes.get("/section/:section", authenticateToken, faceReadLimiter, faceController.getSectionFaceDescriptors);
+
+// ------------------------------------------------------------------
 // GET /api/faces/:studentId — retrieve a student's face descriptor
 // ------------------------------------------------------------------
-faceRoutes.get("/:studentId", authenticateToken, faceLimiter, faceController.getFaceDescriptor);
+faceRoutes.get("/:studentId", authenticateToken, faceReadLimiter, faceController.getFaceDescriptor);
 
 // ------------------------------------------------------------------
 // POST /api/attendance/mark-face-detection — mark attendance from
 // a batch of face-verified student IDs.
 // Mounted at /api/attendance so the path is /api/attendance/mark-face-detection
 // ------------------------------------------------------------------
-faceRoutes.post("/mark-face-detection", authenticateToken, faceLimiter, faceController.markFaceDetection);
+faceRoutes.post("/mark-face-detection", authenticateToken, faceWriteLimiter, faceController.markFaceDetection);
 
 module.exports = faceRoutes;
-
-// Export the limiter so index.js can reuse it for the
-// /api/attendance/mark-face-detection mount (same 30/15m window).
-module.exports.faceLimiter = faceLimiter;
+module.exports.faceLimiter = faceWriteLimiter;

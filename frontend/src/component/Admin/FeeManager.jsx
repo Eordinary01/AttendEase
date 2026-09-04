@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, Plus, Trash2, X, Check, AlertCircle, Save, Eye, Filter, Clock, CheckCircle, Crown, Lock, LayoutGrid, List } from "lucide-react";
+import { DollarSign, Plus, Trash2, X, Check, AlertCircle, Save, Eye, Filter, Clock, CheckCircle, Crown, Lock, LayoutGrid, List, RefreshCw } from "lucide-react";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
 import Modal from "../common/ui/Modal";
@@ -8,7 +8,7 @@ import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import StatCard from "../common/ui/StatCard";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Table from "../common/ui/Table";
 import Input, { Select, Textarea } from "../common/ui/Input";
@@ -16,6 +16,7 @@ import Skeleton from "../common/ui/Skeleton";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import { usePermissions } from "../../contexts/PermissionsContext";
+import { formatDateDMY } from "../../utils/dateUtils";
 
 const FEE_TYPES = ["tuition", "transport", "hostel", "other"];
 const PAYMENT_MODES = ["cash", "online", "cheque", "bank_transfer"];
@@ -44,6 +45,12 @@ const FeeManager = () => {
   const [filterBranch, setFilterBranch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [feeDetail, setFeeDetail] = useState(null);
+
+  // Infinite scroll progressive pagination state
+  const [visibleFeeCount, setVisibleFeeCount] = useState(25);
+  const [visibleTxnCount, setVisibleTxnCount] = useState(25);
+  const [visibleCohortFeeCount, setVisibleCohortFeeCount] = useState(25);
+
   const [formData, setFormData] = useState({
     studentId: "", feeType: "tuition", amount: "", dueDate: "", description: "",
     lateFee: 0, academicYear: "", courseId: "", branch: "", semester: "",
@@ -118,9 +125,10 @@ const FeeManager = () => {
   const [tenantSettings, setTenantSettings] = useState(null);
 
   const { modalProps, openUpgrade, setPlanCode } = useUpgradeModal();
-  const { can } = usePermissions();
+  const { can, loading: permsLoading } = usePermissions();
   const canCollect = can("fee:collect");
   const canWaive = can("fee:waive");
+  const canRead = can("fee:read") || canCollect || canWaive;
 
   useEffect(() => {
     fetchInitial();
@@ -229,22 +237,35 @@ const FeeManager = () => {
     }));
   }, [selectedSection, students, courses, tenantSettings, formData.studentId, formData.feeType]);
 
+  const fetchStudentsForModal = async () => {
+    if (students.length > 0) return;
+    try {
+      const res = await api.get("/attendance/admin/students?limit=2000");
+      const list = res.data?.data || [];
+      setStudents(list);
+    } catch (err) {
+      logError("Fetch Students For Modal", err);
+    }
+  };
+
   const fetchInitial = async () => {
     try {
-      const [studentsRes, coursesRes, tenantRes] = await Promise.all([
-        api.get('/admin/enrollments?limit=2000').catch(() => ({ data: { data: [] } })),
-        api.get('/academic/courses').catch(() => ({ data: { data: [] } })),
-        api.get('/tenant/info').catch(() => ({ data: { data: {} } })),
+      const [sectionsRes, coursesRes, tenantRes] = await Promise.all([
+        api.get("/admin/active-sections").catch(() => ({ data: { data: [] } })),
+        api.get("/academic/courses").catch(() => ({ data: { data: [] } })),
+        api.get("/tenant/info").catch(() => ({ data: { data: {} } })),
       ]);
-      const enrollments = studentsRes.data?.data?.enrollments || studentsRes.data?.data || [];
-      setStudents(enrollments);
-      const s = [...new Set(enrollments.map(e => e.section).filter(Boolean))].sort();
-      setSections(s);
+      const s = sectionsRes.data?.data || sectionsRes.data?.sections || [];
+      if (Array.isArray(s) && s.length > 0) {
+        setSections(s.sort());
+      }
       const c = coursesRes.data?.data || [];
       setCourses(c);
       const ts = tenantRes.data?.data || tenantRes.data?.tenant || {};
       setTenantSettings(ts);
-    } catch (err) { logError("Fetch Students", err); }
+    } catch (err) {
+      logError("Fetch Initial Settings", err);
+    }
   };
 
   const fetchFees = async () => {
@@ -256,10 +277,13 @@ const FeeManager = () => {
       if (filterBranch) params.append("branch", filterBranch);
       if (filterStatus) params.append("status", filterStatus);
       const res = await api.get(`/fees?${params}`);
-      setFees(res.data.data || []);
+      setFees(res.data?.data || []);
+      setVisibleFeeCount(25);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch fees");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchSummary = async () => {
@@ -273,8 +297,44 @@ const FeeManager = () => {
     try {
       const res = await api.get('/fees/transactions');
       setTransactions(res.data.data || []);
+      setVisibleTxnCount(25);
     } catch (err) { /* ignore */ }
   };
+
+  // Infinite Scroll Observers
+  const feeObserver = useRef();
+  const lastFeeElementRef = useCallback(node => {
+    if (loading) return;
+    if (feeObserver.current) feeObserver.current.disconnect();
+    feeObserver.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && visibleFeeCount < fees.length) {
+        setVisibleFeeCount(prev => prev + 25);
+      }
+    });
+    if (node) feeObserver.current.observe(node);
+  }, [loading, visibleFeeCount, fees.length]);
+
+  const txnObserver = useRef();
+  const lastTxnElementRef = useCallback(node => {
+    if (txnObserver.current) txnObserver.current.disconnect();
+    txnObserver.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && visibleTxnCount < transactions.length) {
+        setVisibleTxnCount(prev => prev + 25);
+      }
+    });
+    if (node) txnObserver.current.observe(node);
+  }, [visibleTxnCount, transactions.length]);
+
+  const cohortFeeObserver = useRef();
+  const lastCohortFeeElementRef = useCallback(node => {
+    if (cohortFeeObserver.current) cohortFeeObserver.current.disconnect();
+    cohortFeeObserver.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        setVisibleCohortFeeCount(prev => prev + 25);
+      }
+    });
+    if (node) cohortFeeObserver.current.observe(node);
+  }, []);
 
   const autoAcademicYear = useMemo(() => {
     const startMonth = tenantSettings?.semesterStructure?.academicStartMonth ?? 3;
@@ -284,12 +344,14 @@ const FeeManager = () => {
   }, [tenantSettings]);
 
   const openCreate = () => {
+    fetchStudentsForModal();
     setSelectedFee(null);
     setFormData({ studentId: "", feeType: "tuition", amount: "", dueDate: "", description: "", lateFee: 0, academicYear: autoAcademicYear, courseId: "", branch: "", semester: "" });
     setShowForm(true);
   };
 
   const openBulkCreate = () => {
+    fetchStudentsForModal();
     setSelectedFee(null);
     setFormData({ studentId: "bulk", feeType: "tuition", amount: "", dueDate: "", description: "", lateFee: 0, academicYear: autoAcademicYear, courseId: "", branch: "", semester: "" });
     setShowForm(true);
@@ -423,7 +485,7 @@ const FeeManager = () => {
     { header: "Student", cell: (row) => row.studentId?.name || "—" },
     { header: "Amount", cell: (row) => <span className="font-semibold text-emerald-600">{formatCurrency(row.amount)}</span> },
     { header: "Mode", cell: (row) => <span className="capitalize">{row.mode}</span> },
-    { header: "Date", cell: (row) => <span className="text-ink-soft">{new Date(row.transactionDate).toLocaleDateString()}</span> },
+    { header: "Date", cell: (row) => <span className="text-ink-soft">{formatDateDMY(row.transactionDate)}</span> },
     { header: "Collected By", cell: (row) => row.collectedBy?.name || "—" },
   ];
 
@@ -431,7 +493,7 @@ const FeeManager = () => {
     { header: "Receipt", cell: (row) => <span className="font-mono text-xs">{row.receiptNumber}</span> },
     { header: "Amount", cell: (row) => <span className="font-semibold text-emerald-600">{formatCurrency(row.amount)}</span> },
     { header: "Mode", cell: (row) => <span className="capitalize">{row.mode}</span> },
-    { header: "Date", cell: (row) => <span className="text-ink-soft">{new Date(row.transactionDate).toLocaleDateString()}</span> },
+    { header: "Date", cell: (row) => <span className="text-ink-soft">{formatDateDMY(row.transactionDate)}</span> },
     { header: "Collected By", cell: (row) => row.collectedBy?.name || "—" },
   ];
 
@@ -458,40 +520,48 @@ const FeeManager = () => {
     );
   }
 
-  if (!canCollect && !canWaive) {
+  if (permsLoading) {
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <PageHeader title="Fee Management" subtitle="Manage fees, collect payments, and track dues" icon={DollarSign} />
+      <div className="space-y-6">
+        <DashboardHeader greeting="Institutional Fee & Revenue Management" meta="Manage fee ledgers, track collections, record transactions, and oversee cohort finances" />
+        <Card padding="lg" bordered><Skeleton rows={6} /></Card>
+      </div>
+    );
+  }
+
+  if (!canRead) {
+    return (
+      <div className="space-y-6">
+        <DashboardHeader greeting="Institutional Fee & Revenue Management" meta="Manage fee ledgers, track collections, record transactions, and oversee cohort finances" />
         <EmptyState icon={Lock} title="Access Restricted" description="You don't have permission to manage fees. Contact your admin to assign a role with fee management access." />
-      </motion.div>
+      </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Fee Management"
-        subtitle="Manage fees, collect payments, and track dues"
-        icon={DollarSign}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Institutional Fee & Revenue Management"
+        meta="Manage fee ledgers, track collections, record transactions, and oversee cohort finances"
         actions={
           canCollect && (
-            <>
-              <Button variant="outline" onClick={openGenerate} leftIcon={DollarSign}>Generate by Course</Button>
-              <Button onClick={openCreate} leftIcon={Plus}>Create Fee</Button>
-            </>
+            <div className="flex items-center gap-2">
+              <Button variant="subtle" size="sm" onClick={openGenerate} leftIcon={DollarSign}>Generate by Course</Button>
+              <Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Create Single Fee</Button>
+            </div>
           )
         }
       />
 
-      {error && <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700"><AlertCircle className="w-5 h-5" />{error}</div>}
-      {success && <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700"><Check className="w-5 h-5" />{success}</div>}
+      {error && <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-600 text-xs font-semibold"><AlertCircle className="w-4 h-4" />{error}</div>}
+      {success && <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-emerald-600 text-xs font-semibold"><Check className="w-4 h-4" />{success}</div>}
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Fees" value={formatCurrency(summary.totalFees)} icon={DollarSign} tone="primary" />
-          <StatCard label="Collected" value={formatCurrency(summary.totalCollected)} icon={CheckCircle} tone="success" />
-          <StatCard label="Pending" value={formatCurrency(summary.totalPending)} icon={Clock} tone="warning" />
-          <StatCard label="Overdue" value={`${summary.overdueCount} records`} icon={AlertCircle} tone="danger" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          <StatCard label="Total Invoiced" value={formatCurrency(summary.totalFees)} icon={DollarSign} tone="primary" />
+          <StatCard label="Collected Revenue" value={formatCurrency(summary.totalCollected)} icon={CheckCircle} tone="success" />
+          <StatCard label="Pending Receivables" value={formatCurrency(summary.totalPending)} icon={Clock} tone="warning" />
+          <StatCard label="Overdue Invoices" value={`${summary.overdueCount} records`} icon={AlertCircle} tone="danger" />
         </div>
       )}
 
@@ -654,11 +724,16 @@ const FeeManager = () => {
             </div>
           ) : (
             <div className="grid gap-4">
-              {fees.map(fee => {
+              {fees.slice(0, visibleFeeCount).map((fee, index) => {
                 const isOverdue = fee.status === "overdue";
-                const isPaid = fee.status === "paid";
+                const isLast = index === Math.min(fees.length, visibleFeeCount) - 1;
                 return (
-                <Card key={fee._id} padding="lg" className={isOverdue ? "border-l-4 border-l-red-500" : ""}>
+                <Card
+                  ref={isLast ? lastFeeElementRef : null}
+                  key={fee._id}
+                  padding="lg"
+                  className={isOverdue ? "border-l-4 border-l-red-500" : ""}
+                >
                   <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -676,7 +751,7 @@ const FeeManager = () => {
                         {fee.paidAmount > 0 && <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(fee.paidAmount)}</span>}
                         {fee.lateFee > 0 && <span className="text-red-500">Late: {formatCurrency(fee.lateFee)}</span>}
                         {fee.status !== "paid" && fee.status !== "waived" ? (
-                          <span>Due: {new Date(fee.dueDate).toLocaleDateString()}</span>
+                          <span>Due: {formatDateDMY(fee.dueDate)}</span>
                         ) : (
                           <span className="text-emerald-600 font-semibold flex items-center gap-1">
                             <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Fully Paid
@@ -699,6 +774,23 @@ const FeeManager = () => {
                   </div>
                 </Card>
               )})}
+
+              {visibleFeeCount < fees.length && (
+                <div className="py-6 flex flex-col items-center justify-center gap-2">
+                  <div className="flex items-center gap-2 text-xs text-ink-soft">
+                    <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                    <span>Loading more fee records ({visibleFeeCount} of {fees.length})...</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleFeeCount(prev => Math.min(fees.length, prev + 25))}
+                    className="text-xs"
+                  >
+                    Load More ({fees.length - visibleFeeCount} remaining)
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -707,7 +799,10 @@ const FeeManager = () => {
       {/* Cohort Detailed Student Fees Modal */}
       <Modal
         isOpen={!!selectedCohort}
-        onClose={() => setSelectedCohort(null)}
+        onClose={() => {
+          setSelectedCohort(null);
+          setVisibleCohortFeeCount(25);
+        }}
         title={selectedCohort ? `${selectedCohort.courseName} (${selectedCohort.branch}) — Fee Records` : "Cohort Details"}
         size="xl"
       >
@@ -739,12 +834,18 @@ const FeeManager = () => {
                 <Input
                   placeholder="Search student or roll no..."
                   value={cohortSearch}
-                  onChange={e => setCohortSearch(e.target.value)}
+                  onChange={e => {
+                    setCohortSearch(e.target.value);
+                    setVisibleCohortFeeCount(25);
+                  }}
                 />
               </div>
               <div className="flex gap-2 items-center">
                 <div className="w-36">
-                  <Select value={cohortStatusFilter} onChange={e => setCohortStatusFilter(e.target.value)}>
+                  <Select value={cohortStatusFilter} onChange={e => {
+                    setCohortStatusFilter(e.target.value);
+                    setVisibleCohortFeeCount(25);
+                  }}>
                     <option value="">All Statuses</option>
                     <option value="pending">Pending</option>
                     <option value="partial">Partial</option>
@@ -777,8 +878,11 @@ const FeeManager = () => {
 
               return (
                 <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-                  {filteredList.map(fee => (
+                  {filteredList.slice(0, visibleCohortFeeCount).map((fee, index) => {
+                    const isLast = index === Math.min(filteredList.length, visibleCohortFeeCount) - 1;
+                    return (
                     <div
+                      ref={isLast ? lastCohortFeeElementRef : null}
                       key={fee._id}
                       className="p-3.5 bg-surface rounded-xl border border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-primary/40 transition-colors"
                     >
@@ -795,7 +899,7 @@ const FeeManager = () => {
                           {fee.status !== "paid" && fee.status !== "waived" ? (
                             <>
                               <span>Balance: <strong className="text-amber-600">{formatCurrency(fee.amount - fee.paidAmount)}</strong></span>
-                              <span>Due: {new Date(fee.dueDate).toLocaleDateString()}</span>
+                              <span>Due: {formatDateDMY(fee.dueDate)}</span>
                             </>
                           ) : (
                             <span className="text-emerald-600 font-semibold flex items-center gap-1">
@@ -820,7 +924,20 @@ const FeeManager = () => {
                         )}
                       </div>
                     </div>
-                  ))}
+                  )})}
+
+                  {visibleCohortFeeCount < filteredList.length && (
+                    <div className="py-3 text-center">
+                      <Button
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => setVisibleCohortFeeCount(prev => Math.min(filteredList.length, prev + 25))}
+                        className="text-xs"
+                      >
+                        Load More Records ({filteredList.length - visibleCohortFeeCount} more)
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -833,13 +950,27 @@ const FeeManager = () => {
       </Modal>
 
       {activeTab === "transactions" && (
-        <Table
-          columns={transactionColumns}
-          data={transactions}
-          emptyTitle="No Transactions"
-          emptyMessage="No transactions yet"
-          rowKey="_id"
-        />
+        <div className="space-y-4">
+          <Table
+            columns={transactionColumns}
+            data={transactions.slice(0, visibleTxnCount)}
+            emptyTitle="No Transactions"
+            emptyMessage="No transactions yet"
+            rowKey="_id"
+          />
+          {visibleTxnCount < transactions.length && (
+            <div ref={lastTxnElementRef} className="py-4 flex items-center justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleTxnCount(prev => Math.min(transactions.length, prev + 25))}
+                className="text-xs"
+              >
+                Load More Transactions ({transactions.length - visibleTxnCount} remaining)
+              </Button>
+            </div>
+          )}
+        </div>
       )}
 
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={formData.studentId === "bulk" ? "Bulk Create Fees" : "Create Fee Record"} size="lg" error={error}>
@@ -969,7 +1100,7 @@ const FeeManager = () => {
       </Modal>
 
       <PricingModal {...modalProps} onPlanChanged={() => { checkPlanAccess(); fetchFees(); fetchSummary(); fetchTransactions(); }} />
-    </motion.div>
+    </div>
   );
 };
 

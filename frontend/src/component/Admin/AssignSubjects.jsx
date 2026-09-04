@@ -35,7 +35,7 @@ import Button from "../common/ui/Button";
 import StatCard from "../common/ui/StatCard";
 import { isBranchMatch, isBranchInList } from "../../utils/branchHelper";
 import EmptyState from "../common/ui/EmptyState";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import { Select } from "../common/ui/Input";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
@@ -97,14 +97,9 @@ const AssignSubjects = () => {
     subjectId: "",
   });
 
-
-
-  // Theme colors
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    light: colors?.primary ? `${colors.primary}20` : '#eef2ff',
-    lighter: colors?.primary ? `${colors.primary}10` : '#f5f3ff',
+    primary: colors?.primary || '#7c3aed',
+    secondary: colors?.secondary || '#06b6d4',
   };
 
   useEffect(() => {
@@ -257,43 +252,24 @@ const AssignSubjects = () => {
       if (a.subject?.semester) semSet.add(String(a.subject.semester).trim());
     });
     return Array.from(semSet).sort((a, b) => {
-      const numA = parseInt(a.replace(/\D/g, ""), 10);
-      const numB = parseInt(b.replace(/\D/g, ""), 10);
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
       if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
       return a.localeCompare(b);
     });
-  }, [subjects, assignments, filterCourse, filterBranch, courses]);
+  }, [subjects, assignments, courses, filterCourse, filterBranch]);
 
   const availableYears = useMemo(() => {
-    const years = new Set();
-    subjects.forEach(s => {
-      if (filterCourse) {
-        const cCode = String(s.courseCode || "").toUpperCase();
-        const cId = String(s.courseId || "");
-        if (cCode !== filterCourse.toUpperCase() && cId !== filterCourse) return;
+    const yearSet = new Set();
+    availableSemesters.forEach(sem => {
+      const num = parseInt(sem, 10);
+      if (!isNaN(num) && num > 0) {
+        yearSet.add(Math.ceil(num / 2));
       }
-      if (filterBranch) {
-        if (!isBranchMatch(s.branch, filterBranch, courses, { excludeUnassigned: true })) return;
-      }
-      const semNum = parseInt(String(s.semester || "").replace(/\D/g, ""), 10);
-      const year = s.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
-      if (year) years.add(year);
     });
-    assignments.forEach(a => {
-      if (filterCourse) {
-        const cCode = String(a.subject?.courseCode || "").toUpperCase();
-        const cId = String(a.subject?.courseId || "");
-        if (cCode !== filterCourse.toUpperCase() && cId !== filterCourse) return;
-      }
-      if (filterBranch) {
-        if (!isBranchMatch(a.subject?.branch, filterBranch, courses, { excludeUnassigned: true })) return;
-      }
-      const semNum = parseInt(String(a.subject?.semester || "").replace(/\D/g, ""), 10);
-      const year = a.subject?.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
-      if (year) years.add(year);
-    });
-    return Array.from(years).sort((a, b) => a - b);
-  }, [subjects, assignments, filterCourse, filterBranch, courses]);
+    if (yearSet.size === 0) return [1, 2, 3, 4];
+    return Array.from(yearSet).sort((a, b) => a - b);
+  }, [availableSemesters]);
 
   // Auto-reset main toolbar branch & semester if no longer present in available options
   useEffect(() => {
@@ -779,43 +755,35 @@ const AssignSubjects = () => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Assign Subjects"
-        subtitle="Map subjects to teachers across multiple sections"
-        icon={Grid}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Faculty-Subject Allocation Matrix"
+        meta={`Allocating courses, subjects and teaching sections for ${tenantInfo?.name || "your campus"}`}
         actions={
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button
-              variant="outline"
+              variant="subtle"
+              size="sm"
               leftIcon={Download}
               onClick={exportAssignments}
-              className="!px-4 !py-2"
-              title="Export assignments"
             >
-              <span className="hidden md:inline">Export</span>
+              Export
             </Button>
             <Button
-              variant="outline"
+              variant="subtle"
+              size="sm"
+              leftIcon={RefreshCw}
               onClick={refreshData}
-              className="!px-4 !py-2"
-              title="Refresh data"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden md:inline">Refresh</span>
+              Refresh
             </Button>
             <Button
+              variant="primary"
+              size="sm"
               leftIcon={Plus}
               onClick={() => setShowForm(true)}
-              style={{
-                background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-              }}
             >
-              New Assignment
+              New Allocation
             </Button>
           </div>
         }
@@ -823,27 +791,27 @@ const AssignSubjects = () => {
 
       {/* Messages */}
       {error && (
-        <div className="p-4 rounded-lg flex items-center gap-3" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <p className="text-red-700">{error}</p>
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
       {successMessage && (
-        <div className="p-4 rounded-lg flex items-center gap-3" style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-          <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-          <p className="text-green-700">{successMessage}</p>
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-medium flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0" />
+          <span>{successMessage}</span>
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <StatCard label="Teachers" value={stats.totalTeachers} icon={Users} tone="primary" />
-        <StatCard label="Subjects" value={stats.totalSubjects} icon={BookOpen} tone="primary" />
-        <StatCard label="Assignments" value={stats.totalAssignments} icon={Grid} tone="primary" />
-        <StatCard label="Groups" value={stats.totalGroups} icon={Layers} tone="primary" />
+      {/* Stats Bento Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <StatCard label="Faculty" value={stats.totalTeachers} icon={Users} tone="primary" />
+        <StatCard label="Subjects" value={stats.totalSubjects} icon={BookOpen} tone="secondary" />
+        <StatCard label="Assignments" value={stats.totalAssignments} icon={Grid} tone="info" />
+        <StatCard label="Group Pairs" value={stats.totalGroups} icon={Layers} tone="warning" />
         <StatCard label="Sections" value={stats.totalSections} icon={Award} tone="primary" />
-        <StatCard label="Active Teachers" value={stats.teachersWithAssignments} icon={UserCheck} tone="primary" />
+        <StatCard label="Active Faculty" value={stats.teachersWithAssignments} icon={UserCheck} tone="success" />
       </div>
 
       {/* Filters and Sorting */}
@@ -1745,7 +1713,7 @@ const AssignSubjects = () => {
           </div>
         )}
       </Modal>
-    </motion.div>
+    </div>
   );
 };
 

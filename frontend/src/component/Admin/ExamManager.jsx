@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { FileText, Plus, Edit, Trash2, Eye, ClipboardList, Clock, Filter, Settings, GraduationCap, AlertCircle, Shield } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, Eye, ClipboardList, Clock, Filter, Settings, GraduationCap, AlertCircle, Shield, Building2, Grid } from "lucide-react";
 import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
@@ -8,13 +8,14 @@ import Modal from "../common/ui/Modal";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Table from "../common/ui/Table";
 import Input, { Select, Textarea } from "../common/ui/Input";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import BulkImportModal from "../common/ui/BulkImportModal";
 import { useToast } from "../../contexts/ToastContext";
+import { formatDateDMY, formatDateTime, formatDateReadable } from "../../utils/dateUtils";
 
 const BULK_EXAMPLE = `[
   {
@@ -47,7 +48,7 @@ const BULK_EXAMS_COLUMNS = [
   { key: "startTime", label: "Start Time", required: false, description: "HH:MM 24-hour (defaults from shift)", example: "09:00" },
   { key: "endTime", label: "End Time", required: false, description: "HH:MM 24-hour (defaults from shift)", example: "10:15" },
   { key: "passingMarks", label: "Passing Marks", required: false, description: "Defaults 40% of maxMarks", example: 40 },
-  { key: "room", label: "Room", required: false, description: "Exam venue", example: "Hall A" },
+  { key: "room", label: "Exam Hall Code (Room)", required: true, description: "Registered Exam Hall Code (e.g. HALL-101)", example: "HALL-101" },
   { key: "description", label: "Description", required: false, description: "Notes", example: "Open book" },
   { key: "isBacklog", label: "Supplementary (Backlog)", required: false, description: "true/false — marks this as a supplementary/backlog exam", example: "false" },
   { key: "isActive", label: "Is Active", required: false, description: "true or false (default true)", example: true },
@@ -68,6 +69,8 @@ const ExamManager = () => {
   const [shifts, setShifts] = useState([]);
   const [examTypes, setExamTypes] = useState([]);
   const [examPeriods, setExamPeriods] = useState([]);
+  const [examHalls, setExamHalls] = useState([]);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -77,13 +80,14 @@ const ExamManager = () => {
   const [selectedSemester, setSelectedSemester] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedBranch, setSelectedBranch] = useState("");
   const [showBulk, setShowBulk] = useState(false);
   const [examDetail, setExamDetail] = useState(null);
   const [showPeriodForm, setShowPeriodForm] = useState(false);
   const [newPeriod, setNewPeriod] = useState({ name: "", startDate: "", endDate: "", examTypeCode: "" });
 
   const [formData, setFormData] = useState({
-    courseId: "", semester: "", subjectId: "", title: "", type: "", shift: "I",
+    courseId: "", branch: "", semester: "", subjectId: "", title: "", type: "", shift: "I",
     section: "", date: "", startTime: "", endTime: "",
     maxMarks: 100, room: "", description: "", duration: "",
     examPeriodId: "", invigilators: [], isBacklog: false,
@@ -92,8 +96,8 @@ const ExamManager = () => {
   useEffect(() => { fetchInitial(); }, []);
 
   useEffect(() => {
-    fetchExams();
-  }, [selectedCourse, selectedSemester, selectedSection]);
+    fetchExams(selectedSection, selectedSemester, selectedCourse, selectedBranch);
+  }, [selectedCourse, selectedBranch, selectedSemester, selectedSection]);
 
   useEffect(() => {
     if (error || success) {
@@ -107,10 +111,12 @@ const ExamManager = () => {
       let subjectList = [];
       let assignmentsMap = {};
 
-      const [coursesRes, structRes, periodsRes] = await Promise.all([
+      const [coursesRes, structRes, periodsRes, hallsRes, studentsRes] = await Promise.all([
         api.get("/academic/courses").catch(() => ({ data: {} })),
         api.get("/exams/structure").catch(() => ({ data: {} })),
         api.get("/exams/periods").catch(() => ({ data: { data: [] } })),
+        api.get("/exams/seating/halls?isActive=true").catch(() => ({ data: { data: [] } })),
+        api.get("/users/students?limit=2000").catch(() => ({ data: { data: [] } })),
       ]);
 
       const cList = Array.isArray(coursesRes.data?.data) ? coursesRes.data.data
@@ -121,6 +127,9 @@ const ExamManager = () => {
       setShifts(struct.shifts || []);
       setExamTypes((struct.examTypes || []).filter((t) => t.isActive !== false));
       setExamPeriods(periodsRes.data?.data || []);
+      setExamHalls(hallsRes.data?.data || []);
+      const stdList = Array.isArray(studentsRes.data?.data) ? studentsRes.data.data : (Array.isArray(studentsRes.data) ? studentsRes.data : []);
+      setStudents(stdList);
 
       // Fetch subjects + teachers to derive sections from assignments
       try {
@@ -178,13 +187,14 @@ const ExamManager = () => {
     }
   };
 
-  const fetchExams = async () => {
+  const fetchExams = async (sec = selectedSection, sem = selectedSemester, crs = selectedCourse, br = selectedBranch) => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (selectedSection) params.append("section", selectedSection);
-      if (selectedSemester) params.append("semester", selectedSemester);
-      if (selectedCourse) params.append("courseId", selectedCourse);
+      if (sec) params.append("section", sec);
+      if (sem) params.append("semester", sem);
+      if (crs) params.append("courseId", crs);
+      if (br) params.append("branch", br);
       const q = params.toString() ? `?${params.toString()}` : "";
       const res = await api.get(`/exams${q}`);
       setExams(res.data.data || []);
@@ -195,31 +205,87 @@ const ExamManager = () => {
     }
   };
 
-  // Semesters available for the selected course
+  // Branches available for the selected course in modal
+  const availableBranches = useMemo(() => {
+    if (!formData.courseId) return [];
+    const courseObj = courses.find((c) => String(c._id) === String(formData.courseId));
+    const map = new Map();
+    if (courseObj?.branches && Array.isArray(courseObj.branches)) {
+      courseObj.branches.filter((b) => b.isActive !== false).forEach((b) => {
+        map.set(b.name, b.code ? `${b.name} (${b.code})` : b.name);
+      });
+    }
+    subjects.forEach((s) => {
+      if (String(s.courseId) === String(formData.courseId) && s.branch) {
+        if (!map.has(s.branch)) map.set(s.branch, s.branch);
+      }
+    });
+    return Array.from(map.entries()).map(([name, label]) => ({ name, label }));
+  }, [courses, subjects, formData.courseId]);
+
+  // Branches for top filter bar
+  const filterBranches = useMemo(() => {
+    const map = new Map();
+    if (selectedCourse) {
+      const courseObj = courses.find((c) => String(c._id) === String(selectedCourse));
+      if (courseObj?.branches && Array.isArray(courseObj.branches)) {
+        courseObj.branches.filter((b) => b.isActive !== false).forEach((b) => {
+          map.set(b.name, b.code ? `${b.name} (${b.code})` : b.name);
+        });
+      }
+      subjects.forEach((s) => {
+        if (String(s.courseId) === String(selectedCourse) && s.branch) {
+          if (!map.has(s.branch)) map.set(s.branch, s.branch);
+        }
+      });
+    } else {
+      courses.forEach((c) => {
+        (c.branches || []).filter((b) => b.isActive !== false).forEach((b) => {
+          map.set(b.name, b.code ? `${b.name} (${b.code})` : b.name);
+        });
+      });
+      subjects.forEach((s) => {
+        if (s.branch && !map.has(s.branch)) map.set(s.branch, s.branch);
+      });
+    }
+    return Array.from(map.entries()).map(([name, label]) => ({ name, label }));
+  }, [courses, subjects, selectedCourse]);
+
+  // Semesters available for the selected course & branch
   const availableSemesters = useMemo(() => {
     if (!formData.courseId) return [];
     const set = new Set();
     subjects.forEach((s) => {
-      if (String(s.courseId) === String(formData.courseId) && s.semester) {
-        set.add(String(s.semester));
+      if (String(s.courseId) === String(formData.courseId)) {
+        if (!formData.branch || !s.branch || String(s.branch).toUpperCase() === String(formData.branch).toUpperCase()) {
+          if (s.semester) set.add(String(s.semester));
+        }
       }
     });
     const courseObj = courses.find((c) => String(c._id) === String(formData.courseId));
     if (courseObj) {
-      const totalSems = courseObj.durationYears ? courseObj.durationYears * (courseObj.semestersPerYear || 2) : 8;
+      let totalSems = courseObj.durationYears ? courseObj.durationYears * (courseObj.semestersPerYear || 2) : 8;
+      if (formData.branch && courseObj.branches) {
+        const br = courseObj.branches.find(b => b.name === formData.branch || b.code === formData.branch);
+        if (br?.totalSemesters) totalSems = br.totalSemesters;
+      }
       for (let i = 1; i <= totalSems; i++) {
         set.add(String(i));
       }
     }
     return [...set].sort((a, b) => parseInt(a) - parseInt(b));
-  }, [subjects, courses, formData.courseId]);
+  }, [subjects, courses, formData.courseId, formData.branch]);
 
   // Semesters for top filter bar
   const filterSemesters = useMemo(() => {
     const set = new Set();
     if (selectedCourse) {
       subjects.forEach((s) => {
-        if (String(s.courseId) === String(selectedCourse) && s.semester) set.add(String(s.semester));
+        if (String(s.courseId) === String(selectedCourse)) {
+          if (!selectedBranch || !s.branch || String(s.branch).toUpperCase() === String(selectedBranch).toUpperCase()) {
+            if (s.semester) set.add(String(s.semester));
+          }
+        }
       });
       const courseObj = courses.find((c) => String(c._id) === String(selectedCourse));
       if (courseObj) {
@@ -232,12 +298,22 @@ const ExamManager = () => {
       if (set.size === 0) [1, 2, 3, 4, 5, 6, 7, 8].forEach((i) => set.add(String(i)));
     }
     return [...set].sort((a, b) => parseInt(a) - parseInt(b));
-  }, [subjects, courses, exams, selectedCourse]);
+  }, [subjects, courses, exams, selectedCourse, selectedBranch]);
 
-  // Subjects filtered by selected course AND semester
+  // Subjects filtered by selected course, branch AND semester
   const filteredSubjects = useMemo(() => {
     if (!formData.courseId) return subjects;
     let list = subjects.filter((s) => String(s.courseId) === String(formData.courseId));
+
+    if (formData.branch) {
+      const targetBranchUpper = String(formData.branch).trim().toUpperCase();
+      list = list.filter((s) => {
+        if (!s.branch) return true; // generic/common subjects for the course
+        const sBranchUpper = String(s.branch).trim().toUpperCase();
+        return sBranchUpper === targetBranchUpper || sBranchUpper.includes(targetBranchUpper) || targetBranchUpper.includes(sBranchUpper);
+      });
+    }
+
     if (formData.semester) {
       const targetSemNum = parseInt(String(formData.semester).replace(/\D/g, ""), 10);
       list = list.filter((s) => {
@@ -246,7 +322,7 @@ const ExamManager = () => {
       });
     }
     return list;
-  }, [subjects, formData.courseId, formData.semester]);
+  }, [subjects, formData.courseId, formData.branch, formData.semester]);
 
   // Sections for the selected subject (from teacher assignments + fallback sections)
   const filteredSections = useMemo(() => {
@@ -301,10 +377,72 @@ const ExamManager = () => {
     return merged.length > 0 ? merged : ["I", "II", "III", "IV"];
   }, [exams, shifts]);
 
+  // Class strength calculation for formData's selected cohort
+  const classStrength = useMemo(() => {
+    if (!formData.section) return 0;
+    const matching = students.filter((s) => {
+      const sSec = String(s.section || "").trim().toUpperCase();
+      const targetSec = String(formData.section || "").trim().toUpperCase();
+      if (sSec !== targetSec) return false;
+
+      if (formData.courseId) {
+        const sCourseId = String(s.courseId?._id || s.courseId || "");
+        if (sCourseId && sCourseId !== String(formData.courseId)) return false;
+      }
+
+      if (formData.branch) {
+        const sBranch = String(s.branch || "").trim().toUpperCase();
+        const targetBranch = String(formData.branch || "").trim().toUpperCase();
+        if (sBranch && targetBranch && sBranch !== targetBranch && !sBranch.includes(targetBranch) && !targetBranch.includes(sBranch)) {
+          return false;
+        }
+      }
+
+      if (formData.semester) {
+        const sSem = parseInt(String(s.semester || "").replace(/\D/g, ""), 10);
+        const targetSem = parseInt(String(formData.semester || "").replace(/\D/g, ""), 10);
+        if (!isNaN(sSem) && !isNaN(targetSem) && sSem !== targetSem) return false;
+      }
+      return true;
+    });
+    return matching.length;
+  }, [students, formData.section, formData.courseId, formData.branch, formData.semester]);
+
+  const selectedHall = useMemo(() => {
+    if (!formData.room) return null;
+    return examHalls.find((h) => h.hallCode === formData.room || String(h._id) === String(formData.room));
+  }, [examHalls, formData.room]);
+
+  const isCapacityDeficit = useMemo(() => {
+    if (!selectedHall || classStrength === 0) return false;
+    return classStrength > (selectedHall.capacity || 0);
+  }, [selectedHall, classStrength]);
+
+  // Active / non-expired exam periods (endDate >= today)
+  const activeExamPeriods = useMemo(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    return examPeriods.filter((p) => {
+      if (p.isExpired === true) return false;
+      const endStr = (p.endDate || "").split("T")[0];
+      return !endStr || endStr >= todayStr;
+    });
+  }, [examPeriods]);
+
   const handleCourseChange = (courseId) => {
     setFormData((p) => ({
       ...p,
       courseId,
+      branch: "",
+      semester: "",
+      subjectId: "",
+      section: "",
+    }));
+  };
+
+  const handleBranchChange = (branch) => {
+    setFormData((p) => ({
+      ...p,
+      branch,
       semester: "",
       subjectId: "",
       section: "",
@@ -324,15 +462,17 @@ const ExamManager = () => {
     setEditingExam(null);
     const shiftDef = shifts.find((s) => s.name === shift);
     const defaultType = examTypes.find((t) => t.code === examTypes[0]?.code);
+    const defaultHall = examHalls[0]?.hallCode || "";
     setFormData({
       courseId: selectedCourse || "",
+      branch: selectedBranch || "",
       semester: selectedSemester || "",
       subjectId: "", title: "", type: examTypes[0]?.code || "",
       shift: shift || "I", section: selectedSection, date: date || "",
       startTime: shiftDef?.startTime || "", endTime: shiftDef?.endTime || "",
       maxMarks: defaultType?.defaultMaxMarks != null ? defaultType.defaultMaxMarks : 100,
       duration: defaultType?.defaultDuration != null ? defaultType.defaultDuration : "",
-      room: "", description: "", examPeriodId: "", invigilators: [], isBacklog: false,
+      room: defaultHall, description: "", examPeriodId: "", invigilators: [], isBacklog: false,
     });
     setShowForm(true);
   };
@@ -341,6 +481,7 @@ const ExamManager = () => {
     setEditingExam(exam);
     setFormData({
       courseId: exam.courseId?._id || exam.courseId || "",
+      branch: exam.branch || exam.subjectId?.branch || "",
       semester: exam.semester != null ? String(exam.semester) : (exam.subjectId?.semester ? String(exam.subjectId.semester) : ""),
       subjectId: exam.subjectId?._id || exam.subjectId || "",
       title: exam.title || "",
@@ -372,7 +513,7 @@ const ExamManager = () => {
     }));
   };
 
-  // When subject changes, auto-populate section if only one option & auto-populate semester if empty
+  // When subject changes, auto-populate section if only one option & auto-populate semester/branch if empty
   const handleSubjectChange = (subjectId) => {
     const secs = teacherAssignments[String(subjectId)] || [];
     const secArr = [...secs];
@@ -380,6 +521,7 @@ const ExamManager = () => {
     setFormData((p) => ({
       ...p,
       subjectId,
+      branch: p.branch || sub?.branch || "",
       semester: p.semester || (sub?.semester ? String(sub.semester) : ""),
       section: secArr.length === 1 ? secArr[0] : "",
     }));
@@ -387,8 +529,20 @@ const ExamManager = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.courseId || !formData.semester || !formData.subjectId || !formData.title || !formData.section || !formData.date || !formData.shift || (!formData.isBacklog && !formData.examPeriodId)) {
-      setError("Fill all required fields (Course, Semester, Subject, Section, Period, Date, Shift)");
+    if (!formData.courseId || !formData.semester || !formData.subjectId || !formData.title || !formData.section || !formData.date || !formData.shift || !formData.room || (!formData.isBacklog && !formData.examPeriodId)) {
+      setError("Fill all required fields (Course, Semester, Subject, Section, Period, Date, Shift, Exam Hall)");
+      return;
+    }
+    if (examHalls.length === 0) {
+      setError("Cannot create exam: No active Examination Halls found. Please register an exam hall first.");
+      return;
+    }
+    if (activeExamPeriods.length === 0 && !formData.isBacklog) {
+      setError("Cannot create exam: All configured Exam Periods have ended (expired). Please configure an active/upcoming Exam Period first.");
+      return;
+    }
+    if (isCapacityDeficit) {
+      setError(`Capacity Deficit: Section ${formData.section} has ${classStrength} students, exceeding ${selectedHall?.hallCode} capacity (${selectedHall?.capacity} seats).`);
       return;
     }
     try {
@@ -498,8 +652,7 @@ const ExamManager = () => {
   ];
 
   const formatDateHeader = (dateStr) => {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return formatDateReadable(dateStr, true);
   };
 
   const isToday = (dateStr) => {
@@ -522,23 +675,30 @@ const ExamManager = () => {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Exam Manager"
-        subtitle="Schedule, manage, and grade exams"
-        icon={FileText}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Institutional Examination Center"
+        meta={`Central examination scheduling, shift assignments, seating manifests, and result grading (${exams.length} exams registered)`}
         actions={
           canCreateExam ? (
-            <div className="flex items-center gap-3">
-              <Button variant="outline" leftIcon={ClipboardList} onClick={() => setShowBulk(true)}>
-                Bulk Operations
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="subtle" size="sm" leftIcon={ClipboardList} onClick={() => setShowBulk(true)}>
+                Bulk Import
               </Button>
               {isAdmin && (
-                <Button leftIcon={Settings} variant="outline" asChild>
-                  <Link to="/admin/exam-structure">Exam Config</Link>
-                </Button>
+                <>
+                  <Button leftIcon={Building2} variant="subtle" size="sm" asChild>
+                    <Link to="/admin/exams/halls">Exam Halls</Link>
+                  </Button>
+                  <Button leftIcon={Grid} variant="subtle" size="sm" asChild>
+                    <Link to="/admin/exams/seating">Seating Engine</Link>
+                  </Button>
+                  <Button leftIcon={Settings} variant="subtle" size="sm" asChild>
+                    <Link to="/admin/exam-structure">Exam Config</Link>
+                  </Button>
+                </>
               )}
-              <Button onClick={() => openCreate(dateColumns[0] || "", "I")} leftIcon={Plus}>
+              <Button variant="primary" size="sm" onClick={() => openCreate(dateColumns[0] || "", "I")} leftIcon={Plus}>
                 Create Exam
               </Button>
             </div>
@@ -546,34 +706,63 @@ const ExamManager = () => {
         }
       />
 
-      {/* Filters */}
-      <Card padding="sm" className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-ink-faint" />
-          <span className="text-sm font-semibold text-ink">Filters:</span>
+      {/* Filter Toolbar */}
+      <Card padding="md" bordered>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Course</label>
+            <select
+              value={selectedCourse}
+              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedBranch(""); setSelectedSemester(""); setSelectedSection(""); }}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="">All Courses</option>
+              {courses.map((c) => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Branch</label>
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="">All Branches</option>
+              {filterBranches.map((b) => <option key={b.name} value={b.name}>{b.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Semester</label>
+            <select
+              value={selectedSemester}
+              onChange={(e) => setSelectedSemester(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="">All Semesters</option>
+              {filterSemesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Section</label>
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="">All Sections</option>
+              {allSections.map((s) => <option key={s} value={s}>Section {s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Exam Date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            />
+          </div>
         </div>
-        <Select value={selectedCourse} onChange={(e) => { setSelectedCourse(e.target.value); setSelectedSemester(""); setSelectedSection(""); }} className="w-48">
-          <option value="">All Courses</option>
-          {courses.map((c) => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
-        </Select>
-        <Select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)} className="w-36">
-          <option value="">All Semesters</option>
-          {filterSemesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
-        </Select>
-        <Select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-48">
-          <option value="">All Sections</option>
-          {allSections.map((s) => <option key={s} value={s}>Section {s}</option>)}
-        </Select>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-3 py-2 rounded-xl border border-line bg-surface text-sm text-ink"
-        />
-        {selectedDate && (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedDate("")}>Clear Date</Button>
-        )}
-        <span className="ml-auto text-xs text-ink-faint">{exams.length} exam(s) total</span>
       </Card>
 
       {/* No periods warning */}
@@ -662,16 +851,17 @@ const ExamManager = () => {
                                         </div>
                                       </div>
                                       <p className="text-xs text-primary truncate">{exam.subjectName}</p>
-                                      {courseCode && (
-                                        <div className="flex items-center gap-1 mt-0.5">
-                                          <GraduationCap className="w-3 h-3 text-primary/60" />
-                                          <span className="text-[10px] font-bold text-primary/70">{courseCode}</span>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/20">
+                                          {courseCode ? `${courseCode}` : ""}{exam.branch ? ` • ${exam.branch}` : ""} • Sec {exam.section}
+                                        </span>
+                                        {exam.semester && (
+                                          <span className="text-[10px] text-ink-faint">Sem {exam.semester}</span>
+                                        )}
+                                      </div>
                                       <div className="flex flex-wrap gap-x-2 mt-1 text-[11px] text-ink-soft">
                                         <span>{exam.startTime}-{exam.endTime}</span>
-                                        <span className="font-semibold">Sec {exam.section}</span>
-                                        {exam.room && <span>{exam.room}</span>}
+                                        {exam.room && <span className="font-semibold text-primary/80">🏛️ {exam.room}</span>}
                                       </div>
                                       {exam.invigilators?.length > 0 && (
                                         <div className="mt-1 text-[10px] text-primary/70 truncate">
@@ -725,9 +915,34 @@ const ExamManager = () => {
       {/* Create/Edit Modal */}
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingExam ? "Edit Exam" : "Create Exam"} size="lg" error={error}>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Missing or Expired Exam Period Warning */}
+          {activeExamPeriods.length === 0 && !formData.isBacklog && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>
+                  <strong>No Active Exam Periods:</strong> {examPeriods.length > 0 ? "All configured exam periods have already ended (expired). You cannot schedule exams in completed periods." : "You must configure an exam period before scheduling exams."}
+                </span>
+              </div>
+              <Button type="button" size="xs" variant="outline" onClick={() => setShowPeriodForm(true)}>+ New Period</Button>
+            </div>
+          )}
+
+          {examHalls.length === 0 && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-700 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span><strong>No Exam Halls Registered:</strong> You cannot create exams without registered examination venues.</span>
+              </div>
+              <Button type="button" size="xs" asChild>
+                <Link to="/admin/exams/halls">+ Add Exam Hall</Link>
+              </Button>
+            </div>
+          )}
+
           <div className="p-3 rounded-xl bg-primary-soft/50 border border-primary/10 text-xs text-primary-dark">
             <p className="font-semibold mb-1">Required fields</p>
-            <p>Course → Semester → Subject → Section → Exam Period → Date & Shift are all required.</p>
+            <p>Course → Branch (optional) → Semester → Subject → Section → Exam Period → Exam Hall → Date & Shift are all required.</p>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             {/* Step 1: Course */}
@@ -736,29 +951,78 @@ const ExamManager = () => {
               {courses.map((c) => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
             </Select>
 
-            {/* Step 2: Semester (Course -> Semester -> Subject) */}
-            <Select label="2. Semester *" value={formData.semester} onChange={(e) => handleSemesterChange(e.target.value)} required disabled={!formData.courseId}>
+            {/* Step 2: Branch (Specialization) */}
+            <Select
+              label="2. Branch (Specialization)"
+              value={formData.branch}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              disabled={!formData.courseId}
+            >
+              <option value="">
+                {!formData.courseId
+                  ? "Select course first"
+                  : availableBranches.length === 0
+                  ? "All / No specific branch"
+                  : "All Branches..."}
+              </option>
+              {availableBranches.map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.label}
+                </option>
+              ))}
+            </Select>
+
+            {/* Step 3: Semester (Course + Branch -> Semester -> Subject) */}
+            <Select label="3. Semester *" value={formData.semester} onChange={(e) => handleSemesterChange(e.target.value)} required disabled={!formData.courseId}>
               <option value="">{!formData.courseId ? "Select course first" : availableSemesters.length === 0 ? "No semesters found" : "Select Semester..."}</option>
               {availableSemesters.map((sem) => <option key={sem} value={sem}>Semester {sem}</option>)}
             </Select>
 
-            {/* Step 3: Subject (filtered by course & semester) */}
-            <Select label="3. Subject *" value={formData.subjectId} onChange={(e) => handleSubjectChange(e.target.value)} required disabled={!formData.courseId}>
-              <option value="">{!formData.courseId ? "Select course first" : filteredSubjects.length === 0 ? "No subjects in this semester" : "Select Subject..."}</option>
-              {filteredSubjects.map((s) => <option key={s._id} value={s._id}>{s.subjectCode} — {s.subjectName}</option>)}
+            {/* Step 4: Subject (filtered by course, branch & semester) */}
+            <Select label="4. Subject *" value={formData.subjectId} onChange={(e) => handleSubjectChange(e.target.value)} required disabled={!formData.courseId}>
+              <option value="">{!formData.courseId ? "Select course first" : filteredSubjects.length === 0 ? "No subjects match filter" : "Select Subject..."}</option>
+              {filteredSubjects.map((s) => <option key={s._id} value={s._id}>{s.subjectCode} — {s.subjectName} {s.branch ? `(${s.branch})` : ""}</option>)}
             </Select>
 
-            {/* Step 4: Section (from teacher assignments for selected subject) */}
-            <Select label="4. Section *" value={formData.section} onChange={(e) => setFormData((p) => ({ ...p, section: e.target.value }))} required disabled={!formData.subjectId}>
+            {/* Step 5: Section (from teacher assignments for selected subject) */}
+            <Select label="5. Section *" value={formData.section} onChange={(e) => setFormData((p) => ({ ...p, section: e.target.value }))} required disabled={!formData.subjectId}>
               <option value="">{!formData.subjectId ? "Select subject first" : filteredSections.length === 0 ? "No sections assigned — assign subject to teacher first" : "Select Section..."}</option>
               {filteredSections.map((s) => <option key={s} value={s}>Section {s}</option>)}
             </Select>
 
-            {/* Step 5: Exam Period (disabled for backlog exams) */}
+            {/* Step 6: Exam Period (disabled for backlog exams) */}
             <div className="flex gap-2">
-              <Select label="5. Exam Period *" value={formData.isBacklog ? "" : formData.examPeriodId} onChange={(e) => setFormData((p) => ({ ...p, examPeriodId: e.target.value }))} required disabled={formData.isBacklog} className="flex-1" hint={formData.isBacklog ? "Backlog exams are not tied to a scheduled period" : undefined}>
-                <option value="">{formData.isBacklog ? "Not applicable for backlog" : examPeriods.length === 0 ? "No periods — create one first" : "Select Period..."}</option>
-                {examPeriods.map((p, i) => <option key={i} value={p._id || p.name}>{p.name} ({new Date(p.startDate).toLocaleDateString()} — {new Date(p.endDate).toLocaleDateString()})</option>)}
+              <Select
+                label="6. Exam Period *"
+                value={formData.isBacklog ? "" : formData.examPeriodId}
+                onChange={(e) => setFormData((p) => ({ ...p, examPeriodId: e.target.value }))}
+                required
+                disabled={formData.isBacklog}
+                className="flex-1"
+                hint={formData.isBacklog ? "Backlog exams are not tied to a scheduled period" : undefined}
+              >
+                <option value="">
+                  {formData.isBacklog
+                    ? "Not applicable for backlog"
+                    : activeExamPeriods.length === 0
+                    ? "No active periods (all ended) — create new"
+                    : "Select Period..."}
+                </option>
+                {examPeriods.map((p, i) => {
+                  const endStr = (p.endDate || "").split("T")[0];
+                  const todayStr = new Date().toISOString().split("T")[0];
+                  const isPast = p.isExpired || (endStr && endStr < todayStr);
+                  return (
+                    <option
+                      key={i}
+                      value={p._id || p.name}
+                      disabled={isPast}
+                    >
+                      {p.name} ({formatDateDMY(p.startDate)} — {formatDateDMY(p.endDate)})
+                      {isPast ? " [Expired / Ended]" : ""}
+                    </option>
+                  );
+                })}
               </Select>
               <Button type="button" variant="outline" size="sm" className="mt-6" onClick={() => setShowPeriodForm(true)} disabled={formData.isBacklog}>+ New</Button>
             </div>
@@ -771,6 +1035,31 @@ const ExamManager = () => {
 
             {/* Step 7: Title */}
             <Input label="7. Title *" value={formData.title} onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))} required placeholder="e.g. Mid-Term Exam" />
+
+            {/* Step 8: Examination Hall (Room) with real-time capacity */}
+            <div className="space-y-1">
+              <Select
+                label="8. Examination Hall (Room) *"
+                value={formData.room}
+                onChange={(e) => setFormData((p) => ({ ...p, room: e.target.value }))}
+                required
+              >
+                <option value="">{examHalls.length === 0 ? "⚠️ No exam halls found — create one first" : "Select Exam Hall..."}</option>
+                {examHalls.map((h) => (
+                  <option key={h._id} value={h.hallCode}>
+                    {h.hallCode} — {h.name} (Capacity: {h.capacity} seats • {h.building})
+                  </option>
+                ))}
+              </Select>
+              {selectedHall && (
+                <div className="flex items-center justify-between text-[11px] text-ink-faint px-1">
+                  <span>Capacity: <strong>{selectedHall.capacity} seats</strong> ({selectedHall.rows}R × {selectedHall.cols}C)</span>
+                  {formData.section && classStrength > 0 && (
+                    <span>Sec {formData.section} Enrolled: <strong>{classStrength} students</strong></span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Date & Shift */}
             <Select label="Shift *" value={formData.shift} onChange={(e) => {
@@ -797,8 +1086,21 @@ const ExamManager = () => {
               disabled={!editingExam && !!formData.type}
               hint={!editingExam && formData.type ? "Auto-filled from the selected exam type config" : undefined}
             />
-            <Input label="Room" value={formData.room} onChange={(e) => setFormData((p) => ({ ...p, room: e.target.value }))} placeholder="e.g. Hall A" />
           </div>
+
+          {/* Real-time Hall Capacity Deficit Alert */}
+          {isCapacityDeficit && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <strong className="font-semibold block">⚠️ Hall Capacity Deficit Alert</strong>
+                <span>
+                  Section {formData.section} has <strong>{classStrength} enrolled students</strong>, which exceeds the seating capacity of {selectedHall?.hallCode} (<strong>{selectedHall?.capacity} seats</strong>). There is a deficit of <strong>{classStrength - (selectedHall?.capacity || 0)} seats</strong>. Please select a larger examination hall.
+                </span>
+              </div>
+            </div>
+          )}
+
           <label className="flex items-center gap-2.5 cursor-pointer select-none p-3 rounded-xl border border-line bg-background">
             <input
               type="checkbox"
@@ -825,7 +1127,13 @@ const ExamManager = () => {
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" leftIcon={editingExam ? Edit : Plus} disabled={examPeriods.length === 0 && !formData.isBacklog}>{editingExam ? "Update" : "Create"}</Button>
+            <Button
+              type="submit"
+              leftIcon={editingExam ? Edit : Plus}
+              disabled={(activeExamPeriods.length === 0 && !formData.isBacklog) || examHalls.length === 0 || isCapacityDeficit}
+            >
+              {editingExam ? "Update" : "Create"}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -862,8 +1170,8 @@ const ExamManager = () => {
                     {examDetail.exam.resultStatus === "published" ? "Published" : "Draft"}
                   </Badge>
                   {examDetail.exam.publishedAt && (
-                    <span className="text-[11px] text-ink-faint">
-                      {new Date(examDetail.exam.publishedAt).toLocaleString()}
+                    <span className="text-[10px] text-ink-faint block">
+                      {formatDateTime(examDetail.exam.publishedAt)}
                     </span>
                   )}
                 </div>
@@ -873,7 +1181,7 @@ const ExamManager = () => {
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Subject</p><p className="font-semibold text-ink">{examDetail.exam.subjectName}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Section</p><p className="font-semibold text-ink">{examDetail.exam.section}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Shift</p><p className="font-semibold text-ink">{examDetail.exam.shift || "—"}</p></div>
-              <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Date</p><p className="font-semibold text-ink">{new Date(examDetail.exam.date).toLocaleDateString()}</p></div>
+              <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Date</p><p className="font-semibold text-ink">{formatDateDMY(examDetail.exam.date)}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Time</p><p className="font-semibold text-ink">{examDetail.exam.startTime} - {examDetail.exam.endTime}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Max Marks</p><p className="font-semibold text-ink">{examDetail.exam.maxMarks}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Room</p><p className="font-semibold text-ink">{examDetail.exam.room || "—"}</p></div>
@@ -916,7 +1224,7 @@ const ExamManager = () => {
         exportData={exams}
         onImported={() => { setShowBulk(false); fetchExams(selectedSection); }}
       />
-    </motion.div>
+    </div>
   );
 };
 

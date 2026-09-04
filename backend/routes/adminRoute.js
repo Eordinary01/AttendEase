@@ -29,6 +29,7 @@ const {
 // Import controllers
 const {
   // Tenant Admin functions
+  getDashboardStats,
   getAllTeachers,
   createTeacher: createTeacherCtrl,
   getAllSubjects,
@@ -73,6 +74,8 @@ const {
 const { deleteTeacher } = require("../controllers/userController");
 
 // ==================== BASIC ROUTES (Free tier) ====================
+adminRoute.get("/dashboard-stats", authenticateToken, authorizeRoles(["admin", "teacher"]), getDashboardStats);
+adminRoute.get("/stats", authenticateToken, authorizeRoles(["admin", "teacher"]), getDashboardStats);
 adminRoute.get("/teachers", authenticateToken, authorizeRoles(["admin", "teacher"]), getAllTeachers);
 adminRoute.get("/subjects", authenticateToken, authorizeRoles(["admin", "teacher"]), getAllSubjects);
 adminRoute.get("/enrollments", authenticateToken, authorizeRoles(["admin", "teacher"]), requireAnyPermission("fee:collect", "students:read"), getAllEnrollments);
@@ -89,7 +92,7 @@ adminRoute.get(
   getEnrollmentsBySection,
 );
 adminRoute.get("/my-enrollment", authenticateToken, getMyEnrollment);
-adminRoute.get("/active-sections", authenticateToken, adminAuth, getActiveSections);
+adminRoute.get("/active-sections", authenticateToken, authorizeRoles(["admin", "teacher"]), getActiveSections);
 adminRoute.get("/assignments", authenticateToken, adminAuth, getAllAssignments);
 adminRoute.get(
   "/assignments/teacher/:teacherId",
@@ -361,9 +364,17 @@ adminRoute.get(
 );
 
 /**
+ * GET /api/admin/super/logs/feed?since=<epochMs>
  * GET /api/admin/super/logs/recent?since=<epochMs>
  * Newest activity since a timestamp (live feed)
  */
+adminRoute.get(
+  "/super/logs/feed",
+  authenticateToken,
+  authorizeRoles(["super_admin"]),
+  getRecentActivity,
+);
+
 adminRoute.get(
   "/super/logs/recent",
   authenticateToken,

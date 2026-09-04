@@ -140,27 +140,29 @@ const TenantRegistration = () => {
       setTimeout(() => setCopied(false), 2000);
     };
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 py-12 px-4">
-        <div className="max-w-xl mx-auto">
+      <div className="min-h-screen bg-background text-ink py-12 px-4 flex flex-col justify-center">
+        <div className="max-w-xl mx-auto w-full">
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
+            initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl shadow-xl p-8 text-center"
+            className="bg-surface rounded-2xl border border-line/50 p-8 text-center space-y-6 shadow-sm"
           >
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-10 h-10 text-green-600" />
+            <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+              <CheckCircle className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Institution Registered!
-            </h1>
-            <p className="text-gray-600 mb-6">
-              <span className="font-semibold text-gray-800">{registered.name}</span> is ready.
-              Share this unique login link with your staff, teachers, and students. Only members
-              of your institution can sign in through it.
-            </p>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-ink">
+                Institution Registered!
+              </h1>
+              <p className="text-xs text-ink-soft">
+                <strong className="text-ink font-semibold">{registered.name}</strong> is ready.
+                Share this unique login link with your staff, teachers, and students. Only members
+                of your institution can sign in through it.
+              </p>
+            </div>
 
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
-              <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-2">
+            <div className="bg-background border border-line/50 rounded-xl p-4 space-y-2 text-left">
+              <p className="text-xs font-bold text-primary uppercase tracking-wider">
                 Your Unique Login Link
               </p>
               <div className="flex items-center gap-2">
@@ -169,12 +171,12 @@ const TenantRegistration = () => {
                   readOnly
                   value={loginLink}
                   onFocus={(e) => e.target.select()}
-                  className="flex-1 px-3 py-2 border border-purple-200 rounded-lg bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="flex-1 px-3 py-2 border border-line/50 rounded-xl bg-surface text-xs text-ink font-mono focus:ring-2 focus:ring-primary/20 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition"
+                  className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition cursor-pointer shrink-0 shadow-sm"
                 >
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
@@ -183,10 +185,10 @@ const TenantRegistration = () => {
 
             <button
               onClick={() => navigate('/onboarding')}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-primary text-white font-bold text-xs rounded-xl hover:bg-primary/90 transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
             >
-              Continue to Setup Dashboard
-              <ArrowRight className="w-5 h-5" />
+              <span>Continue to Setup Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>
         </div>
@@ -195,222 +197,221 @@ const TenantRegistration = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-background text-ink py-12 px-4">
+      <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center space-y-2">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl mb-4"
+            transition={{ duration: 0.4 }}
+            className="inline-flex items-center justify-center w-14 h-14 bg-primary/10 border border-primary/20 rounded-2xl text-primary mb-2"
           >
-            <GraduationCap className="w-8 h-8 text-white" />
+            <GraduationCap className="w-7 h-7" />
           </motion.div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl font-bold text-ink tracking-tight">
             Set Up Your Institution
           </h1>
-          <p className="text-gray-600">
+          <p className="text-xs text-ink-soft">
             Start your 14-day free trial. No credit card required.
           </p>
         </div>
 
         {/* Progress Steps */}
-        <div className="mb-8">
+        <div className="space-y-2 max-w-md mx-auto">
           <div className="flex items-center justify-between">
-            <div className={`flex-1 h-2 rounded-full ${step >= 1 ? 'bg-purple-600' : 'bg-gray-200'}`} />
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-2 ${
-              step >= 1 ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+            <div className={`flex-1 h-1.5 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-line'}`} />
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center mx-2 text-xs font-bold ${
+              step >= 1 ? 'bg-primary text-white' : 'bg-surface border border-line text-ink-faint'
             }`}>
               1
             </div>
-            <div className={`flex-1 h-2 rounded-full ${step >= 2 ? 'bg-purple-600' : 'bg-gray-200'}`} />
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-2 ${
-              step >= 2 ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+            <div className={`flex-1 h-1.5 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-line'}`} />
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center mx-2 text-xs font-bold ${
+              step >= 2 ? 'bg-primary text-white' : 'bg-surface border border-line text-ink-faint'
             }`}>
               2
             </div>
-            <div className={`flex-1 h-2 rounded-full ${step >= 3 ? 'bg-purple-600' : 'bg-gray-200'}`} />
+            <div className={`flex-1 h-1.5 rounded-full ${step >= 3 ? 'bg-primary' : 'bg-line'}`} />
           </div>
-          <div className="flex justify-between mt-2 text-sm text-gray-600">
+          <div className="flex justify-between text-[11px] font-bold text-ink-soft uppercase tracking-wider">
             <span>Account Setup</span>
             <span>Institution Details</span>
             <span>Complete</span>
           </div>
         </div>
 
-        {/* Form */}
+        {/* Form Card */}
         <motion.div
           key={step}
-          initial={{ opacity: 0, x: step === 1 ? -20 : 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: step === 1 ? 20 : -20 }}
-          className="bg-white rounded-2xl shadow-xl p-8"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-surface rounded-2xl border border-line/50 p-6 md:p-8 shadow-sm"
         >
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="space-y-6">
             {step === 1 ? (
               // Step 1: Account Setup
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                     Institution Name *
                   </label>
                   <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Building2 className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
                     <input
                       type="text"
                       name="institutionName"
                       value={formData.institutionName}
                       onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="e.g., Springfield School"
+                      className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      placeholder="e.g., Apex University"
                       required
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    This will be used to create your subdomain: {formData.institutionName.toLowerCase().replace(/[^a-z0-9]/g, '')}.yourapp.com
+                  <p className="text-[11px] text-ink-faint">
+                    Subdomain identifier: <span className="font-mono text-primary">{formData.institutionName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'your-campus'}.attendease.com</span>
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                     Admin Email *
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Mail className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
                     <input
                       type="email"
                       name="email"
                       value={formData.email}
                       onChange={handleChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="admin@school.com"
+                      className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      placeholder="admin@university.edu"
                       required
                     />
                   </div>
                 </div>
 
-                <div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Password *
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          name="password"
-                          value={formData.password}
-                          onChange={handleChange}
-                          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          placeholder="••••••••"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(prev => !prev)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-600 focus:outline-none"
-                          title={showPassword ? "Hide password" : "Show password"}
-                        >
-                          {showPassword ? <EyeOff className="w-5 h-5 text-purple-600" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                      <PasswordRequirements password={formData.password} />
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                      Password *
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="w-full pl-10 pr-10 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        placeholder="••••••••"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer"
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Confirm Password *
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                          type={showConfirmPassword ? "text" : "password"}
-                          name="confirmPassword"
-                          value={formData.confirmPassword}
-                          onChange={handleChange}
-                          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          placeholder="••••••••"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(prev => !prev)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-600 focus:outline-none"
-                          title={showConfirmPassword ? "Hide password" : "Show password"}
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-5 h-5 text-purple-600" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
+                    <PasswordRequirements password={formData.password} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                      Confirm Password *
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        className="w-full pl-10 pr-10 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        placeholder="••••••••"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(prev => !prev)}
+                        className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer"
+                        title={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
               // Step 2: Institution Details
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-600" /> Platform Theme & Trial Branding
-                  </h3>
-                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl mb-4 text-sm text-purple-900">
-                    <p className="font-semibold mb-1">Standard Platform Theme Included</p>
-                    <p className="text-purple-700 text-xs">
-                      Your 14-day Free Trial starts with the standard AttendEase platform theme. Custom branding (custom colors, logo, and white-labeling) is available on the Professional and Enterprise plans.
-                    </p>
+              <div className="space-y-5">
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-primary">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Standard Platform Theme Included</span>
                   </div>
-
-                  <div className="grid md:grid-cols-1 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Welcome Message</label>
-                      <input type="text" name="welcomeMessage" value={formData.welcomeMessage}
-                        onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                        placeholder="e.g., Empowering students for a brighter future" />
-                    </div>
-                  </div>
+                  <p className="text-ink-soft">
+                    Your 14-day Free Trial starts with the standard AttendEase platform theme. Custom branding (custom colors, logo, and white-labeling) is unlocked on the Professional and Enterprise plans.
+                  </p>
                 </div>
 
-                <hr className="border-gray-200" />
-                <h3 className="text-base font-semibold text-gray-800">Contact Details</h3>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                    Welcome Message
+                  </label>
+                  <input
+                    type="text"
+                    name="welcomeMessage"
+                    value={formData.welcomeMessage}
+                    onChange={handleChange}
+                    className="w-full px-3.5 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                    placeholder="e.g., Empowering students for a brighter future"
+                  />
+                </div>
+
+                <hr className="border-line/50" />
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       Phone Number
                     </label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <Phone className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
                       <input
                         type="tel"
                         name="phone"
                         value={formData.phone}
                         onChange={handleChange}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        placeholder="+91 1234567890"
+                        className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        placeholder="+91 9876543210"
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       Address
                     </label>
                     <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <MapPin className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
                       <input
                         type="text"
                         name="address"
                         value={formData.address}
                         onChange={handleChange}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        placeholder="Street address"
+                        className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        placeholder="Street address, campus building"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       City
                     </label>
                     <input
@@ -418,12 +419,12 @@ const TenantRegistration = () => {
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       placeholder="City"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       State
                     </label>
                     <input
@@ -431,32 +432,12 @@ const TenantRegistration = () => {
                       name="state"
                       value={formData.state}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       placeholder="State"
                     />
                   </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Country
-                    </label>
-                    <select
-                      name="country"
-                      value={formData.country}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="India">India</option>
-                      <option value="USA">United States</option>
-                      <option value="UK">United Kingdom</option>
-                      <option value="Canada">Canada</option>
-                      <option value="Australia">Australia</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
                       PIN Code
                     </label>
                     <input
@@ -464,7 +445,7 @@ const TenantRegistration = () => {
                       name="pincode"
                       value={formData.pincode}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                       placeholder="PIN code"
                     />
                   </div>
@@ -473,18 +454,18 @@ const TenantRegistration = () => {
             )}
 
             {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-                <AlertCircle className="w-5 h-5" />
-                <span className="text-sm">{error}</span>
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-600 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
-            <div className="flex justify-between mt-8">
+            <div className="flex items-center justify-between pt-2 border-t border-line/50">
               {step === 2 && (
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  className="px-5 py-2 border border-line/50 rounded-xl text-xs font-semibold hover:bg-background transition cursor-pointer"
                 >
                   Back
                 </button>
@@ -492,19 +473,19 @@ const TenantRegistration = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`ml-auto px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition flex items-center gap-2 ${
+                className={`ml-auto px-6 py-2.5 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition flex items-center gap-2 shadow-sm cursor-pointer ${
                   loading ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {loading ? (
-                  'Processing...'
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : step === 1 ? (
                   <>
-                    Continue
-                    <ArrowRight className="w-5 h-5" />
+                    <span>Continue</span>
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 ) : (
-                  'Complete Registration'
+                  <span>Complete Registration</span>
                 )}
               </button>
             </div>
@@ -512,21 +493,21 @@ const TenantRegistration = () => {
         </motion.div>
 
         {/* Features List */}
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="text-center space-y-3">
+          <p className="text-xs text-ink-soft">
             By signing up, you agree to our Terms of Service and Privacy Policy.
           </p>
-          <div className="flex flex-wrap justify-center gap-4 mt-4 text-sm text-gray-500">
+          <div className="flex flex-wrap justify-center gap-4 text-xs font-semibold text-ink-soft">
             <span className="flex items-center gap-1">
-              <CheckCircle className="w-4 h-4 text-green-500" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
               14-day free trial
             </span>
             <span className="flex items-center gap-1">
-              <CheckCircle className="w-4 h-4 text-green-500" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
               No credit card required
             </span>
             <span className="flex items-center gap-1">
-              <CheckCircle className="w-4 h-4 text-green-500" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
               Cancel anytime
             </span>
           </div>

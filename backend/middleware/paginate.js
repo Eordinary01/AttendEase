@@ -1,13 +1,13 @@
 function paginate(query, page = 1, limit = 50) {
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+  const l = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
   const skip = (p - 1) * l;
   return query.skip(skip).limit(l);
 }
 
 function paginatedResponse(docs, total, page = 1, limit = 50) {
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+  const l = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
   return {
     success: true,
     data: docs,

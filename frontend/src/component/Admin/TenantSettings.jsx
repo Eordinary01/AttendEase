@@ -53,9 +53,9 @@ import { logError } from "../../utils/logger";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import Button from "../common/ui/Button";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
-import Input, { Select } from "../common/ui/Input";
+import Input, { Select, Textarea } from "../common/ui/Input";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import { useTheme } from '../../contexts/ThemeContexts';
@@ -155,9 +155,11 @@ const TenantSettings = () => {
         setTenantInfo(tenant);
         setFormData({
           branding: tenant.branding || {
-            institutionName: tenant.name,
+            institutionName: tenant.name || "",
             primaryColor: "#6366f1",
             secondaryColor: "#8b5cf6",
+            welcomeMessage: "",
+            customMessage: "",
           },
           contact: tenant.contact || {
             email: "",
@@ -453,24 +455,19 @@ const TenantSettings = () => {
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        icon={SettingsIcon}
-        title="Settings"
-        subtitle="Manage your institution settings and preferences"
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Institutional Configuration & Preferences"
+        meta={`Custom branding, contact profiles, academic terms, and security parameters for ${tenantInfo?.name || "your campus"}`}
         actions={
-          <>
-            <Button variant="outline" leftIcon={RefreshCw} onClick={fetchData}>
+          <div className="flex items-center gap-2">
+            <Button variant="subtle" size="sm" leftIcon={RefreshCw} onClick={fetchData}>
               Refresh
             </Button>
-            <Button variant="primary" leftIcon={Save} onClick={handleSubmit} disabled={saving} loading={saving}>
+            <Button variant="primary" size="sm" leftIcon={Save} onClick={handleSubmit} disabled={saving} loading={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
-          </>
+          </div>
         }
       />
 
@@ -679,9 +676,34 @@ const TenantSettings = () => {
               <>
               <Card>
                 <h3 className="text-lg font-semibold text-ink mb-4">
-                  Branding
+                  Custom Institution Branding & Portal Message
                 </h3>
                 <div className="space-y-4">
+                  <Input
+                    label="Institution Display Name"
+                    placeholder="e.g. Apex Institute of Technology"
+                    value={formData.branding?.institutionName || ""}
+                    onChange={(e) =>
+                      handleInputChange("branding", "institutionName", e.target.value)
+                    }
+                  />
+
+                  <div className="space-y-1">
+                    <Textarea
+                      label="Custom Subdomain Login Welcome / Notice Message"
+                      placeholder="e.g. Welcome to Apex University Portal. Please sign in with your official university credentials to access lectures and attendance."
+                      rows="3"
+                      value={formData.branding?.customMessage || formData.branding?.welcomeMessage || ""}
+                      onChange={(e) => {
+                        handleInputChange("branding", "customMessage", e.target.value);
+                        handleInputChange("branding", "welcomeMessage", e.target.value);
+                      }}
+                    />
+                    <p className="text-xs text-ink-faint">
+                      This custom message is prominently displayed on your institution's login screen (<code className="font-mono text-primary font-bold">/{tenantInfo?.subdomain || "subdomain"}</code>).
+                    </p>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-ink-soft mb-1">
                       Primary Color
@@ -1416,7 +1438,7 @@ const TenantSettings = () => {
         {...modalProps}
         onPlanChanged={() => { fetchData(); setTimeout(() => setReloginRequired(true), 1000); }}
       />
-    </motion.div>
+    </div>
   );
 };
 

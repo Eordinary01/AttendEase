@@ -5,7 +5,7 @@ import { useToast } from "../../contexts/ToastContext";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
 import Badge from "../common/ui/Badge";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Modal from "../common/ui/Modal";
 import { Input, Select, Textarea } from "../common/ui/Input";
@@ -65,7 +65,7 @@ const Announcements = () => {
         priority: formData.priority,
         targetRoles: formData.targetRoles,
       });
-      toastSuccess(formData.type === "short_term" ? "Short-term alert created (expires in 6 hours)" : "Announcement created (expires in 7 days)");
+      toastSuccess(formData.type === "short_term" ? "Short-term alert published (expires in 6 hours)" : "Campus broadcast published (active for 7 days)");
       setShowForm(false);
       setFormData({ title: "", message: "", type: "announcement", priority: "normal", targetRoles: ["student", "teacher", "admin"] });
       fetchAnnouncements();
@@ -104,106 +104,134 @@ const Announcements = () => {
     if (p === "urgent") return "danger";
     if (p === "high") return "warning";
     if (p === "low") return "info";
-    return "default";
+    return "neutral";
   };
 
-  const getTypeTone = (t) => (t === "short_term" ? "warning" : "info");
+  const getTypeTone = (t) => (t === "short_term" ? "warning" : "primary");
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Announcements"
-        subtitle="Manage announcements and alerts for your institution"
-        icon={Megaphone}
+      <DashboardHeader
+        greeting="Campus Broadcasts & Alerts"
+        meta={`Publish announcements, critical flashes, and institutional notifications (${announcements.length} active records)`}
         actions={
-          <div className="flex items-center gap-3">
-            <Select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-40">
-              <option value="all">All Types</option>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowForm(true)}
+            leftIcon={Plus}
+          >
+            New Broadcast
+          </Button>
+        }
+      />
+
+      {/* Info Bento Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <Card padding="md" bordered className="bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Megaphone className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-ink uppercase tracking-wider">Campus Broadcasts</h3>
+          </div>
+          <p className="text-xs text-ink-soft">Retained for {ANNOUNCEMENT_DAYS} days. Distributed across enrolled faculty, students, and parent portals.</p>
+        </Card>
+        <Card padding="md" bordered className="bg-amber-500/5 border-amber-500/20">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
+            <h3 className="text-xs font-bold text-ink uppercase tracking-wider">Flash Priority Alerts</h3>
+          </div>
+          <p className="text-xs text-ink-soft">Active for {SHORT_TERM_HOURS} hours. Used for emergency advisories, schedule shifts, and urgent updates.</p>
+        </Card>
+      </div>
+
+      {/* Filter Toolbar */}
+      <Card padding="md" bordered>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="all">All Broadcast Types</option>
               <option value="announcement">Announcements</option>
               <option value="short_term">Short-term Alerts</option>
-            </Select>
-            <Select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="w-36">
-              <option value="all">All Priority</option>
+            </select>
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="all">All Priorities</option>
               <option value="urgent">Urgent</option>
               <option value="high">High</option>
               <option value="normal">Normal</option>
               <option value="low">Low</option>
-            </Select>
-            <Button onClick={() => setShowForm(true)} leftIcon={Plus}>
-              New Announcement
-            </Button>
+            </select>
           </div>
-        }
-      />
 
-      {/* Info cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card padding="md" className="border-l-4 border-l-info">
-          <div className="flex items-center gap-2 mb-1">
-            <Megaphone className="w-4 h-4 text-info" />
-            <h3 className="text-sm font-bold text-ink">Announcements</h3>
-          </div>
-          <p className="text-xs text-ink-soft">Lasts {ANNOUNCEMENT_DAYS} days. Visible to all users in the organization.</p>
-        </Card>
-        <Card padding="md" className="border-l-4 border-l-warning">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-warning" />
-            <h3 className="text-sm font-bold text-ink">Short-term Alerts</h3>
-          </div>
-          <p className="text-xs text-ink-soft">Lasts {SHORT_TERM_HOURS} hours. For quick, time-sensitive information.</p>
-        </Card>
-      </div>
+          <span className="text-xs text-ink-soft font-semibold">{announcements.length} records published</span>
+        </div>
+      </Card>
 
       {/* Announcements list */}
       {announcements.length === 0 ? (
         <EmptyState
-          title="No Announcements"
-          description="Create your first announcement to notify users"
+          title="No Broadcasts Found"
+          description="Create your first announcement to notify users across your campus."
           icon={Bell}
-          action={<Button onClick={() => setShowForm(true)} leftIcon={Plus}>New Announcement</Button>}
+          action={<Button variant="primary" size="sm" onClick={() => setShowForm(true)} leftIcon={Plus}>New Broadcast</Button>}
         />
       ) : (
         <div className="space-y-3">
           {announcements.map((alert) => (
-            <Card key={alert.id} padding="md" className={isExpired(alert) ? "opacity-50" : ""}>
+            <Card key={alert.id} padding="md" bordered className={`transition hover:border-primary/30 ${isExpired(alert) ? "opacity-60" : ""}`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <Badge tone={getTypeTone(alert.type)} className="capitalize">
-                      {alert.type === "short_term" ? "Short-term" : "Announcement"}
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <Badge tone={getTypeTone(alert.type)} size="sm" className="capitalize">
+                      {alert.type === "short_term" ? "Flash Alert" : "Announcement"}
                     </Badge>
-                    <Badge tone={getPriorityTone(alert.priority)} className="capitalize">
+                    <Badge tone={getPriorityTone(alert.priority)} size="sm" className="capitalize">
                       {alert.priority}
                     </Badge>
-                    {isExpired(alert) && <Badge tone="default">Expired</Badge>}
+                    {isExpired(alert) && <Badge tone="neutral" size="sm">Expired</Badge>}
                     {alert.expiryDate && !isExpired(alert) && (
-                      <span className="text-[10px] text-ink-faint flex items-center gap-0.5">
-                        <Clock className="w-3 h-3" />{getTimeLeft(alert)}
+                      <span className="text-[11px] text-ink-faint flex items-center gap-1 font-semibold">
+                        <Clock className="w-3 h-3 text-primary" />{getTimeLeft(alert)}
                       </span>
                     )}
                   </div>
-                  <h4 className="font-semibold text-ink text-sm">{alert.title}</h4>
-                  <p className="text-sm text-ink-soft mt-0.5 line-clamp-2">{alert.message}</p>
-                  <div className="flex items-center gap-3 mt-2 text-[10px] text-ink-faint">
+                  <h4 className="font-bold text-ink text-sm">{alert.title}</h4>
+                  <p className="text-xs text-ink-soft mt-1 leading-relaxed">{alert.message}</p>
+                  <div className="flex items-center gap-3 mt-2.5 text-[11px] text-ink-faint font-medium">
                     <span>{new Date(alert.createdAt).toLocaleDateString()}</span>
-                    {alert.createdBy && <span>by {alert.createdBy.name}</span>}
-                    <span className="flex items-center gap-0.5">
-                      <Users className="w-3 h-3" />
-                      {(alert.targetRoles || []).join(", ")}
+                    {alert.createdBy && <span>• by {alert.createdBy.name}</span>}
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3 text-primary" />
+                      Audience: {(alert.targetRoles || []).join(", ")}
                     </span>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(alert.id)} className="text-red-500 hover:text-red-700 flex-shrink-0">
+                <button 
+                  onClick={() => handleDelete(alert.id)} 
+                  className="p-1.5 text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer shrink-0"
+                  title="Delete announcement"
+                >
                   <Trash2 className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </Card>
           ))}
@@ -211,24 +239,24 @@ const Announcements = () => {
       )}
 
       {/* Create Form Modal */}
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Create Announcement" size="md">
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Create Campus Broadcast" size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Select label="Type *" value={formData.type} onChange={(e) => setFormData((p) => ({ ...p, type: e.target.value }))}>
-            <option value="announcement">Announcement (7 days)</option>
-            <option value="short_term">Short-term Alert (6 hours)</option>
+          <Select label="Broadcast Category *" value={formData.type} onChange={(e) => setFormData((p) => ({ ...p, type: e.target.value }))}>
+            <option value="announcement">Standard Announcement (7 days retention)</option>
+            <option value="short_term">Short-term Emergency Alert (6 hours retention)</option>
           </Select>
-          <Input label="Title *" value={formData.title} onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))} placeholder="Announcement title" required />
-          <Select label="Priority" value={formData.priority} onChange={(e) => setFormData((p) => ({ ...p, priority: e.target.value }))}>
-            <option value="low">Low</option>
-            <option value="normal">Normal</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
+          <Input label="Subject Title *" value={formData.title} onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))} placeholder="e.g. Campus Holiday Notice, Exam Schedule Published" required />
+          <Select label="Broadcast Priority" value={formData.priority} onChange={(e) => setFormData((p) => ({ ...p, priority: e.target.value }))}>
+            <option value="low">Low Priority</option>
+            <option value="normal">Normal Priority</option>
+            <option value="high">High Priority</option>
+            <option value="urgent">Urgent / Critical</option>
           </Select>
           <div>
-            <label className="block text-xs font-semibold text-ink mb-1">Visible to</label>
-            <div className="flex flex-wrap gap-2">
+            <label className="block text-xs font-bold text-ink mb-1.5 uppercase tracking-wider">Target Recipient Roles</label>
+            <div className="flex flex-wrap gap-3">
               {["student", "teacher", "admin"].map((role) => (
-                <label key={role} className="flex items-center gap-1.5 text-sm text-ink cursor-pointer">
+                <label key={role} className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.targetRoles.includes(role)}
@@ -247,10 +275,15 @@ const Announcements = () => {
               ))}
             </div>
           </div>
-          <Textarea label="Message *" value={formData.message} onChange={(e) => setFormData((p) => ({ ...p, message: e.target.value }))} rows={4} placeholder="Write your announcement..." required />
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" leftIcon={Plus}>Publish</Button>
+          <Textarea label="Broadcast Message Body *" value={formData.message} onChange={(e) => setFormData((p) => ({ ...p, message: e.target.value }))} rows={4} placeholder="Compose your official communication..." required className="resize-none" />
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-line/50">
+            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              Publish Broadcast
+            </Button>
           </div>
         </form>
       </Modal>

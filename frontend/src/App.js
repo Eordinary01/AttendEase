@@ -35,6 +35,8 @@ const SubjectList = lazy(() => import("./component/Subjects/SubjectsList"));
 const StudentSubjects = lazy(() => import("./component/Subjects/StudentsSubjects"));
 const TeacherSubjects = lazy(() => import("./component/Subjects/TeachersSubjects"));
 const TeacherAlerts = lazy(() => import("./component/Teacher/TeacherAlerts"));
+const TeacherFaceSession = lazy(() => import("./component/FaceAttendance/TeacherFaceSession"));
+const FaceRegistration = lazy(() => import("./component/FaceAttendance/FaceRegistration"));
 const LandingPage = lazy(() => import("./component/Landing/LandingPage"));
 const TenantRegistration = lazy(() => import("./component/Landing/TenantRegistration"));
 const OnboardingWizard = lazy(() => import("./component/Admin/OnboardingWizard"));
@@ -57,10 +59,15 @@ const GradeManager = lazy(() => import("./component/GradeManager"));
 const ResultsView = lazy(() => import("./component/ResultsView"));
 const ExamManager = lazy(() => import("./component/Admin/ExamManager"));
 const ExamStructureConfig = lazy(() => import("./component/Admin/ExamStructureConfig"));
+const ExamHallManager = lazy(() => import("./component/Admin/ExamHallManager"));
+const ExamSeatingEngine = lazy(() => import("./component/Admin/ExamSeatingEngine"));
+const StudentHallTicket = lazy(() => import("./component/exam/StudentHallTicket"));
+const InvigilatorQRScanner = lazy(() => import("./component/exam/InvigilatorQRScanner"));
 const Announcements = lazy(() => import("./component/Admin/Announcements"));
 const StudentsManager = lazy(() => import("./component/Admin/StudentsManager"));
 const ReportsManager = lazy(() => import("./component/Admin/ReportsManager"));
 const AcademicStructure = lazy(() => import("./component/Admin/AcademicStructure"));
+const CalendarManager = lazy(() => import("./component/Admin/CalendarManager"));
 const ForgotPassword = lazy(() => import("./component/Auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("./component/Auth/ResetPassword"));
 
@@ -83,9 +90,15 @@ const PrivateRoute = ({
     return <Navigate to={getPostLogoutPath(userRole)} replace />;
   }
 
-  // Check if user has required role (if specified)
-  if (requiredRole && userRole !== requiredRole && !(requiredRole === 'admin' && userRole === 'super_admin')) {
-    return <Navigate to="/dashboard" replace />;
+  // Check if user has required role (supports single string or array of strings)
+  if (requiredRole) {
+    const isAllowedRole = Array.isArray(requiredRole)
+      ? requiredRole.includes(userRole) || (requiredRole.includes("admin") && userRole === "super_admin")
+      : userRole === requiredRole || (requiredRole === "admin" && userRole === "super_admin");
+
+    if (!isAllowedRole) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;
@@ -269,10 +282,14 @@ const App = () => {
       );
     }
 
+    const roleMatches = Array.isArray(requiredRole)
+      ? requiredRole.includes(role) || (requiredRole.includes("admin") && role === "super_admin")
+      : role === requiredRole || (requiredRole === "admin" && role === "super_admin");
+
     const allowed =
       (!requiredRole && !requiredPermission) ||
-      role === requiredRole ||
-      (role === 'super_admin' && (requiredRole === 'admin' || !requiredRole)) ||
+      roleMatches ||
+      (role === "super_admin") ||
       (requiredPermission && can(requiredPermission));
 
     if (!allowed) {
@@ -436,6 +453,26 @@ const App = () => {
             </Protected>
           }
         />
+        <Route
+          path="/face-attendance"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="biometricAttendance">
+                <TeacherFaceSession />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/face-registration"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="biometricAttendance">
+                <FaceRegistration />
+              </PlanGate>
+            </Protected>
+          }
+        />
 
         {/* Admin Routes */}
         <Route
@@ -492,6 +529,14 @@ const App = () => {
           element={
             <Protected requiredRole="admin">
               <TenantSettings />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/calendar"
+          element={
+            <Protected requiredRole="admin">
+              <CalendarManager />
             </Protected>
           }
         />
@@ -641,6 +686,46 @@ const App = () => {
             <Protected requiredPermission="exam:create">
               <PlanGate requiredModule="examManagement">
                 <ExamManager />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/exams/halls"
+          element={
+            <Protected requiredPermission="exam:create">
+              <PlanGate requiredModule="examSeating">
+                <ExamHallManager />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/exams/seating"
+          element={
+            <Protected requiredPermission="exam:create">
+              <PlanGate requiredModule="examSeating">
+                <ExamSeatingEngine />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/exams/hall-ticket"
+          element={
+            <Protected>
+              <PlanGate requiredModule="examSeating">
+                <StudentHallTicket />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/exams/invigilator-scanner"
+          element={
+            <Protected requiredPermission="exam:grade">
+              <PlanGate requiredModule="examSeating">
+                <InvigilatorQRScanner />
               </PlanGate>
             </Protected>
           }

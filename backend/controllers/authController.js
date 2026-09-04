@@ -165,6 +165,11 @@ const login = async (req, res) => {
         role: user.role,
         section: user.section,
         rollNo: user.rollNo,
+        courseId: user.courseId,
+        courseName: user.courseName,
+        branch: user.branch,
+        semester: user.semester,
+        admissionYear: user.admissionYear,
         isFirstLogin: user.isFirstLogin,
         tenantId: user.tenantId
       }

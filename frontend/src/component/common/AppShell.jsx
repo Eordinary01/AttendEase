@@ -32,9 +32,15 @@ import {
   Megaphone,
   Award,
   Activity,
+  Camera,
+  UserCheck,
+  Grid,
+  Scan,
 } from 'lucide-react';
 import api from '../../utils/api';
 import { usePermissions } from '../../contexts/PermissionsContext';
+import { clearTenantFaceCache } from '../../utils/idbStorage';
+import { initOfflineSync, onSyncEvent } from '../../utils/offlineSync';
 
 const roleNav = {
   super_admin: [
@@ -57,6 +63,8 @@ const roleNav = {
       { to: '/admin/academic-structure', label: 'Academic Structure', icon: Network, module: 'academicStructure' },
       { to: '/admin/timetable', label: 'Timetable', icon: Calendar, module: 'timetable' },
       { to: '/admin/exams', label: 'Exam Manager', icon: FileText, module: 'examManagement' },
+      { to: '/admin/exams/halls', label: 'Exam Halls', icon: Building2, module: 'examSeating' },
+      { to: '/admin/exams/seating', label: 'Seating Engine', icon: Grid, module: 'examSeating' },
       { to: '/exams', label: 'Exam Schedule', icon: Calendar, module: 'examManagement' },
       { to: '/exams/grades', label: 'Grade Manager', icon: ClipboardCheck, module: 'examManagement' },
       { to: '/reports', label: 'Reports', icon: ClipboardCheck, permission: 'reports:view' },
@@ -88,8 +96,13 @@ const roleNav = {
       { to: '/admin/timetable', label: 'Timetable Manager', icon: Calendar, module: 'timetable', permission: 'timetable:write' },
       { to: '/exams', label: 'Exams', icon: FileText, module: 'examManagement', permission: 'exam:read' },
       { to: '/admin/exams', label: 'Exam Manager', icon: FileText, module: 'examManagement', permission: 'exam:create' },
+      { to: '/admin/exams/halls', label: 'Exam Halls', icon: Building2, module: 'examSeating', permission: 'exam:create' },
+      { to: '/admin/exams/seating', label: 'Seating Engine', icon: Grid, module: 'examSeating', permission: 'exam:create' },
+      { to: '/exams/invigilator-scanner', label: 'Invigilator Scanner', icon: Scan, module: 'examSeating', permission: 'exam:grade' },
       { to: '/exams/grades', label: 'Grade Manager', icon: ClipboardCheck, module: 'examManagement', permission: 'exam:grade' },
       { to: '/reports', label: 'Reports', icon: ClipboardCheck, permission: 'reports:view' },
+      { to: '/face-attendance', label: 'Face Attendance', icon: Camera, module: 'biometricAttendance' },
+      { to: '/face-registration', label: 'Face Registration', icon: UserCheck, module: 'biometricAttendance' },
     ]},
     { group: 'People', items: [
       { to: '/students', label: 'Students', icon: Users, permission: 'students:read' },
@@ -111,6 +124,7 @@ const roleNav = {
     { group: 'Academics', items: [
       { to: '/attendance-history', label: 'Attendance History', icon: ClipboardCheck },
       { to: '/exams', label: 'Exams', icon: FileText, module: 'examManagement', permission: 'exam:read' },
+      { to: '/exams/hall-ticket', label: 'Admit Card', icon: Award, module: 'examSeating', permission: 'exam:read' },
       { to: '/exams/results', label: 'My Results', icon: Award, module: 'examManagement', permission: 'exam:read' },
     ]},
     { group: 'Finance', items: [
@@ -131,6 +145,7 @@ const roleNav = {
       { to: '/subjects', label: "My Child's Subjects", icon: BookMarked, permission: 'subjects:read' },
       { to: '/attendance-history', label: 'Attendance History', icon: ClipboardCheck, permission: 'attendance:read' },
       { to: '/timetable', label: 'Timetable', icon: Calendar, module: 'timetable', permission: 'timetable:read' },
+      { to: '/exams/hall-ticket', label: 'Admit Card', icon: Award, module: 'examSeating', permission: 'exam:read' },
       { to: '/exams/results', label: 'Results', icon: Award, module: 'examManagement', permission: 'exam:read' },
     ]},
     { group: 'Finance', items: [
@@ -211,9 +226,60 @@ const AppShell = ({ role, userName, userId, onLogout, children }) => {
     }
   };
 
+  const [userAvatar, setUserAvatar] = useState(localStorage.getItem('userAvatar') || null);
+
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handleAvatarUpdate = () => {
+      setUserAvatar(localStorage.getItem('userAvatar') || null);
+    };
+    window.addEventListener('userAvatarUpdated', handleAvatarUpdate);
+
+    // Initial avatar fetch if token present and avatar not yet cached
+    const cachedAv = localStorage.getItem('userAvatar');
+    if (localStorage.getItem('token') && !cachedAv) {
+      api.get('/users/profile')
+        .then((res) => {
+          const av = res.data?.data?.avatar;
+          if (av) {
+            setUserAvatar(av);
+            localStorage.setItem('userAvatar', av);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('userAvatarUpdated', handleAvatarUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    initOfflineSync().catch(() => {});
+
+    const unsubscribe = onSyncEvent((event) => {
+      if (event.type === 'SYNC_COMPLETE' && event.syncedCount > 0) {
+        if (typeof window !== 'undefined' && window.notifyToast) {
+          window.notifyToast(`✅ Auto-synced ${event.syncedCount} offline attendance record(s) successfully!`, 'success', 4000);
+        }
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = () => {
+    const currentTenantId = localStorage.getItem('tenantId');
+    if (currentTenantId) {
+      clearTenantFaceCache(currentTenantId).catch(() => {});
+    }
+    if (onLogout) onLogout();
+  };
 
   const groups = roleNav[role] || [];
   const displayName = userName || localStorage.getItem('userName') || 'Account';
@@ -231,11 +297,22 @@ const AppShell = ({ role, userName, userId, onLogout, children }) => {
     academicStructure: 'Academic Structure',
   };
 
+  const isModuleActive = (modules, mod) => {
+    if (!modules || !mod) return true;
+    if (modules[mod] === true) return true;
+    if ((mod === 'biometricAttendance' || mod === 'faceAttendance') && (modules.biometricAttendance || modules.biometric_attendance || modules.faceAttendance || modules.face_attendance)) return true;
+    if (mod === 'examManagement' && modules.exam_management) return true;
+    if (mod === 'financeManagement' && modules.finance_management) return true;
+    if (mod === 'parentPortal' && modules.parent_portal) return true;
+    if (mod === 'academicStructure' && modules.academic_structure) return true;
+    return Boolean(modules[mod]);
+  };
+
   const renderItems = (items) =>
     items
       .filter((item) => !item.permission || can(item.permission))
       .map((item) => {
-      const locked = Boolean(item.module) && planModules !== null && !planModules[item.module];
+      const locked = Boolean(item.module) && planModules !== null && !isModuleActive(planModules, item.module);
       const active = isActive(item.to);
 
       if (locked) {
@@ -327,7 +404,7 @@ const AppShell = ({ role, userName, userId, onLogout, children }) => {
       {/* Sign out */}
       <div className="border-t border-line p-3 shrink-0">
         <button
-          onClick={onLogout}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-[18px] h-[18px]" />
@@ -380,9 +457,17 @@ const AppShell = ({ role, userName, userId, onLogout, children }) => {
           {/* User menu */}
           <Menu as="div" className="relative">
             <Menu.Button className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-background transition-colors">
-              <span className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
-                {initial}
-              </span>
+              {userAvatar ? (
+                <img
+                  src={userAvatar}
+                  alt={displayName}
+                  className="w-8 h-8 rounded-full object-cover border border-line shadow-xs"
+                />
+              ) : (
+                <span className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
+                  {initial}
+                </span>
+              )}
               <span className="hidden md:block text-sm font-semibold text-ink max-w-[140px] truncate">{displayName}</span>
               <ChevronDown className="w-4 h-4 text-ink-faint hidden md:block" />
             </Menu.Button>
@@ -414,7 +499,7 @@ const AppShell = ({ role, userName, userId, onLogout, children }) => {
                   <Menu.Item>
                     {({ active }) => (
                       <button
-                        onClick={onLogout}
+                        onClick={handleLogout}
                         className={`${active ? 'bg-red-50' : ''} group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-red-600`}
                       >
                         <LogOut className="w-4 h-4" /> Sign out

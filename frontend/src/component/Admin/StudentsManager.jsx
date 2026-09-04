@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
 import { Users, Plus, Edit, Search, AlertCircle, Check, Save, GraduationCap } from "lucide-react";
 import api from "../../utils/api";
 import Modal from "../common/ui/Modal";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Table from "../common/ui/Table";
 import Input, { Select } from "../common/ui/Input";
@@ -33,8 +32,20 @@ const StudentsManager = () => {
   });
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 });
+  const [limit, setLimit] = useState(25);
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, pages: 1 });
+
+  const fetchSections = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/active-sections");
+      const secList = res.data?.data || res.data?.sections || [];
+      if (Array.isArray(secList) && secList.length > 0) {
+        setSections(secList.sort());
+      }
+    } catch (err) {
+      // Fallback
+    }
+  }, []);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -57,21 +68,28 @@ const StudentsManager = () => {
       if (res.data.pagination) {
         setPagination(res.data.pagination);
       }
-      if (!selectedSection) {
-        setSections([...new Set(data.map(s => s.section).filter(Boolean))].sort());
+      if (sections.length === 0) {
+        setSections(prev => {
+          const combined = new Set([...prev, ...data.map(s => s.section).filter(Boolean)]);
+          return Array.from(combined).sort();
+        });
       }
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load students");
     } finally {
       setLoading(false);
     }
-  }, [page, limit, selectedSection, search]);
+  }, [page, limit, selectedSection, search, sections.length]);
 
   useEffect(() => {
     setPage(1);
   }, [selectedSection, search]);
 
-  useEffect(() => { fetchStudents(); fetchCourses(); }, [fetchStudents, fetchCourses]);
+  useEffect(() => {
+    fetchStudents();
+    fetchCourses();
+    fetchSections();
+  }, [fetchStudents, fetchCourses, fetchSections]);
 
   useEffect(() => {
     if (error || success) {
@@ -113,10 +131,10 @@ const StudentsManager = () => {
       setSubmitting(true);
       if (editing) {
         await api.put(`/students/${editing.id}`, formData);
-        setSuccess("Student updated");
+        setSuccess("Student updated successfully");
       } else {
         await api.post('/students', formData);
-        setSuccess("Student created");
+        setSuccess("Student enrolled successfully");
       }
       setShowForm(false);
       fetchStudents();
@@ -129,123 +147,207 @@ const StudentsManager = () => {
 
   const attendanceBadge = (s) => {
     const pct = s.attendance?.percentage;
-    if (pct === undefined || pct === null) return <Badge tone="neutral">—</Badge>;
+    if (pct === undefined || pct === null) return <Badge tone="neutral" size="sm">—</Badge>;
     const tone = pct >= 75 ? "success" : pct >= 60 ? "warning" : "danger";
-    return <Badge tone={tone}>{pct}%</Badge>;
+    return <Badge tone={tone} size="sm">{pct}%</Badge>;
   };
 
   const columns = [
-    { header: "Name", cell: (s) => <span className="font-medium text-ink">{s.name}</span> },
-    { header: "Roll No", cell: (s) => <span className="text-ink-soft">{s.rollNo}</span> },
-    { header: "Section", cell: (s) => <span className="text-ink-soft">Section {s.section}</span> },
-    { header: "Course / Branch", cell: (s) => (
-      <span className="text-ink-soft">
-        {s.courseName ? s.courseName : "—"}{s.branch ? ` / ${s.branch}` : ""}
-      </span>
-    ) },
-    { header: "Sem", cell: (s) => s.semester ? <Badge tone="primary">Sem {s.semester}</Badge> : <Badge tone="neutral">—</Badge> },
-    { header: "Adm Year", cell: (s) => <span className="text-ink-soft">{s.admissionYear || "—"}</span> },
+    { 
+      header: "Student Name", 
+      cell: (s) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
+            {s.name?.charAt(0)?.toUpperCase()}
+          </div>
+          <div>
+            <p className="font-bold text-ink text-xs">{s.name}</p>
+            <p className="text-[11px] text-ink-soft">{s.email}</p>
+          </div>
+        </div>
+      )
+    },
+    { header: "Roll No", cell: (s) => <span className="font-mono text-xs font-bold text-ink">{s.rollNo}</span> },
+    { 
+      header: "Section", 
+      cell: (s) => (
+        <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+          Section {s.section}
+        </span>
+      ) 
+    },
+    { 
+      header: "Course / Branch", 
+      cell: (s) => (
+        <span className="text-xs text-ink-soft font-medium">
+          {(s.courseName || s.courseId?.name || s.courseId?.code || "—")}{s.branch ? ` / ${s.branch}` : ""}
+        </span>
+      ) 
+    },
+    { header: "Semester", cell: (s) => s.semester ? <Badge tone="primary" size="sm">Sem {s.semester}</Badge> : <Badge tone="neutral" size="sm">—</Badge> },
+    { header: "Batch", cell: (s) => <span className="text-xs text-ink-soft font-medium">{s.admissionYear || "—"}</span> },
     { header: "Attendance", cell: attendanceBadge },
-    ...(canWrite ? [{ header: "", cell: (s) => (
-      <Button variant="subtle" size="sm" onClick={() => openEdit(s)} leftIcon={Edit} title="Edit" />
-    ) }] : []),
+    ...(canWrite ? [{ 
+      header: "", 
+      cell: (s) => (
+        <button
+          onClick={() => openEdit(s)}
+          className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
+          title="Edit student"
+        >
+          <Edit className="w-3.5 h-3.5" />
+        </button>
+      ) 
+    }] : []),
   ];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Students"
-        subtitle="Manage student profiles and view attendance"
-        icon={GraduationCap}
-        actions={canWrite ? <Button onClick={openCreate} leftIcon={Plus}>Add Student</Button> : null}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Student Directory & Enrollment"
+        meta={`Managing ${pagination.total || students.length} student profiles and attendance telemetry`}
+        actions={
+          canWrite ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={openCreate}
+              leftIcon={Plus}
+            >
+              Enroll Student
+            </Button>
+          ) : null
+        }
       />
 
+      {error && (
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
+      {success && (
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-medium flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0" />
+          <span>{success}</span>
+        </div>
+      )}
 
-      <Card>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <input
-              type="text"
-              placeholder="Search by name, roll no or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
+      {/* Filter Toolbar */}
+      <Card padding="md" bordered>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto flex-1">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <input
+                type="text"
+                placeholder="Search by student name, roll no, email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <div className="relative w-full sm:w-48">
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+              >
+                <option value="">All Sections</option>
+                {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
+              </select>
+            </div>
           </div>
-          <select
-            value={selectedSection}
-            onChange={(e) => setSelectedSection(e.target.value)}
-            className="w-full px-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none"
-          >
-            <option value="">All Sections</option>
-            {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
-          </select>
+
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <div className="flex items-center gap-1.5 text-xs text-ink-soft">
+              <span className="font-medium">Rows:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 py-1 text-xs rounded-lg border border-line/50 bg-background text-ink outline-none cursor-pointer focus:ring-1 focus:ring-primary"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+            <span className="text-xs text-ink-soft font-semibold">{pagination.total || students.length} students found</span>
+          </div>
         </div>
       </Card>
 
       {loading ? (
-        <Card padding="lg"><Skeleton rows={5} /></Card>
+        <Card padding="lg" bordered><Skeleton rows={6} /></Card>
       ) : students.length === 0 ? (
         <EmptyState
           title="No Students Found"
-          description="No students match your filters"
+          description="No students matching your search criteria."
           icon={Users}
-          action={canWrite ? <Button onClick={openCreate} leftIcon={Plus}>Add Student</Button> : null}
+          action={canWrite ? <Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Enroll Student</Button> : null}
         />
       ) : (
-        <Card padding="none" className="overflow-hidden">
+        <Card padding="none" bordered className="overflow-hidden">
           <Table columns={columns} data={students} rowKey="id" pagination={pagination} onPageChange={setPage} />
         </Card>
       )}
 
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? "Edit Student" : "Add Student"} size="lg" error={error}>
+      {/* Student Form Modal */}
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? "Edit Student Profile" : "Enroll New Student"} size="lg" error={error}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input label="Full Name *" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required />
-            <Input label="Email *" type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required />
-            <Input label="Roll No *" value={formData.rollNo} onChange={e => setFormData(p => ({ ...p, rollNo: e.target.value }))} required />
-            <Input label="Section *" value={formData.section} onChange={e => setFormData(p => ({ ...p, section: e.target.value.toUpperCase() }))} required />
+          <div className="grid md:grid-cols-2 gap-3.5">
+            <Input label="Full Name *" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Alex Johnson" />
+            <Input label="Student Email *" type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required placeholder="alex@campus.edu" />
+            <Input label="Roll Number *" value={formData.rollNo} onChange={e => setFormData(p => ({ ...p, rollNo: e.target.value }))} required placeholder="e.g. CS2026-042" />
+            <Input label="Section *" value={formData.section} onChange={e => setFormData(p => ({ ...p, section: e.target.value.toUpperCase() }))} required placeholder="A" />
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="md:col-span-1">
+          <div className="grid md:grid-cols-3 gap-3">
+            <div>
               <Select label="Course" value={formData.courseId} onChange={e => handleCourseChange(e.target.value)}>
                 <option value="">Select course (optional)</option>
                 {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
               </Select>
             </div>
-            <div className="md:col-span-1">
+            <div>
               <Select label="Branch / Stream" value={formData.branch} onChange={e => setFormData(p => ({ ...p, branch: e.target.value }))} disabled={!formData.courseId || branchOptions.length === 0}>
                 <option value="">
-                  {!formData.courseId ? "Select a course first" : branchOptions.length === 0 ? "No branches defined" : "Select branch (optional)"}
+                  {!formData.courseId ? "Select course first" : branchOptions.length === 0 ? "No branches" : "Select branch"}
                 </option>
                 {branchOptions.map((b, i) => (
-                  <option key={b._id || b.name + i} value={b.name}>{b.name}{b.totalSemesters ? ` (${b.durationYears} yrs / ${b.totalSemesters} sem)` : ""}</option>
+                  <option key={b._id || b.name + i} value={b.name}>{b.name}{b.totalSemesters ? ` (${b.durationYears}y / ${b.totalSemesters}s)` : ""}</option>
                 ))}
               </Select>
             </div>
-            <div className="md:col-span-1">
+            <div>
               <Input label="Admission Year" type="number" min="2000" max="2100" value={formData.admissionYear} onChange={e => setFormData(p => ({ ...p, admissionYear: e.target.value }))} />
             </div>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-4">
-            <div>
-              <Input label="Starting Semester" type="number" min="1" value={formData.semester} onChange={e => setFormData(p => ({ ...p, semester: e.target.value }))} hint="Auto-increments per term" />
-            </div>
-            <Input label="Phone" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} />
-            <Input label="Parent Name" value={formData.parentName} onChange={e => setFormData(p => ({ ...p, parentName: e.target.value }))} />
-            <Input label="Parent Phone" value={formData.parentPhone} onChange={e => setFormData(p => ({ ...p, parentPhone: e.target.value }))} />
+          <div className="grid md:grid-cols-2 gap-3.5 pt-2 border-t border-line/50">
+            <Input label="Phone Number" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+91 9876543210" />
+            <Input label="Parent / Guardian Name" value={formData.parentName} onChange={e => setFormData(p => ({ ...p, parentName: e.target.value }))} placeholder="Parent name" />
+            <Input label="Parent Phone" value={formData.parentPhone} onChange={e => setFormData(p => ({ ...p, parentPhone: e.target.value }))} placeholder="Parent contact" />
+            <Input label="Current Semester" type="number" min="1" max="16" value={formData.semester} onChange={e => setFormData(p => ({ ...p, semester: parseInt(e.target.value, 10) || 1 }))} />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button type="submit" loading={submitting} leftIcon={Save}>{editing ? "Update" : "Create"}</Button>
+
+          <div className="flex justify-end pt-3 gap-2.5 border-t border-line/50">
+            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" loading={submitting}>
+              {editing ? "Update Profile" : "Save Enrollment"}
+            </Button>
           </div>
         </form>
       </Modal>
-    </motion.div>
+    </div>
   );
 };
 
