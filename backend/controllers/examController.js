@@ -6,9 +6,11 @@ const Subject = require("../models/Subject");
 const Tenant = require("../models/Tenant");
 const ExamHall = require("../models/ExamHall");
 const { requirePermission } = require("../middleware/permission");
+const { getPagination, paginatedResponse } = require("../middleware/paginate");
 const logger = require("../utils/logger");
 const { toObjectId } = require("../utils/sanitize");
 const { computeStudentGrades, computeSectionBacklogs, calculateGrade } = require("../utils/gradeCalculator");
+const { publishExamEvent } = require("../events/publishers");
 
 // ─── Default exam structure (fallback when tenant has none configured) ───
 const DEFAULT_EXAM_TYPES = [
@@ -576,6 +578,8 @@ const createExam = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    publishExamEvent(tenantId, 'exam.created', exam);
+
     return res.status(201).json({ success: true, data: exam });
   } catch (error) {
     logger.error("Error creating exam", { error: error.message });
@@ -676,11 +680,23 @@ const getExams = async (req, res) => {
       if (endDate) filter.date.$lte = new Date(endDate);
     }
 
-    const exams = await Exam.find(filter)
+    const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const { page, limit, skip } = getPagination(req, 100, 200);
+
+    let queryExec = Exam.find(filter)
       .sort({ date: 1, startTime: 1 })
       .populate("createdBy", "name")
       .populate("invigilators", "name")
       .lean();
+
+    if (isPaginated) {
+      queryExec = queryExec.skip(skip).limit(limit);
+    }
+
+    const [exams, total] = await Promise.all([
+      queryExec,
+      Exam.countDocuments(filter),
+    ]);
 
     const now = new Date();
     const enriched = exams.map((ex) => {
@@ -694,7 +710,11 @@ const getExams = async (req, res) => {
       };
     });
 
-    return res.status(200).json({ success: true, data: enriched });
+    if (isPaginated) {
+      return res.status(200).json(paginatedResponse(enriched, total, page, limit));
+    }
+
+    return res.status(200).json({ success: true, data: enriched, total });
   } catch (error) {
     logger.error("Error fetching exams", { error: error.message });
     return res.status(500).json({ success: false, message: "Failed to fetch exams" });
@@ -827,6 +847,9 @@ const updateExam = async (req, res) => {
     }
 
     await exam.save();
+
+    publishExamEvent(req.user.tenantId, 'exam.updated', exam);
+
     return res.status(200).json({ success: true, data: exam });
   } catch (error) {
     logger.error("Error updating exam", { error: error.message });
@@ -1041,6 +1064,8 @@ const publishExamResults = async (req, res) => {
     exam.publishedAt = new Date();
     exam.publishedBy = req.user._id;
     await exam.save();
+
+    publishExamEvent(req.user.tenantId, 'exam.results_published', exam);
 
     return res.status(200).json({ success: true, message: "Results published", data: exam });
   } catch (error) {

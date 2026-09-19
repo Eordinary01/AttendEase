@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import ERPCard from "./ERPCard";
+import UniversalSpinner from "../ui/UniversalSpinner";
+import { formatWeekday } from "../../../utils/dateUtils";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -8,10 +10,9 @@ export default function ERPWeeklyTimetable({
   loading = false,
   onRefresh,
 }) {
+  const todayName = formatWeekday(new Date(), "long");
   const [activeDay, setActiveDay] = useState(
-    DAYS.includes(new Date().toLocaleDateString("en-US", { weekday: "long" }))
-      ? new Date().toLocaleDateString("en-US", { weekday: "long" })
-      : "Monday"
+    DAYS.includes(todayName) ? todayName : "Monday"
   );
 
   // Group timetable slots by day
@@ -58,9 +59,7 @@ export default function ERPWeeklyTimetable({
       {/* Slots Matrix for Selected Day */}
       <div className="p-3 divide-y divide-line/40 overflow-y-auto max-h-56">
         {loading ? (
-          <div className="p-6 text-center text-xs text-ink-faint">
-            Loading timetable...
-          </div>
+          <UniversalSpinner size="sm" label="Loading timetable..." className="py-4" />
         ) : currentSlots.length === 0 ? (
           <div className="p-6 text-center text-xs text-ink-faint">
             No lectures scheduled on {activeDay}.

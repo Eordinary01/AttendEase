@@ -66,6 +66,7 @@ const userSchema = mongoose.Schema(
     },
     createdByAdmin: { type: Boolean, default: false },
     isFirstLogin: { type: Boolean, default: true },
+    forcePasswordChange: { type: Boolean, default: false },
     tempPasswordSent: { type: Boolean, default: false },
     tempPasswordSentAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
@@ -101,9 +102,14 @@ const userSchema = mongoose.Schema(
     profileComplete: { type: Boolean, default: false },
     avatar: { type: String, trim: true, default: null },
 
-    // Custom roles assigned to teachers
+    // Custom roles assigned to teachers with optional academic cohort scoping (Option B)
     customRoles: [{
-      roleId: { type: mongoose.Schema.Types.ObjectId, ref: "CustomRole" },
+      roleId: { type: mongoose.Schema.Types.ObjectId, ref: "CustomRole", required: true },
+      courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },
+      branch: { type: String, trim: true, default: "" },
+      semester: { type: Number, default: null },
+      section: { type: String, uppercase: true, trim: true, default: "" },
+      isPrimary: { type: Boolean, default: false },
       assignedAt: { type: Date, default: Date.now },
       assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     }],

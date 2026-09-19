@@ -15,7 +15,9 @@ const {
 const { featureGuard } = require("../middleware/featureGuard");
 const { requirePermission } = require("../middleware/permission");
 const { escapeRegExp } = require("../utils/sanitize");
+const { getTeacherAssignedSections } = require("../utils/sectionHelper");
 const logger = require("../utils/logger");
+const { toISODateString } = require("../utils/dateFormatter");
 const validate = require("../middleware/validate");
 const {
   markAttendance,
@@ -32,7 +34,36 @@ const {
   updateAttendanceRecord: updateAttendanceRecordCtrl,
   deleteAttendanceRecord,
   getAttendanceHistory,
+  getDeficitTrajectory,
+  getBatchRiskAnalytics,
 } = require("../controllers/attendanceController");
+
+// ==================== PHASE 9: PREDICTIVE DROPOUT & RISK ANALYTICS ====================
+
+/**
+ * GET /api/attendance/analytics/deficit
+ * Student & Staff endpoint for 75% attendance trajectory & classes needed
+ * Query: ?studentId=xxx&subjectId=xxx
+ */
+attendanceRoute.get(
+  "/analytics/deficit",
+  authenticateToken,
+  featureGuard("attendance"),
+  getDeficitTrajectory
+);
+
+/**
+ * GET /api/attendance/analytics/risk
+ * Staff batch endpoint for section/subject at-risk rosters & summary
+ * Query: ?section=A&subjectId=xxx&courseId=xxx
+ */
+attendanceRoute.get(
+  "/analytics/risk",
+  authenticateToken,
+  authorizeRoles("teacher", "admin", "super_admin"),
+  featureGuard("attendance"),
+  getBatchRiskAnalytics
+);
 
 // ==================== TEACHER-ONLY ROUTES ====================
 
@@ -216,25 +247,31 @@ attendanceRoute.get(
         }
       }
 
-      // Teachers without privileged management permissions can only view students in their assigned sections
-      const isPrivileged = req.user.role === 'admin' ||
-                           req.user.role === 'super_admin' ||
-                           req.user.permissions?.includes("students:read") ||
-                           req.user.permissions?.includes("students:write") ||
-                           req.user.permissions?.includes("attendance:read_all") ||
-                           req.user.permissions?.includes("*");
-
-      if (req.user.role === 'teacher' && !isPrivileged) {
-        const assignedSections = [...new Set((req.user.assignedSubjects || []).map(a => a.section).filter(Boolean))];
+      // Teachers can only view students in their assigned sections
+      if (req.user.role === 'teacher') {
+        const assignedSections = await getTeacherAssignedSections(req.user, tenantId);
         if (assignedSections.length === 0) {
-          return res.status(200).json({ success: true, data: [], pagination: { page: 1, limit: parseInt(limit), total: 0, pages: 0 } });
+          return res.status(200).json({
+            success: true,
+            data: [],
+            pagination: { page: 1, limit: parseInt(limit, 10) || 50, total: 0, pages: 0 }
+          });
         }
-        if (section && !assignedSections.includes(section)) {
-          return res.status(403).json({ success: false, message: "You can only view students in your assigned sections" });
+        if (section && section !== 'all') {
+          const secClean = section.trim().toUpperCase();
+          if (!assignedSections.includes(secClean)) {
+            return res.status(200).json({
+              success: true,
+              data: [],
+              pagination: { page: 1, limit: parseInt(limit, 10) || 50, total: 0, pages: 0 }
+            });
+          }
+          query.section = secClean;
+        } else {
+          query.section = { $in: assignedSections };
         }
-        query.section = { $in: assignedSections };
-      } else if (section) {
-        query.section = section;
+      } else if (section && section !== 'all') {
+        query.section = section.trim().toUpperCase();
       }
       if (search) {
         const safeSearch = escapeRegExp(search);
@@ -820,7 +857,7 @@ attendanceRoute.get(
   async (req, res) => {
     try {
       const tenantId = req.user.tenantId;
-      const { date = new Date().toISOString().split('T')[0] } = req.query;
+      const { date = toISODateString(new Date()) } = req.query;
 
       const selectedDate = new Date(date);
       const startOfDay = new Date(selectedDate);

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Megaphone, Clock, Trash2, CheckSquare, Square, Plus } from "lucide-react";
 import api from "../../utils/api";
+import eventSourceManager from "../../utils/eventSourceManager";
+import { formatDateDMY } from "../../utils/dateUtils";
 import { useToast } from "../../contexts/ToastContext";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
@@ -26,6 +28,15 @@ const TeacherAlerts = () => {
     priority: "normal",
   });
 
+  const fetchAlertsOnly = useCallback(async () => {
+    try {
+      const res = await api.get("/alerts?includeExpired=true");
+      setAnnouncements(Array.isArray(res.data?.data) ? res.data.data : []);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -50,6 +61,16 @@ const TeacherAlerts = () => {
     };
     fetchData();
   }, [toastError]);
+
+  // Real-time live update for teacher broadcasts
+  useEffect(() => {
+    const unsubCreated = eventSourceManager.on("alert.created", fetchAlertsOnly);
+    const unsubBroadcast = eventSourceManager.on("broadcast.announcement", fetchAlertsOnly);
+    return () => {
+      unsubCreated();
+      unsubBroadcast();
+    };
+  }, [fetchAlertsOnly]);
 
   const toggleSection = (sec) => {
     setSelectedSections((prev) =>
@@ -199,7 +220,7 @@ const TeacherAlerts = () => {
                         {getTimeLeft(a)}
                       </span>
                     )}
-                    <span>{new Date(a.createdAt).toLocaleDateString()}</span>
+                    <span>{formatDateDMY(a.createdAt)}</span>
                   </div>
                 </div>
                 <button

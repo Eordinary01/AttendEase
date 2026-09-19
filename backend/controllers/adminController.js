@@ -26,6 +26,7 @@ const {
   getActiveTenantSections,
   invalidateTenantSectionsCache,
   validateSectionsExist,
+  getTeacherAssignedSections,
 } = require("../utils/sectionHelper");
 const { getEffectiveLimits, getEffectiveModules } = require("../utils/planDefaults");
 require("dotenv").config();
@@ -1405,7 +1406,7 @@ const getAllSubjects = async (req, res) => {
 const getAllEnrollments = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const skip = (page - 1) * limit;
 
     let filter = { tenantId: req.user.tenantId };
@@ -3100,7 +3101,12 @@ const getLeadStats = async (req, res) => {
 const getActiveSections = async (req, res) => {
   try {
     const tenantId = req.user?.tenantId || req.tenantId;
-    const sections = await getActiveTenantSections(tenantId);
+    let sections = await getActiveTenantSections(tenantId);
+    if (req.user?.role === "teacher") {
+      const teacherSections = await getTeacherAssignedSections(req.user, tenantId);
+      const filtered = sections.filter((s) => teacherSections.includes(s.toUpperCase()));
+      sections = filtered.length > 0 ? filtered : teacherSections;
+    }
     return res.status(200).json({
       success: true,
       message: "Active sections retrieved successfully",

@@ -2,10 +2,80 @@ const Attendance = require("../models/Attendance");
 const Subject = require("../models/Subject");
 const User = require("../models/User");
 const Timetable = require("../models/Timetable");
+const Enrollment = require("../models/Enrollment");
 const mongoose = require("mongoose");
-const { paginate, paginatedResponse } = require("../middleware/paginate");
+const { getPagination, paginate, paginatedResponse } = require("../middleware/paginate");
 const logger = require("../utils/logger");
+const { toISODateString } = require("../utils/dateFormatter");
+const {
+  publishAttendanceMarked,
+  publishAttendanceCorrected,
+  publishAtRiskAlert,
+} = require("../events/publishers");
 require("dotenv").config();
+
+/**
+ * Batch resolves student documents (User + Enrollment fallback) in a single query pass
+ * Eliminates N+1 DB lookup loops when formatting attendance records and summaries.
+ */
+async function batchResolveStudents(rawStudentIds, tenantId) {
+  if (!rawStudentIds || rawStudentIds.length === 0) return new Map();
+
+  const validObjectIds = rawStudentIds
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)))
+    .map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  const studentMap = new Map();
+  if (validObjectIds.length === 0) return studentMap;
+
+  // 1. Bulk query User collection
+  const users = await User.find({
+    _id: { $in: validObjectIds },
+    ...(tenantId ? { tenantId } : {}),
+  })
+    .select("name rollNo section email")
+    .lean();
+
+  users.forEach((u) => {
+    studentMap.set(String(u._id), {
+      id: u._id,
+      name: u.name,
+      rollNo: u.rollNo || "N/A",
+      email: u.email || "",
+      section: u.section || "",
+    });
+  });
+
+  // 2. Bulk query Enrollment for any IDs unresolved via User
+  const unresolvedIds = validObjectIds.filter((id) => !studentMap.has(String(id)));
+  if (unresolvedIds.length > 0) {
+    const enrollments = await Enrollment.find({
+      ...(tenantId ? { tenantId } : {}),
+      $or: [
+        { _id: { $in: unresolvedIds } },
+        { userId: { $in: unresolvedIds } },
+      ],
+    })
+      .select("_id userId firstName lastName email enrollmentNumber section")
+      .lean();
+
+    enrollments.forEach((enr) => {
+      const studentObj = {
+        id: enr.userId || enr._id,
+        name: `${enr.firstName || ""} ${enr.lastName || ""}`.trim() || enr.email,
+        rollNo: enr.enrollmentNumber || "N/A",
+        email: enr.email || "",
+        section: enr.section || "",
+      };
+      studentMap.set(String(enr._id), studentObj);
+      if (enr.userId) {
+        studentMap.set(String(enr.userId), studentObj);
+      }
+    });
+  }
+
+  return studentMap;
+}
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -146,7 +216,7 @@ const markAttendance = async (req, res) => {
       });
     }
 
-    const dateStr = attendanceDate.toISOString().split("T")[0];
+    const dateStr = toISODateString(attendanceDate);
     const classSessionId = `${subjectId}_${section}_${dateStr}_${classSlot._id}`;
 
     // Get all students in this section once for validation within tenant
@@ -181,18 +251,28 @@ const markAttendance = async (req, res) => {
       },
     }).session(session).lean();
 
-    if (existingRecords.length > 0 && !isOfflineSync) {
+    // Separate pre-existing leave/synthetic records from regular attendance marking
+    const nonLeaveRecords = existingRecords.filter((r) => {
+      const isLeave = r.status === "leave";
+      const isSyntheticOrApproved =
+        r.remarks &&
+        (/Synthetic Leave Record/i.test(r.remarks) || /Leave Approved:/i.test(r.remarks));
+      return !(isLeave && isSyntheticOrApproved);
+    });
+
+    if (nonLeaveRecords.length > 0 && !isOfflineSync) {
       await cleanupSession(true);
       return res.status(409).json({
         success: false,
         message: `Attendance has already been marked for this class session on ${day} (${dateStr}). Re-marking or updating attendance is locked.`,
         code: "ALREADY_MARKED",
-        existingCount: existingRecords.length,
+        existingCount: nonLeaveRecords.length,
       });
     }
 
+    const existingMap = new Map(existingRecords.map((r) => [r.studentId.toString(), r]));
+
     if (existingRecords.length > 0 && isOfflineSync) {
-      const existingMap = new Map(existingRecords.map(r => [r.studentId.toString(), r]));
       const conflicts = [];
 
       for (const [studentId, status] of Object.entries(attendanceData)) {
@@ -272,6 +352,15 @@ const markAttendance = async (req, res) => {
           }
         };
 
+        // Audit Trail: If overriding a student previously marked as 'leave' (e.g. mentor approved)
+        const priorRecord = existingMap.get(studentId);
+        if (priorRecord && priorRecord.status === "leave" && status !== "leave") {
+          const teacherNote = req.body.remarks || `Marked ${status}`;
+          attendanceDoc.remarks = `Overridden from leave by Teacher: ${teacherNote}`;
+        } else if (priorRecord && priorRecord.remarks) {
+          attendanceDoc.remarks = priorRecord.remarks;
+        }
+
         bulkOperations.push({
           updateOne: {
             filter: {
@@ -313,6 +402,21 @@ const markAttendance = async (req, res) => {
           addStatRecalcJob(studentId, subjectId, tenantId);
         } catch (e) {}
       }
+
+      // Phase 9: Consecutive absence detection for absent students + cache invalidation
+      try {
+        const cache = require("../middleware/cache");
+        cache.delPattern(`risk:${tenantId}:*`);
+        cache.delPattern(`risk:batch:${tenantId}:*`);
+      } catch (e) {}
+
+      for (const studentId of processedStudentIds) {
+        if (normalizedAttendance[studentId] === "absent") {
+          detectConsecutiveAbsence(studentId, tenantId, { subjectId, section }).catch((err) => {
+            logger.warn("Consecutive absence check error", { studentId, error: err.message });
+          });
+        }
+      }
     }
 
     // Proxy detection check (Item #14)
@@ -350,6 +454,19 @@ const markAttendance = async (req, res) => {
 
     // Get class summary
     const classSummary = await getClassSummary(classSessionId, tenantId);
+
+    // Publish real-time domain event (fire-and-forget)
+    publishAttendanceMarked(tenantId, {
+      sessionId: classSessionId,
+      subjectId,
+      section,
+      date,
+      recordsCreated: bulkOperations.length,
+      stats: {
+        totalStudents: studentsInSection.length,
+        markedCount: bulkOperations.length,
+      },
+    });
 
     return res.status(201).json({
       success: true,
@@ -682,9 +799,7 @@ const getAttendanceSummary = async (req, res) => {
       });
     }
 
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPagination(req, 50, 200);
     const sectionRegex = new RegExp(`^${section.trim()}$`, "i");
 
     const matchQuery = {
@@ -710,48 +825,28 @@ const getAttendanceSummary = async (req, res) => {
       { $limit: limit },
     ]);
 
-    // Asynchronous resolution of student details (User & Enrollment)
-    const Enrollment = require("../models/Enrollment");
-    const studentSummary = await Promise.all(
-      studentAggStats.map(async (stat) => {
-        const rawId = stat._id;
-        let name = "Student";
-        let rollNo = "";
+    // Batch resolve student details for all aggregated rows in 1 query
+    const studentIds = studentAggStats.map((s) => s._id).filter(Boolean);
+    const studentMap = await batchResolveStudents(studentIds, tenantId);
 
-        if (rawId) {
-          const u = await User.findById(rawId).select("name rollNo email").lean();
-          if (u) {
-            name = u.name;
-            rollNo = u.rollNo || "";
-          } else {
-            const enr = await Enrollment.findById(rawId).lean();
-            if (enr) {
-              name = `${enr.firstName || ''} ${enr.lastName || ''}`.trim() || enr.email;
-              rollNo = enr.enrollmentNumber || "";
-            } else {
-              const enrByUserId = await Enrollment.findOne({ userId: rawId, tenantId }).lean();
-              if (enrByUserId) {
-                name = `${enrByUserId.firstName || ''} ${enrByUserId.lastName || ''}`.trim() || enrByUserId.email;
-                rollNo = enrByUserId.enrollmentNumber || "";
-              }
-            }
-          }
-        }
+    const studentSummary = studentAggStats.map((stat) => {
+      const rawId = stat._id ? String(stat._id) : null;
+      const sObj = rawId ? studentMap.get(rawId) : null;
+      const name = sObj?.name || "Student";
+      const rollNo = sObj?.rollNo || "";
+      const percentage = stat.totalClasses > 0 ? Number(((stat.presentCount / stat.totalClasses) * 100).toFixed(2)) : 0;
 
-        const percentage = stat.totalClasses > 0 ? Number(((stat.presentCount / stat.totalClasses) * 100).toFixed(2)) : 0;
-
-        return {
-          studentId: rawId,
-          name,
-          rollNo,
-          totalClasses: stat.totalClasses,
-          presentCount: stat.presentCount,
-          absentCount: stat.absentCount,
-          leaveCount: stat.leaveCount,
-          percentage,
-        };
-      })
-    );
+      return {
+        studentId: stat._id,
+        name,
+        rollNo,
+        totalClasses: stat.totalClasses,
+        presentCount: stat.presentCount,
+        absentCount: stat.absentCount,
+        leaveCount: stat.leaveCount,
+        percentage,
+      };
+    });
 
     // 2. Class sessions summary & overall stats
     const [classSessions, overallStatsRaw] = await Promise.all([
@@ -1060,7 +1155,7 @@ const getAttendanceByDate = async (req, res) => {
     startDate.setUTCHours(0, 0, 0, 0);
     const endDate = new Date(attendanceDate);
     endDate.setUTCHours(23, 59, 59, 999);
-    const dateStr = attendanceDate.toISOString().split("T")[0];
+    const dateStr = toISODateString(attendanceDate);
     const sectionRegex = new RegExp(`^${section.trim()}$`, "i");
 
     const attendance = await Attendance.find({
@@ -1176,14 +1271,26 @@ const updateAttendanceRecord = async (req, res) => {
       });
     }
 
-    attendance.status = status;
-    if (remarks) {
+    // Audit trail: If overriding a leave record, record teacher override note
+    if (attendance.status === "leave" && status !== "leave") {
+      attendance.remarks = remarks
+        ? `Overridden from leave by Teacher: ${remarks}`
+        : `Overridden from leave by Teacher: Status changed to ${status}`;
+    } else if (remarks) {
       attendance.remarks = remarks;
     }
+    attendance.status = status;
     attendance.updatedAt = Date.now();
     await attendance.save();
 
     await updateStudentAttendanceStats(attendance.studentId, attendance.subjectId, tenantId);
+
+    // Invalidate risk cache
+    try {
+      const cache = require("../middleware/cache");
+      cache.delPattern(`risk:${tenantId}:*`);
+      cache.delPattern(`risk:batch:${tenantId}:*`);
+    } catch (e) {}
 
     // Sync User model
     try {
@@ -1194,6 +1301,16 @@ const updateAttendanceRecord = async (req, res) => {
     } catch (e) {
       logger.error("Failed to sync User.attendance after update", { error: e.message });
     }
+
+    // Publish real-time correction event (fire-and-forget)
+    publishAttendanceCorrected(tenantId, {
+      attendanceId: attendance._id,
+      studentId: attendance.studentId,
+      subjectId: attendance.subjectId,
+      status: attendance.status,
+      date: attendance.date,
+      updatedBy: req.user._id,
+    });
 
     return res.status(200).json({
       success: true,
@@ -1250,6 +1367,13 @@ const deleteAttendanceRecord = async (req, res) => {
 
     // Update statistics after deletion
     await updateStudentAttendanceStats(studentId, subjectId, tenantId);
+
+    // Invalidate risk cache
+    try {
+      const cache = require("../middleware/cache");
+      cache.delPattern(`risk:${tenantId}:*`);
+      cache.delPattern(`risk:batch:${tenantId}:*`);
+    } catch (e) {}
 
     // Sync User model
     try {
@@ -1338,9 +1462,7 @@ const getAttendanceHistory = async (req, res) => {
       if (toDate) query.date.$lte = new Date(toDate);
     }
 
-    const p = Math.max(1, parseInt(page, 10) || 1);
-    const l = Math.min(2000, Math.max(1, parseInt(limit, 10) || 50));
-    const skip = (p - 1) * l;
+    const { page: p, limit: l, skip } = getPagination(req, 50, 200);
 
     const [records, total] = await Promise.all([
       Attendance.find(query)
@@ -1353,77 +1475,44 @@ const getAttendanceHistory = async (req, res) => {
       Attendance.countDocuments(query),
     ]);
 
-    const Enrollment = require("../models/Enrollment");
-    const formattedRecords = await Promise.all(
-      records.map(async (r) => {
-        let studentObj = null;
-        const rawStudentId = r.studentId;
+    // Batch resolve all student details in one single roundtrip
+    const uniqueStudentIds = [...new Set(records.map((r) => r.studentId).filter(Boolean))];
+    const studentMap = await batchResolveStudents(uniqueStudentIds, tenantId);
 
-        if (rawStudentId) {
-          const u = await User.findById(rawStudentId).select("name rollNo section email").lean();
-          if (u) {
-            studentObj = {
-              id: u._id,
-              name: u.name,
-              rollNo: u.rollNo || "N/A",
-              email: u.email || "",
-              section: u.section || r.section,
-            };
-          } else {
-            const enr = await Enrollment.findById(rawStudentId).lean();
-            if (enr) {
-              studentObj = {
-                id: enr._id,
-                name: `${enr.firstName || ''} ${enr.lastName || ''}`.trim() || enr.email,
-                rollNo: enr.enrollmentNumber || "N/A",
-                email: enr.email || "",
-                section: enr.section || r.section,
-              };
-            } else {
-              const enrByUserId = await Enrollment.findOne({ userId: rawStudentId, tenantId }).lean();
-              if (enrByUserId) {
-                studentObj = {
-                  id: rawStudentId,
-                  name: `${enrByUserId.firstName || ''} ${enrByUserId.lastName || ''}`.trim() || enrByUserId.email,
-                  rollNo: enrByUserId.enrollmentNumber || "N/A",
-                  email: enrByUserId.email || "",
-                  section: enrByUserId.section || r.section,
-                };
-              }
-            }
-          }
-        }
+    const formattedRecords = records.map((r) => {
+      const rawStudentId = r.studentId ? String(r.studentId) : null;
+      const studentObj = rawStudentId ? studentMap.get(rawStudentId) : null;
 
-        return {
-          id: r._id,
-          date: r.date,
-          day: r.day || "Monday",
-          startTime: r.startTime || "09:00 AM",
-          endTime: r.endTime || "10:00 AM",
-          room: r.room || "LH-101",
-          student: studentObj || {
-            id: rawStudentId || null,
-            name: "Student",
-            rollNo: "N/A",
-            email: "",
-          },
-          subject: {
-            id: r.subjectId?._id,
-            code: r.subjectId?.subjectCode || r.subject?.subjectCode,
-            name: r.subjectId?.subjectName || r.subject?.subjectName,
-          },
-          teacher: {
-            id: r.teacherId?._id,
-            name: r.teacherId?.name,
-          },
-          status: r.status,
-          remarks: r.remarks,
-          section: r.section,
-          semester: r.semester,
-          classSessionId: r.classSessionId,
-        };
-      })
-    );
+      return {
+        id: r._id,
+        date: r.date,
+        day: r.day || "Monday",
+        startTime: r.startTime || "09:00 AM",
+        endTime: r.endTime || "10:00 AM",
+        room: r.room || "LH-101",
+        student: studentObj || {
+          id: rawStudentId || null,
+          name: "Student",
+          rollNo: "N/A",
+          email: "",
+          section: r.section || "",
+        },
+        subject: {
+          id: r.subjectId?._id,
+          code: r.subjectId?.subjectCode || r.subject?.subjectCode,
+          name: r.subjectId?.subjectName || r.subject?.subjectName,
+        },
+        teacher: {
+          id: r.teacherId?._id,
+          name: r.teacherId?.name,
+        },
+        status: r.status,
+        remarks: r.remarks,
+        section: r.section,
+        semester: r.semester,
+        classSessionId: r.classSessionId,
+      };
+    });
 
     const matchQuery = { ...query };
     if (matchQuery.tenantId && mongoose.Types.ObjectId.isValid(matchQuery.tenantId)) {
@@ -1483,6 +1572,424 @@ const getAttendanceHistory = async (req, res) => {
   }
 };
 
+/**
+ * Phase 9: 75% Attendance Deficit Trajectory Engine
+ * Computes projected semester trajectory, classes required to reach 75%,
+ * impossibility detection, and standardized alert messages.
+ */
+async function computeDeficitTrajectory(studentId, tenantId, subjectId = null) {
+  const match = {
+    tenantId: new mongoose.Types.ObjectId(tenantId),
+    studentId: new mongoose.Types.ObjectId(studentId),
+  };
+  if (subjectId && mongoose.Types.ObjectId.isValid(subjectId)) {
+    match.subjectId = new mongoose.Types.ObjectId(subjectId);
+  }
+
+  const agg = await Attendance.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        totalClasses: { $sum: 1 },
+        presentCount: { $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] } },
+        absentCount: { $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] } },
+        leaveCount: { $sum: { $cond: [{ $eq: ["$status", "leave"] }, 1, 0] } },
+      },
+    },
+  ]);
+
+  const stats = agg[0] || { totalClasses: 0, presentCount: 0, absentCount: 0, leaveCount: 0 };
+  const totalClasses = stats.totalClasses;
+  const presentCount = stats.presentCount;
+  const absentCount = stats.absentCount;
+  const leaveCount = stats.leaveCount;
+
+  const attendancePercentage = totalClasses > 0
+    ? Number(((presentCount / totalClasses) * 100).toFixed(2))
+    : 0;
+
+  // Resolve projected classes based on timetable frequency
+  let projectedClasses = 60; // Standard baseline
+  try {
+    let section = null;
+    const student = await User.findById(studentId).select("section").lean();
+    section = student?.section;
+
+    if (section) {
+      const ttQuery = {
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        section: section.toUpperCase(),
+        isNoClass: { $ne: true },
+      };
+      if (subjectId && mongoose.Types.ObjectId.isValid(subjectId)) {
+        ttQuery.subjectId = new mongoose.Types.ObjectId(subjectId);
+      }
+      const weeklySlots = await Timetable.countDocuments(ttQuery);
+      if (weeklySlots > 0) {
+        // Standard semester = ~15 active teaching weeks
+        projectedClasses = Math.max(totalClasses, weeklySlots * 15);
+      } else {
+        projectedClasses = Math.max(totalClasses, 60);
+      }
+    } else {
+      projectedClasses = Math.max(totalClasses, 60);
+    }
+  } catch (e) {
+    projectedClasses = Math.max(totalClasses, 60);
+  }
+
+  const remainingClasses = Math.max(0, projectedClasses - totalClasses);
+
+  let classesRequired = 0;
+  let isMathematicallyImpossible = false;
+
+  if (totalClasses === 0) {
+    classesRequired = 0;
+    isMathematicallyImpossible = false;
+  } else if (attendancePercentage >= 75) {
+    classesRequired = 0;
+    isMathematicallyImpossible = false;
+  } else {
+    // Consecutive classes needed to reach >= 75% attendance:
+    // (presentCount + c) / (totalClasses + c) >= 0.75 => 0.25 * c >= 0.75 * totalClasses - presentCount
+    const rawRequired = Math.ceil((0.75 * totalClasses - presentCount) / 0.25);
+    classesRequired = Math.max(0, rawRequired);
+
+    // Minimum classes to achieve 75% by semester end:
+    const minClassesToPassSemester = Math.ceil(0.75 * projectedClasses - presentCount);
+
+    // Impossible if needed exceeds remaining classes or even 100% on remaining cannot reach 75%
+    if (minClassesToPassSemester > remainingClasses || (presentCount + remainingClasses) < (0.75 * projectedClasses)) {
+      isMathematicallyImpossible = true;
+    }
+  }
+
+  let riskLevel = "good";
+  if (totalClasses === 0) {
+    riskLevel = "good";
+  } else if (isMathematicallyImpossible) {
+    riskLevel = "critical";
+  } else if (attendancePercentage >= 75) {
+    riskLevel = "good";
+  } else if (attendancePercentage >= 65) {
+    riskLevel = "warning";
+  } else {
+    riskLevel = "critical";
+  }
+
+  let alertMessage = "";
+  if (riskLevel === "good") {
+    alertMessage = "✅ GOOD: Attendance is excellent. Keep it up!";
+  } else if (riskLevel === "warning") {
+    alertMessage = `⚠️ WARNING: Needs ${classesRequired} consecutive classes to reach 75%`;
+  } else if (isMathematicallyImpossible) {
+    alertMessage = "🔴 CRITICAL: Mathematically impossible to reach 75% before semester end without medical condonation waiver";
+  } else {
+    alertMessage = "🔴 CRITICAL: Attendance is severely low. Immediate intervention required.";
+  }
+
+  return {
+    studentId,
+    tenantId,
+    subjectId: subjectId || null,
+    totalClasses,
+    presentCount,
+    absentCount,
+    leaveCount,
+    attendancePercentage,
+    projectedClasses,
+    remainingClasses,
+    classesRequired,
+    isMathematicallyImpossible,
+    riskLevel,
+    alertMessage,
+  };
+}
+
+/**
+ * Phase 9: Consecutive Absence Multi-Tier Escalation Detector
+ * Checks sorted attendance records for 3 consecutive absences on scheduled class days.
+ */
+async function detectConsecutiveAbsence(studentId, tenantId, options = {}) {
+  const query = {
+    tenantId: new mongoose.Types.ObjectId(tenantId),
+    studentId: new mongoose.Types.ObjectId(studentId),
+  };
+  if (options.subjectId && mongoose.Types.ObjectId.isValid(options.subjectId)) {
+    query.subjectId = new mongoose.Types.ObjectId(options.subjectId);
+  }
+
+  const records = await Attendance.find(query)
+    .sort({ date: -1 })
+    .select("date status section subjectId")
+    .limit(30)
+    .lean();
+
+  let streakLength = 0;
+  let lastAbsenceDate = null;
+
+  for (const r of records) {
+    if (r.status === "absent") {
+      streakLength += 1;
+      if (!lastAbsenceDate) {
+        lastAbsenceDate = r.date;
+      }
+    } else if (r.status === "present" || r.status === "leave") {
+      break;
+    }
+  }
+
+  if (streakLength >= 3) {
+    const Alert = require("../models/Alert");
+    // Check if already triggered for this exact lastAbsenceDate
+    const existing = await Alert.findOne({
+      tenantId: new mongoose.Types.ObjectId(tenantId),
+      type: "absence_escalation",
+      "metadata.studentId": new mongoose.Types.ObjectId(studentId),
+      "metadata.lastAbsenceDate": lastAbsenceDate,
+    });
+
+    if (existing) {
+      return {
+        triggered: false,
+        alreadyEscalated: true,
+        streakLength,
+        lastAbsenceDate,
+        studentId,
+      };
+    }
+
+    // Trigger escalation via queue or non-blocking async
+    const { addAbsenceEscalationJob } = require("../queues/attendanceQueue");
+    await addAbsenceEscalationJob({
+      studentId,
+      tenantId,
+      streakLength,
+      lastAbsenceDate,
+      subjectId: options.subjectId,
+      section: options.section || records[0]?.section,
+    });
+
+    publishAtRiskAlert(tenantId, {
+      studentId,
+      streakLength,
+      lastAbsenceDate,
+      subjectId: options.subjectId,
+      section: options.section || records[0]?.section,
+    });
+
+    return {
+      triggered: true,
+      streakLength,
+      lastAbsenceDate,
+      studentId,
+    };
+  }
+
+  return {
+    triggered: false,
+    streakLength,
+    lastAbsenceDate: null,
+    studentId,
+  };
+}
+
+/**
+ * GET /api/attendance/analytics/deficit
+ * Returns deficit trajectory for a student
+ */
+const getDeficitTrajectory = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    let targetStudentId = req.query.studentId;
+
+    if (req.user.role === "student") {
+      targetStudentId = req.user._id.toString();
+    } else if (!targetStudentId) {
+      return res.status(400).json({ success: false, message: "studentId query parameter is required" });
+    }
+
+    const { subjectId } = req.query;
+    const cache = require("../middleware/cache");
+    const cacheKey = `risk:${tenantId}:${targetStudentId}${subjectId ? `:${subjectId}` : ""}`;
+
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ success: true, data: cached, cached: true });
+    }
+
+    const trajectory = await computeDeficitTrajectory(targetStudentId, tenantId, subjectId);
+    await cache.set(cacheKey, trajectory, 120);
+
+    return res.status(200).json({ success: true, data: trajectory });
+  } catch (error) {
+    logger.error("Error computing deficit trajectory", { error: error.message });
+    return res.status(500).json({ success: false, message: "Error computing deficit trajectory", error: error.message });
+  }
+};
+
+/**
+ * GET /api/attendance/analytics/risk
+ * Batch endpoint: returns risk analysis for all students in a section/subject
+ */
+const getBatchRiskAnalytics = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    const { section, subjectId, courseId } = req.query;
+
+    const cache = require("../middleware/cache");
+    const cacheKey = `risk:batch:${tenantId}:${section || "all"}:${subjectId || "all"}`;
+
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ success: true, data: cached.students, summary: cached.summary, cached: true });
+    }
+
+    const studentQuery = { tenantId, role: "student", isActive: true };
+    if (section) studentQuery.section = section.trim().toUpperCase();
+    if (courseId && mongoose.Types.ObjectId.isValid(courseId)) {
+      studentQuery.courseId = new mongoose.Types.ObjectId(courseId);
+    }
+
+    const students = await User.find(studentQuery).select("name email section rollNo").lean();
+
+    const attendanceMatch = { tenantId: new mongoose.Types.ObjectId(tenantId) };
+    if (subjectId && mongoose.Types.ObjectId.isValid(subjectId)) {
+      attendanceMatch.subjectId = new mongoose.Types.ObjectId(subjectId);
+    }
+    if (section) {
+      attendanceMatch.section = section.trim().toUpperCase();
+    }
+
+    const records = await Attendance.aggregate([
+      { $match: attendanceMatch },
+      {
+        $group: {
+          _id: "$studentId",
+          totalClasses: { $sum: 1 },
+          presentCount: { $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] } },
+          absentCount: { $sum: { $cond: [{ $eq: ["$status", "absent"] }, 1, 0] } },
+          leaveCount: { $sum: { $cond: [{ $eq: ["$status", "leave"] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    const recordMap = new Map(records.map((r) => [String(r._id), r]));
+
+    // Check weekly timetable frequency for projected classes
+    let weeklySlots = 0;
+    if (section) {
+      const ttQuery = {
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        section: section.trim().toUpperCase(),
+        isNoClass: { $ne: true },
+      };
+      if (subjectId && mongoose.Types.ObjectId.isValid(subjectId)) {
+        ttQuery.subjectId = new mongoose.Types.ObjectId(subjectId);
+      }
+      weeklySlots = await Timetable.countDocuments(ttQuery);
+    }
+
+    const studentResults = students.map((s) => {
+      const r = recordMap.get(String(s._id)) || { totalClasses: 0, presentCount: 0, absentCount: 0, leaveCount: 0 };
+      const totalClasses = r.totalClasses;
+      const presentCount = r.presentCount;
+      const absentCount = r.absentCount;
+      const leaveCount = r.leaveCount;
+
+      const attendancePercentage = totalClasses > 0
+        ? Number(((presentCount / totalClasses) * 100).toFixed(2))
+        : 0;
+
+      const projectedClasses = weeklySlots > 0 ? Math.max(totalClasses, weeklySlots * 15) : Math.max(totalClasses, 60);
+      const remainingClasses = Math.max(0, projectedClasses - totalClasses);
+
+      let classesRequired = 0;
+      let isMathematicallyImpossible = false;
+
+      if (totalClasses > 0 && attendancePercentage < 75) {
+        // Consecutive classes needed to reach >= 75% attendance:
+        const rawRequired = Math.ceil((0.75 * totalClasses - presentCount) / 0.25);
+        classesRequired = Math.max(0, rawRequired);
+
+        // Minimum classes to achieve 75% by semester end:
+        const minClassesToPassSemester = Math.ceil(0.75 * projectedClasses - presentCount);
+
+        if (minClassesToPassSemester > remainingClasses || (presentCount + remainingClasses) < (0.75 * projectedClasses)) {
+          isMathematicallyImpossible = true;
+        }
+      }
+
+      let riskLevel = "good";
+      if (totalClasses === 0) {
+        riskLevel = "good";
+      } else if (isMathematicallyImpossible) {
+        riskLevel = "critical";
+      } else if (attendancePercentage >= 75) {
+        riskLevel = "good";
+      } else if (attendancePercentage >= 65) {
+        riskLevel = "warning";
+      } else {
+        riskLevel = "critical";
+      }
+
+      let alertMessage = "";
+      if (riskLevel === "good") {
+        alertMessage = "✅ GOOD: Attendance is excellent. Keep it up!";
+      } else if (riskLevel === "warning") {
+        alertMessage = `⚠️ WARNING: Needs ${classesRequired} consecutive classes to reach 75%`;
+      } else if (isMathematicallyImpossible) {
+        alertMessage = "🔴 CRITICAL: Mathematically impossible to reach 75% before semester end without medical condonation waiver";
+      } else {
+        alertMessage = "🔴 CRITICAL: Attendance is severely low. Immediate intervention required.";
+      }
+
+      return {
+        id: s._id,
+        name: s.name,
+        email: s.email,
+        rollNo: s.rollNo,
+        section: s.section,
+        totalClasses,
+        presentCount,
+        absentCount,
+        leaveCount,
+        attendancePercentage,
+        projectedClasses,
+        remainingClasses,
+        classesRequired,
+        isMathematicallyImpossible,
+        riskLevel,
+        alertMessage,
+      };
+    });
+
+    const summary = studentResults.reduce(
+      (acc, s) => {
+        acc.totalStudents++;
+        if (s.riskLevel === "good") acc.goodCount++;
+        else if (s.riskLevel === "warning") acc.warningCount++;
+        else if (s.riskLevel === "critical") acc.criticalCount++;
+        if (s.isMathematicallyImpossible) acc.impossibleCount++;
+        return acc;
+      },
+      { totalStudents: 0, goodCount: 0, warningCount: 0, criticalCount: 0, impossibleCount: 0 }
+    );
+
+    await cache.set(cacheKey, { students: studentResults, summary }, 120);
+
+    return res.status(200).json({
+      success: true,
+      data: studentResults,
+      summary,
+    });
+  } catch (error) {
+    logger.error("Error computing batch risk analytics", { error: error.message });
+    return res.status(500).json({ success: false, message: "Error computing batch risk analytics", error: error.message });
+  }
+};
+
 module.exports = {
   markAttendance,
   getAttendanceRecords,
@@ -1493,4 +2000,8 @@ module.exports = {
   deleteAttendanceRecord,
   updateStudentAttendanceStats,
   getAttendanceHistory,
+  computeDeficitTrajectory,
+  detectConsecutiveAbsence,
+  getDeficitTrajectory,
+  getBatchRiskAnalytics,
 };

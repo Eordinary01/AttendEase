@@ -1,6 +1,8 @@
 import React from "react";
 import { Clock, MapPin, User, CheckCircle, AlertCircle } from "lucide-react";
 import ERPCard from "./ERPCard";
+import UniversalSpinner from "../ui/UniversalSpinner";
+import { formatWeekday } from "../../../utils/dateUtils";
 
 export default function ERPTodayTimetable({
   schedule = [],
@@ -8,7 +10,7 @@ export default function ERPTodayTimetable({
   onRefresh,
   currentDayName = "",
 }) {
-  const day = currentDayName || new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const day = currentDayName || formatWeekday(new Date(), "long");
 
   return (
     <ERPCard
@@ -32,9 +34,7 @@ export default function ERPTodayTimetable({
       {/* Table Content */}
       <div className="divide-y divide-line/60 overflow-y-auto max-h-56">
         {loading ? (
-          <div className="p-8 text-center text-xs text-ink-faint">
-            Loading today's schedule...
-          </div>
+          <UniversalSpinner size="sm" label="Loading today's schedule..." className="py-6" />
         ) : schedule.length === 0 ? (
           <div className="p-8 text-center text-xs text-ink-faint">
             No scheduled classes for today ({day}).

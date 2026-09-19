@@ -13,10 +13,20 @@ const { apiLogger } = require('./middleware/apiLogger');
 
 // Connect to MongoDB
 if (process.env.NODE_ENV !== 'test') {
+  mongoose.connection.on('error', (err) => {
+    logger.error('MongoDB pool error', { error: err.message });
+  });
+  mongoose.connection.on('disconnected', () => {
+    logger.warn('MongoDB disconnected');
+  });
+  mongoose.connection.on('reconnected', () => {
+    logger.info('MongoDB reconnected');
+  });
+
   mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/attendance_dev', {
     maxPoolSize: parseInt(process.env.MONGO_POOL_SIZE, 10) || 50,
     minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE, 10) || 5,
-    serverSelectionTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
     heartbeatFrequencyMS: 10000
   }).then(async () => {
@@ -35,13 +45,18 @@ if (process.env.NODE_ENV !== 'test') {
       // Sync effective plan limits, modules, settings and update stats for all tenants
       const tenants = await Tenant.find({});
       for (const t of tenants) {
-        if (t.subscription?.plan) {
-          applyPlanUpgradeToTenant(t, t.subscription.plan);
+        try {
+          if (t.subscription?.plan) {
+            applyPlanUpgradeToTenant(t, t.subscription.plan);
+          }
+          await t.save();
+          await t.updateStats();
+        } catch (innerErr) {
+          logger.warn(`Failed syncing tenant ${t.slug || t._id}: ${innerErr.message}`);
         }
-        await t.save();
-        await t.updateStats();
       }
       logger.info(`Synced effective plan limits, modules, and stats for ${tenants.length} tenant(s)`);
+      autoCompleteExams().catch(err => logger.error('Error auto-completing exams on connect', { error: err.message }));
     } catch (e) {
       logger.error('Error syncing tenant limits & stats', { error: e.message });
     }
@@ -91,27 +106,63 @@ app.use(helmet({
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Body parsing middleware
+const cookieParser = require('cookie-parser');
+const csrfProtection = require('./middleware/csrf');
+
+// Body and Cookie parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 
 // CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+if (process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL.split(',').forEach((u) => {
+    const trimmed = u.trim();
+    if (trimmed && !allowedOrigins.includes(trimmed)) allowedOrigins.push(trimmed);
+  });
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+      return callback(null, origin);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
+    'Cache-Control',
+    'cache-control',
+    'Last-Event-ID',
+    'last-event-id',
+    'Accept',
+    'accept',
+    'Pragma',
+    'pragma',
     'X-Tenant-Id',
     'X-Request-ID',
     'x-offline-sync',
     'X-Offline-Sync',
     'x-device-fingerprint',
     'X-Device-Fingerprint',
+    'X-XSRF-TOKEN',
+    'x-xsrf-token',
   ],
-  exposedHeaders: ['X-Request-ID'],
+  exposedHeaders: ['X-Request-ID', 'Last-Event-ID'],
   credentials: true
 }));
+
+// Double-submit cookie CSRF protection
+app.use(csrfProtection);
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -149,6 +200,8 @@ const authRoutes = require("./routes/authRoutes");
 
 app.use("/api/landing", landingRoutes);
 app.use("/api/auth", authRoutes);  
+const demoRoutes = require("./routes/demoRoutes");
+app.use("/api/demo", demoRoutes);
 
 // Public tenant registration endpoint
 const { registerTenant } = require("./controllers/tenantController");
@@ -161,6 +214,8 @@ const { autoFilterUserResponses } = require("./middleware/responseFilter");
 app.use(tenantResolver);
 app.use(apiLogger);
 app.use(autoFilterUserResponses);
+const demoGuard = require("./middleware/demoGuard");
+app.use(demoGuard);
 
 // ==================== PROTECTED ROUTES (Tenant required) ====================
 
@@ -188,11 +243,15 @@ const reportsRoutes = require('./routes/reportsRoutes');
 const academicRoutes = require('./routes/academicRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const calendarRoute = require('./routes/calendarRoute');
+const leaveRoutes = require('./routes/leaveRoutes');
+const eventStreamRoute = require('./routes/eventStreamRoute');
 
 // Protected routes (require tenant resolution)
 app.use("/api/users", userRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/tickets", ticketRoute);
+app.use("/api/leaves", leaveRoutes);
+app.use("/api/events", eventStreamRoute);
 app.use("/api/alerts", alertRoute);
 app.use("/api/attendance", attendanceRoute);
 app.use("/api/attendance", faceRoutes);  // mounts mark-face-detection at /api/attendance/mark-face-detection
@@ -283,12 +342,22 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 8011;
 if (process.env.NODE_ENV !== 'test') {
+  const sseManager = require('./utils/sseManager');
+  const eventBus = require('./events/eventBus');
+
   const server = app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 
     // Run auto-complete on startup, then every hour
     autoCompleteExams();
     setInterval(autoCompleteExams, 60 * 60 * 1000);
+
+    // Periodically reap stale SSE connections every 30 seconds
+    const sseReaperInterval = setInterval(() => {
+      sseManager.reapStaleClients();
+    }, 30 * 1000);
+
+    server._sseReaperInterval = sseReaperInterval;
   });
 
   const gracefulShutdown = (signal) => {
@@ -296,6 +365,11 @@ if (process.env.NODE_ENV !== 'test') {
     server.close(async () => {
       logger.info('HTTP server closed.');
       try {
+        if (server._sseReaperInterval) {
+          clearInterval(server._sseReaperInterval);
+        }
+        sseManager.closeAll('server_shutdown');
+        await eventBus.close();
         await mongoose.connection.close();
         logger.info('MongoDB connection closed.');
         const cache = require('./middleware/cache');

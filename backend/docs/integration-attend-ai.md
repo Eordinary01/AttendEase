@@ -719,3 +719,49 @@ There is **no app to install** — it's a web page.
 - [ ] Camera permission already granted on the demo phone
 - [ ] Printed student photos / second phone ready as "students"
 - [ ] Screen-recording fallback on hand
+
+---
+
+## 15. Biometric Engine Architecture, Anti-Spoofing & Edge-Case Defenses (Delivered)
+
+### 15.1 Real-Time Neural Network Pipeline
+The client-side facial inference pipeline operates directly in WebGL/GPU via `face-api.js`:
+1. **Face Detection**: `TinyFaceDetector` with input resolution $320\times 320$, threshold $0.35$.
+2. **Landmark Extraction**: `FaceLandmark68Net` computing 68 discrete 2D coordinates covering jawline, eyebrows, nose bridge, eyes, and mouth contours.
+3. **Biometric Feature Extraction**: `FaceRecognitionNet` yielding a 128-dimensional continuous vector $\mathbf{v} \in \mathbb{R}^{128}$.
+4. **Identity Matching**: Euclidean distance calculation against pre-loaded in-memory class section vectors:
+   $$d(\mathbf{u}, \mathbf{v}) = \sqrt{\sum_{i=1}^{128} (u_i - v_i)^2}$$
+
+### 15.2 Calibrated Non-Linear Confidence Mapping
+To prevent false-negative confidence suppression, distance $d$ is mapped to calibrated percentage confidence:
+- $d \le 0.20 \implies 95\% - 99\%$ (Exceptional Match)
+- $0.20 < d \le 0.35 \implies 88\% - 95\%$ (High-Confidence Match)
+- $0.35 < d \le 0.45 \implies 78\% - 87\%$ (Solid Match)
+- $0.45 < d \le 0.55 \implies 65\% - 77\%$ (Moderate Match)
+- $0.55 < d \le 0.60 \implies 50\% - 64\%$ (Marginal Match Threshold)
+- $d > 0.60 \implies \text{Unrecognized / Unknown}$
+
+### 15.3 Anti-Spoofing & Active Liveness Defense Engine
+To defend against 2D printed photo attacks, smartphone screen replays, and video loops:
+1. **3D Head Pose Yaw Estimation**:
+   $$\text{Yaw} = \frac{\text{noseTip}_x - \text{leftEyeOuter}_x}{\text{rightEyeOuter}_x - \text{leftEyeOuter}_x} - 0.5$$
+   - Flat 2D photographs maintain rigid inter-ocular ratios when moved.
+   - Genuine 3D human faces undergo non-linear perspective warping when turning left ($\text{Yaw} < -0.12$) or right ($\text{Yaw} > 0.12$).
+2. **Eye Aspect Ratio (EAR) Blink Detection**:
+   $$\text{EAR} = \frac{\|\mathbf{p}_2 - \mathbf{p}_6\| + \|\mathbf{p}_3 - \mathbf{p}_5\|}{2 \|\mathbf{p}_1 - \mathbf{p}_4\|}$$
+   Detects physiological blink events ($\text{EAR} < 0.20$ dipping for 100–400ms before returning to open state $> 0.26$).
+3. **Dual Liveness Operating Modes**:
+   - **Fast Passive Scan Mode**: Micro-jitter tracking + involuntary blink detection for high-speed classroom entry.
+   - **Strict Active Challenge Mode**: Interactive 4-step challenge (`CENTER` $\to$ `TURN_LEFT` $\to$ `TURN_RIGHT` $\to$ `BLINK` $\to$ `VERIFIED`).
+
+### 15.4 Unknown Face Persistence & Timeout Handling
+- When an unrecognized face enters the camera frame, a temporal tracking window ($2.2\text{s}$) prevents perpetual scanning loops.
+- If no candidate descriptor matches within $2.2\text{s}$, the HUD dynamically updates to a red dashed bounding reticle:
+  `✖ Unrecognized Student (Not Enrolled)`
+- Prompts the instructor to perform instant enrollment via the integrated 1-click **Enroll Live Face** toolbar.
+
+### 15.5 Dedicated Face Registration Portal (`/face-registration`)
+- Full student biometric enrollment interface with live alignment quality feedback.
+- Captures 128-dimensional embedding from live webcam or uploaded portrait photo.
+- Persists to MongoDB `User.faceDescriptor` and stores audit reference avatars in `backend/uploads/face-attendance/`.
+

@@ -1,8 +1,8 @@
 # AttendEase — Enterprise Product Architecture & Technical Blueprint
 
-> **System Version:** 2.0.0 (Phase 5 Complete)  
-> **Architecture Pattern:** Multi-Tenant Modular Monolith with Asynchronous Queue Workers  
-> **Last Updated:** 2026-08-16  
+> **System Version:** 2.2.0 (Subdomain Tenant Custom Branding + Profile UI Revamp + Biometric AI HUD Revamp & Optimizations + SSE Log Streaming)  
+> **Architecture Pattern:** Multi-Tenant Modular Monolith with Asynchronous Queue Workers & Client-Side Edge Biometrics  
+> **Last Updated:** 2026-08-29  
 
 ---
 
@@ -16,8 +16,11 @@
 3. **Attendance Management & Background Aggregation Engine** — Class-slot attendance capture, proxy detection (IP & device fingerprinting), offline queue sync, SMS fallback parsing, and real-time background statistical aggregation.
 4. **Exams, Invigilation & Grade Management** — Date × Shift exam scheduling grid (Shifts I–IV), teacher invigilation duty assignment (max 2, overlap detection), custom enterprise exam structures, and student grade/result tracking.
 5. **Fee Structure & Billing Lifecycle** — Program tuition structures, automated fee generation, student self-payment portal integration (Razorpay), collection receipts, and fee waivers.
-6. **Multi-Tenant SaaS Engine & Feature Gating** — Dynamic plan-based module gating (`attendance`, `exams`, `fees`, `timetable`, `academic`, `calendar`, `alerts`, `reports`, `parent_portal`, `exam_structure`), tenant branding tokens, subscription billing, and usage quota enforcement.
+6. **Multi-Tenant SaaS Engine & Subdomain Custom Branding** — Dynamic plan-based module gating, institutional subdomain auto-theming (`/auth/tenant-info`), custom administrative notice messages, tenant branding tokens, subscription billing, and usage quota enforcement.
 7. **Custom Role-Based Access Control (RBAC)** — Granular `module:action` permissions, custom organizational roles, and multi-tenant security boundaries.
+8. **Privacy-Preserving Biometric AI Face Recognition & Anti-Spoofing Engine** — 100% Vector-Only mathematical landmark embedding recognition (`face-api.js`), active 3D perspective yaw anti-spoofing challenge, eye-aspect-ratio (EAR) blink validation, token-aligned HUD with `ReticleCorners`, memoized detector instances (320/416), gated countdown and liveness loops, IndexedDB local caching (<10ms startup & true offline mode), Stale-While-Revalidate delta sync, and zero raw facial photo storage guarantee.
+9. **Media & Cloudinary Asset Engine** — Direct in-memory buffer streaming for profile avatars and tenant branding with face-centered auto-cropping and resilient local disk fallback.
+10. **Platform Monitoring & Real-Time SSE Log Streaming** — Centralized request and audit tracing (`APILog`) with live Server-Sent Events (SSE) log feed streaming to Super Admin dashboards.
 
 ---
 
@@ -30,8 +33,10 @@ flowchart TB
     subgraph Clients["Client Layer (Frontend SPA)"]
         SA_UI["Super Admin Dashboard"]
         TA_UI["Tenant Admin Portal"]
-        TC_UI["Teacher Dashboard"]
+        TC_UI["Teacher Dashboard & Face Session"]
         ST_UI["Student & Parent Portal"]
+        IDB[("IndexedDB Local Store\n(Offline Queue & Biometric Cache)")]
+        TC_UI <--> IDB
     end
 
     subgraph Edge["Edge & Middleware Layer"]
@@ -49,6 +54,7 @@ flowchart TB
         Validators["Express Validators"]
         Audit["Audit & Request Tracing"]
         PlanDefaults["Plan Defaults Engine"]
+        CloudinaryUtil["Cloudinary Stream Engine"]
     end
 
     subgraph AsyncWorker["Asynchronous Queue Workers"]
@@ -60,10 +66,11 @@ flowchart TB
 
     subgraph DataStore["Data & Persistence Layer"]
         MongoDB[("MongoDB Primary Store\n(Mongoose ODM)")]
-        RedisCache[("Redis Cache & State\n(Sessions & Rate Limits)")]
+        RedisCache[("Redis Cache & State\n(Sessions, TTL & Rate Limits)")]
     end
 
     subgraph External["External Integrations"]
+        Cloudinary["Cloudinary Media CDN"]
         Razorpay["Razorpay Payment Gateway"]
         Nodemailer["SMTP Email Service"]
         Twilio["SMS Gateway Integration"]
@@ -114,6 +121,16 @@ sequenceDiagram
 - **No Client Spoofing:** For non-`super_admin` users, any client-supplied `tenantId` in body or query parameters is stripped and replaced with `req.user.tenantId`.
 - **Super Admin Support Mode:** `super_admin` accounts bypass automatic tenant scoping, enabling global cross-tenant administration, plan setup, and support monitoring.
 - **Cache Isolation:** Cache keys in Redis are strictly namespaced: `tenant:${tenantId}:*` and `user:${userId}:*`. Invalidation triggers on write operations to preserve consistency.
+
+### 3.3 Subdomain Custom Branding & Login Portal Resolution
+Institutional tenants can access white-labeled login screens tailored to their identity:
+1. **Subdomain Detection:** Extracted from window host (`<subdomain>.attendease.com`), route path (`/login/:subdomain`), or query string (`?subdomain=...`).
+2. **Public Tenant Info API (`GET /api/auth/tenant-info`):** Returns institution metadata without requiring pre-authentication:
+   - `institutionName` (prioritizes `branding.institutionName` over default organizational name)
+   - `customMessage` / `welcomeMessage` (administrative notices or announcements displayed in an accent quote card)
+   - `primaryColor`, `secondaryColor`, `accentColor`
+   - `logo`, `bannerImage`, `favicon`
+3. **Adaptive Client Theme:** The login page dynamically injects tenant colors into CSS custom properties, adjusts ambient blur glows, applies custom button gradients, and presents the administrator's notice card (with clean fallback to AttendEase defaults if unconfigured).
 
 ---
 
@@ -303,6 +320,73 @@ flowchart LR
 - **Auto Generation:** Billing runs generate individual student `Fee` records for the upcoming term.
 - **Payment & Receipts:** Students pay online via Razorpay or submit offline payments to admins. Transactions generate immutable `Transaction` logs and downloadable PDF receipts.
 
+### 6.6 Privacy-Preserving Biometric AI Face Recognition & Offline Caching Architecture
+The ATTEND-AI Face Attendance module enables automated classroom attendance tracking through edge-evaluated neural biometrics with **strict biometric privacy** and **instant IndexedDB local caching**:
+
+```mermaid
+flowchart TB
+    subgraph ClientPipeline["Client Edge Processing (Browser WebGL & IndexedDB)"]
+        Cam["Webcam Video Feed"] --> TinyFace["1. TinyFaceDetector (320x320)"]
+        TinyFace --> Landmark["2. FaceLandmark68Net"]
+        Landmark --> Embed["3. FaceRecognitionNet (128-dim Vector)"]
+        Landmark --> AntiSpoof["4. 3D Head-Pose & EAR Blink Engine"]
+        IDBCache[("IndexedDB Local Biometric Cache\n(Instant <10ms Load & Offline Match)")]
+        IDBCache --> Matcher["5. Euclidean In-Memory Vector Matcher"]
+        Embed --> Matcher
+        AntiSpoof --> Gate["6. Liveness Gate (Passive/Active Challenge)"]
+        Matcher & Gate --> HUD["7. Augmented Viewfinder HUD"]
+    end
+
+    subgraph BackendAPI["AttendEase Backend API"]
+        DeltaSync["GET /api/faces/section/:section?since=...\n(Incremental Stale-While-Revalidate Sync)"]
+        EnrollFace["POST /api/faces/register\n(100% Vector-Only, faceImageUrl: null)"]
+        MarkFace["POST /api/attendance/mark-face-detection\n(Validates & Commits Records)"]
+    end
+
+    subgraph Database["Database Persistence Layer"]
+        UserDoc[("User.faceDescriptor [128-dim Float Array]\nUser.faceUpdatedAt [Date]\n(Zero Raw Photo Storage)")]
+        AttDoc[("Attendance Records\n(status: 'present', remarks: 'ATTEND-AI')")]
+    end
+
+    BackendAPI <--> IDBCache
+    HUD --> MarkFace
+    EnrollFace --> UserDoc
+    DeltaSync --> UserDoc
+    MarkFace --> AttDoc
+```
+
+#### Biometric Privacy & Edge Caching Pillars
+1. **🔒 100% Vector-Only Privacy (Zero Raw Photo Storage)**:
+   - During registration and scanning, `face-api.js` computes 128-dimensional floating point vectors inside browser memory.
+   - Raw facial photos are **never converted to blobs, stored on disk, or uploaded to the cloud** (`faceImageUrl: null`). Only irreversible numerical vectors are stored.
+2. **⚡ IndexedDB Offline Biometric Caching (`AttendEaseOffline` v2)**:
+   - Descriptors are persisted in browser IndexedDB disk.
+   - Opening a section face session loads vectors in **$<10\text{ ms}$**, eliminating cold-start spinner delays and enabling **100% offline attendance in lecture halls with zero Wi-Fi**.
+3. **🔄 Stale-While-Revalidate Delta Sync**:
+   - Background fetch sends `GET /api/faces/section/:section?since=<maxUpdatedAt>` to download only newly enrolled or updated student vectors without interrupting live matching.
+4. **🏢 Multi-Tenant Isolation & Auto-Purge**:
+   - IndexedDB keys are partitioned as `${tenantId}_${studentId}`. Logging out or switching institutions invokes `clearTenantFaceCache(tenantId)` to guarantee zero cross-tenant biometric leakage.
+5. **Active Anti-Spoofing Defense**: Measures non-linear 3D perspective deformation ($\text{Yaw} = \frac{\text{nose}_x - \text{leftEye}_x}{\text{rightEye}_x - \text{leftEye}_x} - 0.5$) and Eye Aspect Ratio (EAR) blink transitions to block 2D printed photo attacks and static screen replays.
+6. **Calibrated Confidence Scoring**: Maps Euclidean distance ($d \in [0, 0.60]$) to non-linear confidence percentages ($99\%$ for $d \le 0.20$, $88-95\%$ for $d \le 0.35$).
+7. **🎨 Tokenized Viewfinder HUD & Reticle System**:
+   - Clean dark viewfinder container (`bg-neutral-950`) with subtle `35%` cyber grid texture.
+   - Component-driven corner brackets (`ReticleCorners`) dynamically styled with token border colors (`border-emerald-400`, `border-rose-400`, `border-amber-400`, `border-white/40`).
+   - Single-color emerald liveness progress bar replacing multi-color gradients.
+   - Clean stat badges, `rounded-2xl` cards, and `font-bold` typography.
+8. **⚡ Client Engine Performance Optimizations**:
+   - **Memoized Detector Instances:** Reusable `TinyFaceDetectorOptions` (size 320 for real-time quality alignment loop, size 416 for capture and upload) to eliminate per-frame heap allocations.
+   - **Gated Countdown Loop:** The 1-second interval timer only ticks when active candidate countdowns or unauthorized cooldowns exist.
+   - **Conditional Liveness Computation:** `processLiveness` calculation only runs when challenge mode is activated.
+   - **Static Branch Resolution:** Module-scoped `BRANCH_ALIASES` map avoiding per-render object re-allocations during student filtering.
+
+---
+
+### 6.7 Cloudinary Media Storage & In-Memory Upload Pipeline
+Media assets across the platform are processed through a unified Cloudinary integration (`backend/utils/cloudinary.js`):
+- **RAM-Only Ephemeral Buffers:** `multer.memoryStorage()` keeps files strictly in temporary memory during the HTTP lifecycle, preventing unencrypted temporary files from landing on server disks.
+- **Smart Face-Centered Cropping:** Avatars are automatically transformed upon upload with `{ width: 400, height: 400, crop: 'fill', gravity: 'face', quality: 'auto' }`.
+- **Zero-Config Local Fallback:** If Cloudinary credentials are omitted in `.env`, the engine transparently writes assets to `/backend/uploads/` and serves static routes with no code changes required.
+
 ---
 
 ## 7. Database Architecture & Entity-Relationship Schema
@@ -334,8 +418,8 @@ erDiagram
 
 | Collection | Schema File | Key Responsibilities & Key Fields |
 |------------|-------------|-----------------------------------|
-| `Tenant` | [Tenant.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/Tenant.js) | Org profile, `settings` (semesters, exams, shifts), `branding` (logo, colors), `subscription` (plan, status). |
-| `User` | [User.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/User.js) | All accounts (`role`: super_admin/admin/teacher/student/parent), `attendance` summary, `assignedSubjects`, `tokenVersion`, 2FA. |
+| `Tenant` | [Tenant.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/Tenant.js) | Org profile, `settings` (semesters, exams, shifts), `branding` (institutionName, customMessage, welcomeMessage, primaryColor, secondaryColor, accentColor, logo/favicon/bannerImage on Cloudinary), `subscription` (plan, status). |
+| `User` | [User.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/User.js) | All accounts (`role`: super_admin/admin/teacher/student/parent), `avatar` (Cloudinary URL), `faceDescriptor` (128-dim Float array, **100% Vector-Only, zero photo storage guarantee**), `faceUpdatedAt` (delta sync timestamp), `attendance` summary, `assignedSubjects`, `tokenVersion`, 2FA. |
 | `Plan` | [Plan.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/Plan.js) | SaaS plan tiers, prices, enabled `modules`, resource `limits`. Source of truth is merged with `planDefaults.js`. |
 | `Course` | [Course.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/Course.js) | Academic programs, `branches[]`, duration, `feeStructure` (tuition total & period). |
 | `Subject` | [Subject.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/Subject.js) | Course subjects, credits, semester mapping, `isActive`. |
@@ -348,7 +432,7 @@ erDiagram
 | `CustomRole` | [CustomRole.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/CustomRole.js) | Custom roles per tenant, array of `permissions`. |
 | `AuditLog` | [AuditLog.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/AuditLog.js) | Security & compliance audit trail: actor, role, tenant, action, resource, IP, request ID. |
 | `RefreshToken` | [RefreshToken.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/RefreshToken.js) | 7-day single-use rotated refresh tokens. |
-| `APILog` | [APILog.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/APILog.js) | System execution performance & monitoring log. |
+| `APILog` | [APILog.js](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/backend/models/APILog.js) | System execution performance & real-time SSE monitoring log feed. |
 
 ---
 
@@ -390,6 +474,7 @@ AttendEase features an institutional white-labeling theme engine:
 - **Design Tokens:** Defined in `tailwind.config.js` using RGB-triplet CSS variables (`--color-primary`, `--color-secondary`, `--color-surface`, `--color-ink`, `--color-line`).
 - **Dynamic Ingestion:** `ThemeContexts.jsx` fetches tenant branding colors from the API and dynamically writes CSS custom properties to the document root.
 - **Hook Access:** Components consume theme values via `useThemeColors()`, ensuring consistent, accessible custom branding without re-compilation.
+- **Subdomain Institutional Portal (`/login/:subdomain`):** Dynamically applies institutional branding, logos, custom accent glows, and admin notice cards from `/auth/tenant-info`.
 
 ### 8.3 Shared UI Component Kit
 Located at `frontend/src/component/common/ui/`:
@@ -408,14 +493,17 @@ The API is formally specified via OpenAPI 3.0 in [backend/docs/openapi.yaml](fil
 
 ```
 /api
-├── /auth            (login, register, refresh, logout, 2FA, sessions, password-reset)
-├── /admin           (teachers, assignments, bulk uploads, audit logs)
+├── /auth            (login, register, /tenant-info subdomain branding, refresh, logout, 2FA, sessions, password-reset)
+├── /admin           (teachers, assignments, bulk uploads, audit logs, /super/logs/feed SSE real-time log feed)
 ├── /academic        (courses, branches, semesters, promotion, graduation)
 ├── /subjects        (subject CRUD, teacher allocations)
 ├── /students        (student profiles, academic status, enrollment)
 ├── /attendance      (mark, timetable slots, history, stats, tickets, proxy detection)
+├── /faces           (vector-only enrollment, section descriptor delta sync with ?since=, featureGuard: biometric_attendance)
+├── /users           (profile details, avatar photo upload/delete via /profile/photo)
 ├── /timetable       (grid view, slot CRUD, bulk import, conflict check)
 ├── /exams           (schedules, shifts, invigilation duties, grade submission, results)
+├── /exams/seating   (Phase 8: exam halls, Jumble & Split seating engine, HMAC-SHA256 Admit Cards, invigilator QR scanner)
 ├── /fees            (structures, fee generation, collecting, waivers, receipts, student self-pay)
 ├── /roles           (custom roles, granular permissions)
 ├── /tenants         (branding, settings, usage quotas)
@@ -424,6 +512,24 @@ The API is formally specified via OpenAPI 3.0 in [backend/docs/openapi.yaml](fil
 ├── /alerts          (announcements, broadcasting)
 └── /support         (support tickets, reactivation)
 ```
+
+---
+
+## 10. Phase 8: Exam Seating Arrangement Engine & Cryptographic QR Hall Tickets
+
+### 10.1 Anti-Cheating Jumble & Split Seating Allocation Engine
+The seating engine distributes students across 2D room matrices ($R \times C$):
+1. Gathers all scheduled exams for a selected Date $\times$ Shift.
+2. Retrieves enrolled students and partitions them into groups by program/branch: $G_k = \{S_1, S_2, \dots\}$.
+3. **Interleaving Round-Robin**: Alternates adjacent seats with candidates from different programs (e.g. Row 1: `CSE_01`, `ME_01`, `ECE_01`, `CSE_02`).
+4. Generates room seating matrices and door notices for printing.
+
+### 10.2 Cryptographically Signed Admit Cards & Invigilator QR Scanner
+1. **HMAC-SHA256 Signature**: For each allocation, an HMAC token is calculated using the tenant's secret:
+   $$\text{Token} = \text{Base64Url}(\text{JSON}(\text{studentId, examId, hallCode, seatNumber, date, shift})) + "." + \text{HMAC-SHA256}(\text{payload})$$
+2. **Student Admit Card View**: Renders the signed QR code alongside examination schedule, venue, seat assignments, and candidate photo.
+3. **Invigilator Scanner**: Real-time camera QR scanner decodes payload, validates cryptographic signature, checks room assignment, and completes 1-tap entrance check-in (`attendanceStatus: "present"`).
+
 
 ---
 

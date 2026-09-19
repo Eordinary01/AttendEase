@@ -19,6 +19,7 @@ import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
+import { getLocalTodayStr } from "../../utils/dateUtils";
 
 const InvigilatorQRScanner = () => {
   const [halls, setHalls] = useState([]);
@@ -50,7 +51,7 @@ const InvigilatorQRScanner = () => {
   const fetchRoster = useCallback(async () => {
     if (!selectedHallId) return;
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalTodayStr();
       const res = await api.get(`/exams/seating/allocations?hallId=${selectedHallId}&examDate=${today}`);
       if (res.data?.success) {
         setCheckedInList(res.data.data || []);

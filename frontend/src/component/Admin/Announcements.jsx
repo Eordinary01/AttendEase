@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Bell, Plus, Trash2, Megaphone, Clock, Filter, Users } from "lucide-react";
 import api from "../../utils/api";
+import { formatDateDMY } from "../../utils/dateUtils";
 import { useToast } from "../../contexts/ToastContext";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
@@ -9,6 +10,7 @@ import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Modal from "../common/ui/Modal";
 import { Input, Select, Textarea } from "../common/ui/Input";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 
 const SHORT_TERM_HOURS = 6;
 const ANNOUNCEMENT_DAYS = 7;
@@ -112,7 +114,7 @@ const Announcements = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <UniversalSpinner size="lg" label="Loading announcements..." />
       </div>
     );
   }
@@ -217,7 +219,7 @@ const Announcements = () => {
                   <h4 className="font-bold text-ink text-sm">{alert.title}</h4>
                   <p className="text-xs text-ink-soft mt-1 leading-relaxed">{alert.message}</p>
                   <div className="flex items-center gap-3 mt-2.5 text-[11px] text-ink-faint font-medium">
-                    <span>{new Date(alert.createdAt).toLocaleDateString()}</span>
+                    <span>{formatDateDMY(alert.createdAt)}</span>
                     {alert.createdBy && <span>• by {alert.createdBy.name}</span>}
                     <span className="flex items-center gap-1">
                       <Users className="w-3 h-3 text-primary" />

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../utils/api";
+import { formatDateDMY } from "../../utils/dateUtils";
 import { logError } from "../../utils/logger";
 import { motion } from "framer-motion";
 import {
@@ -339,7 +340,7 @@ const TenantList = () => {
                     <div className="flex items-center gap-3 text-sm text-ink-soft font-medium flex-wrap">
                       <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-line"></span>{tenant.subdomain}</span>
                       <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-line"></span>{tenant.contact?.email}</span>
-                      <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-line"></span>Joined {new Date(tenant.createdAt).toLocaleDateString()}</span>
+                      <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-line"></span>Joined {formatDateDMY(tenant.createdAt)}</span>
                     </div>
                   </div>
                 </div>

@@ -114,7 +114,7 @@ function getWorkerRemainingCount(db) {
 /**
  * Perform background synchronization loop
  */
-async function processSync(token, apiUrl) {
+async function processSync(token, apiUrl, xsrfToken) {
   if (isSyncing) return;
   isSyncing = true;
   cancelRequested = false;
@@ -158,13 +158,21 @@ async function processSync(token, apiUrl) {
 
         console.info(`[SyncWorker] Syncing attendance item ${item.id} -> ${endpoint}...`);
 
+        const headers = {
+          'Content-Type': 'application/json',
+          'x-offline-sync': 'true',
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        if (xsrfToken) {
+          headers['X-XSRF-TOKEN'] = xsrfToken;
+        }
+
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'x-offline-sync': 'true',
-          },
+          credentials: 'include',
+          headers,
           body: JSON.stringify({
             ...item.payload,
             attendanceData: normalizedAttendance,
@@ -240,11 +248,11 @@ async function processSync(token, apiUrl) {
  * Worker message dispatcher
  */
 self.onmessage = (event) => {
-  const { type, token, apiUrl } = event.data || {};
+  const { type, token, apiUrl, xsrfToken } = event.data || {};
 
   switch (type) {
     case 'START_SYNC':
-      processSync(token, apiUrl);
+      processSync(token, apiUrl, xsrfToken);
       break;
 
     case 'CANCEL_SYNC':

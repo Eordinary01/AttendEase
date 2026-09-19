@@ -1,5 +1,6 @@
 import React from "react";
 import ERPCard from "./ERPCard";
+import UniversalSpinner from "../ui/UniversalSpinner";
 
 export default function ERPAttendanceTable({
   bySubject = [],
@@ -25,9 +26,7 @@ export default function ERPAttendanceTable({
       {/* Table Content */}
       <div className="divide-y divide-line/60 overflow-y-auto max-h-56">
         {loading ? (
-          <div className="p-8 text-center text-xs text-ink-faint">
-            Loading attendance records...
-          </div>
+          <UniversalSpinner size="sm" label="Loading attendance records..." className="py-6" />
         ) : bySubject.length === 0 ? (
           <div className="p-8 text-center text-xs text-ink-faint">
             No subject attendance records found.

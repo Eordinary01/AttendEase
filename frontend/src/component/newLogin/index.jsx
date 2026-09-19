@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { logError } from "../../utils/logger";
+import { getApiBaseUrl } from "../../utils/api";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -25,18 +26,23 @@ const NewLogin = ({ onLogin }) => {
   });
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [loginType, setLoginType] = useState("tenant"); // "tenant", "parent", or "super"
   const [tenantBranding, setTenantBranding] = useState(null);
   const [subdomainLocked, setSubdomainLocked] = useState(false);
   const navigate = useNavigate();
 
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8011";
+  const apiBase = getApiBaseUrl();
+  const API_URL = apiBase.endsWith('/api') ? apiBase : `${apiBase}/api`;
 
-  // Determine tenant subdomain from the URL (unique login link) or hostname
+  // Determine tenant subdomain from the URL param, query param, or explicit hostname opt-in
   const resolveSubdomain = useCallback(() => {
     if (urlSubdomain) return urlSubdomain;
     const query = new URLSearchParams(window.location.search).get('subdomain');
     if (query) return query;
+
+    const enableHostnameSubdomain =
+      process.env.REACT_APP_ENABLE_HOSTNAME_SUBDOMAIN === 'true';
+    if (!enableHostnameSubdomain) return '';
+
     const hostname = window.location.hostname;
     const parts = hostname.split('.');
     if (parts.length > 2 && parts[0] !== 'www' && parts[0] !== 'app') {
@@ -45,27 +51,39 @@ const NewLogin = ({ onLogin }) => {
     return '';
   }, [urlSubdomain]);
 
-  // Whether we arrived via an institution's unique login link
   const resolvedSubdomain = resolveSubdomain();
   const hasTenantContext = !!resolvedSubdomain;
+  const isSuperAdminLoginRoute = !urlSubdomain && !resolvedSubdomain;
 
-  // Generic /login is reserved for super admins and tenant admins; students,
-  // teachers and parents must log in through their institution's unique link.
-  const loginTabs = hasTenantContext
-    ? [
+  // Initialize and synchronize loginType based on route mode
+  const [loginType, setLoginType] = useState(() => (isSuperAdminLoginRoute ? "super" : "tenant"));
+
+  useEffect(() => {
+    if (isSuperAdminLoginRoute) {
+      setLoginType("super");
+    } else {
+      setLoginType((prev) => (prev === "parent" ? "parent" : "tenant"));
+    }
+  }, [isSuperAdminLoginRoute]);
+
+  // Strict route-level tab isolation:
+  // /login -> Super Admin ONLY
+  // /login/:subdomain -> Institution Members & Parents ONLY
+  const loginTabs = isSuperAdminLoginRoute
+    ? [{ key: "super", label: "Super Admin", icon: Building2 }]
+    : [
         { key: "tenant", label: "Institution Login", icon: School },
         { key: "parent", label: "Parent", icon: Users },
-        { key: "super", label: "Super Admin", icon: Building2 },
-      ]
-    : [
-        { key: "tenant", label: "Tenant Admin", icon: School },
-        { key: "super", label: "Super Admin", icon: Building2 },
       ];
 
   // Fetch tenant branding and custom message from subdomain on mount
   useEffect(() => {
     const subdomain = resolveSubdomain();
     if (!subdomain) return;
+    if (subdomain === 'demo') {
+      navigate('/', { replace: true });
+      return;
+    }
 
     setFormData(prev => ({ ...prev, subdomain }));
     setSubdomainLocked(true);
@@ -114,16 +132,22 @@ const NewLogin = ({ onLogin }) => {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/auth/super-admin/login`, {
-        email: formData.email.toLowerCase().trim(),
-        password: formData.password
-      });
+      const response = await axios.post(
+        `${API_URL}/auth/super-admin/login`,
+        {
+          email: formData.email.toLowerCase().trim(),
+          password: formData.password
+        },
+        { withCredentials: true }
+      );
 
-      if (response.data.success && response.data.token) {
+      if (response.data.success && (response.data.user || response.data.token)) {
         const { token, user } = response.data;
         
-        // Store token and user data
-        localStorage.setItem("token", token);
+        if (token) {
+          localStorage.setItem("token", token);
+        }
+        localStorage.removeItem("refreshToken");
         localStorage.setItem("userId", user.id);
         localStorage.setItem("userName", user.name);
         localStorage.setItem("userEmail", user.email);
@@ -131,7 +155,7 @@ const NewLogin = ({ onLogin }) => {
         localStorage.setItem("isSuperAdmin", "true");
         
         // Update parent state
-        onLogin(token, user.role, user.id, user.name, user.email);
+        onLogin(token || null, user.role, user.id, user.name, user.email);
 
         setMessage({ text: `Super Admin login successful!`, type: "success" });
 
@@ -182,27 +206,35 @@ const NewLogin = ({ onLogin }) => {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        email: formData.email.toLowerCase().trim(),
-        password: formData.password,
-        subdomain: subdomain
-      });
+      const response = await axios.post(
+        `${API_URL}/auth/login`,
+        {
+          email: formData.email.toLowerCase().trim(),
+          password: formData.password,
+          subdomain: subdomain
+        },
+        { withCredentials: true }
+      );
 
-      if (response.data.success && response.data.token) {
+      if (response.data.success && (response.data.user || response.data.token)) {
         const { token, user } = response.data;
         
-        // Store token and user data
-        localStorage.setItem("token", token);
-        localStorage.setItem("userId", user.id);
+        if (token) {
+          localStorage.setItem("token", token);
+        }
+        localStorage.setItem("user", JSON.stringify(user));
+        localStorage.setItem("userId", user.id || user._id);
         localStorage.setItem("userName", user.name);
         localStorage.setItem("userEmail", user.email);
+        localStorage.setItem("userSection", user.section || "");
+        localStorage.setItem("userRollNo", user.rollNo || "");
         localStorage.setItem("role", user.role);
         localStorage.setItem("tenantId", user.tenantId || "");
         localStorage.setItem("tenantSubdomain", subdomain);
         localStorage.setItem("isSuperAdmin", "false");
         
         // Update parent state
-        onLogin(token, user.role, user.id, user.name, user.email);
+        onLogin(token || null, user.role, user.id, user.name, user.email);
 
         setMessage({ text: `Login successful! Welcome ${user.name} (${user.role})`, type: "success" });
 
@@ -256,16 +288,23 @@ const NewLogin = ({ onLogin }) => {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/auth/parent-login`, {
-        email: formData.email.toLowerCase().trim(),
-        password: formData.password,
-        subdomain,
-      });
+      const response = await axios.post(
+        `${API_URL}/auth/parent-login`,
+        {
+          email: formData.email.toLowerCase().trim(),
+          password: formData.password,
+          subdomain,
+        },
+        { withCredentials: true }
+      );
 
-      if (response.data.success && response.data.token) {
+      if (response.data.success && (response.data.user || response.data.token)) {
         const { token, user } = response.data;
 
-        localStorage.setItem("token", token);
+        if (token) {
+          localStorage.setItem("token", token);
+        }
+        localStorage.removeItem("refreshToken");
         localStorage.setItem("userId", user.id);
         localStorage.setItem("userName", user.studentName);
         localStorage.setItem("userEmail", user.email);
@@ -277,7 +316,7 @@ const NewLogin = ({ onLogin }) => {
         localStorage.setItem("isSuperAdmin", "false");
         localStorage.setItem("accessMode", "parent");
 
-        onLogin(token, "parent", user.id, user.studentName, user.email);
+        onLogin(token || null, "parent", user.id, user.studentName, user.email);
 
         setMessage({ text: `Parent access granted. Welcome! Viewing ${user.studentName}'s progress.`, type: "success" });
 
@@ -296,7 +335,11 @@ const NewLogin = ({ onLogin }) => {
     }
   };
 
-  const handleSubmit = loginType === "super" ? handleSuperAdminLogin : loginType === "parent" ? handleParentLogin : handleTenantLogin;
+  const handleSubmit = isSuperAdminLoginRoute
+    ? handleSuperAdminLogin
+    : loginType === "parent"
+    ? handleParentLogin
+    : handleTenantLogin;
 
   return (
     <div 
@@ -329,7 +372,7 @@ const NewLogin = ({ onLogin }) => {
           onClick={() => navigate('/')}
           className="flex items-center gap-2.5 cursor-pointer group"
         >
-          {hasTenantContext && tenantBranding?.logo ? (
+          {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.logo ? (
             <img
               src={tenantBranding.logo}
               alt={tenantBranding.name || "Logo"}
@@ -340,12 +383,14 @@ const NewLogin = ({ onLogin }) => {
               className="w-9 h-9 rounded-xl text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform"
               style={{ backgroundColor: primaryColor }}
             >
-              <GraduationCap className="w-5 h-5" />
+              {isSuperAdminLoginRoute ? <Building2 className="w-5 h-5" /> : <GraduationCap className="w-5 h-5" />}
             </div>
           )}
           <div>
             <span className="text-base font-black tracking-tight text-ink">
-              {hasTenantContext && tenantBranding?.name ? tenantBranding.name : "AttendEase"}
+              {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.name
+                ? tenantBranding.name
+                : "AttendEase"}
             </span>
             <span 
               className="text-[10px] uppercase font-bold ml-1.5 px-1.5 py-0.5 rounded border"
@@ -355,7 +400,9 @@ const NewLogin = ({ onLogin }) => {
                 borderColor: `${primaryColor}30`,
               }}
             >
-              {hasTenantContext && tenantBranding?.subdomain
+              {isSuperAdminLoginRoute
+                ? "Super Admin"
+                : hasTenantContext && tenantBranding?.subdomain
                 ? `${tenantBranding.subdomain}.attendease.com`
                 : "ERP Cloud"}
             </span>
@@ -382,7 +429,12 @@ const NewLogin = ({ onLogin }) => {
         <div className="lg:col-span-7 space-y-6">
           <div className="space-y-3">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-ink tracking-tight leading-tight">
-              {hasTenantContext && tenantBranding?.name ? (
+              {isSuperAdminLoginRoute ? (
+                <>
+                  AttendEase Platform <br className="hidden sm:inline" />
+                  <span style={{ color: primaryColor }}>Super Admin Portal</span>
+                </>
+              ) : hasTenantContext && tenantBranding?.name ? (
                 <>
                   Welcome to <span style={{ color: primaryColor }}>{tenantBranding.name}</span>
                 </>
@@ -395,7 +447,7 @@ const NewLogin = ({ onLogin }) => {
             </h1>
 
             {/* Custom Notice Message from Tenant Admin (if configured) or Default Description */}
-            {hasTenantContext && tenantBranding?.customMessage ? (
+            {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.customMessage ? (
               <div className="p-4 rounded-2xl bg-surface/90 border border-line/70 shadow-sm relative overflow-hidden backdrop-blur-sm space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider" style={{ color: primaryColor }}>
                   <MessageSquareQuote className="w-4 h-4" />
@@ -407,7 +459,9 @@ const NewLogin = ({ onLogin }) => {
               </div>
             ) : (
               <p className="text-sm sm:text-base text-ink-soft max-w-xl leading-relaxed">
-                {hasTenantContext && tenantBranding?.name
+                {isSuperAdminLoginRoute
+                  ? "Centralized multi-tenant infrastructure control, institution provisioning, global tenant monitoring, and platform licensing management."
+                  : hasTenantContext && tenantBranding?.name
                   ? `Sign in to access your course attendance, timetables, academic proofs, and real-time class notifications.`
                   : `Empower your institution with continuous AI face recognition attendance, timetable scheduling, fee tracking, and multi-tenant administrative control.`}
               </p>
@@ -421,11 +475,15 @@ const NewLogin = ({ onLogin }) => {
                 className="w-8 h-8 rounded-xl flex items-center justify-center"
                 style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
               >
-                <ScanFace className="w-4 h-4" />
+                {isSuperAdminLoginRoute ? <Building2 className="w-4 h-4" /> : <ScanFace className="w-4 h-4" />}
               </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">AI Face Biometrics</h3>
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
+                {isSuperAdminLoginRoute ? "Multi-Tenant Cloud" : "AI Face Biometrics"}
+              </h3>
               <p className="text-xs text-ink-soft">
-                Continuous 5-second auto-marking with anti-spoof liveness detection.
+                {isSuperAdminLoginRoute
+                  ? "Tenant lifecycle provisioning, subscription controls, and strict database isolation."
+                  : "Continuous 5-second auto-marking with anti-spoof liveness detection."}
               </p>
             </div>
 
@@ -434,11 +492,15 @@ const NewLogin = ({ onLogin }) => {
                 className="w-8 h-8 rounded-xl flex items-center justify-center"
                 style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
               >
-                <Calendar className="w-4 h-4" />
+                {isSuperAdminLoginRoute ? <Globe className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
               </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">Timetables & Roster</h3>
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
+                {isSuperAdminLoginRoute ? "System Observability" : "Timetables & Roster"}
+              </h3>
               <p className="text-xs text-ink-soft">
-                Live faculty queue, automated schedule conflict detection & proof verification.
+                {isSuperAdminLoginRoute
+                  ? "Real-time error logs, system telemetry, and global tenant activity monitoring."
+                  : "Live faculty queue, automated schedule conflict detection & proof verification."}
               </p>
             </div>
           </div>
@@ -484,7 +546,7 @@ const NewLogin = ({ onLogin }) => {
               <div className="p-6 sm:p-7 pb-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {tenantBranding?.logo ? (
+                    {!isSuperAdminLoginRoute && tenantBranding?.logo ? (
                       <img
                         src={tenantBranding.logo}
                         alt={tenantBranding.name || "Logo"}
@@ -499,7 +561,7 @@ const NewLogin = ({ onLogin }) => {
                           color: primaryColor,
                         }}
                       >
-                        {loginType === "super" ? (
+                        {isSuperAdminLoginRoute ? (
                           <Building2 className="w-5 h-5" />
                         ) : loginType === "parent" ? (
                           <Users className="w-5 h-5" />
@@ -510,45 +572,53 @@ const NewLogin = ({ onLogin }) => {
                     )}
                     <div className="min-w-0">
                       <h2 className="text-base font-bold text-ink tracking-tight truncate">
-                        {tenantBranding?.name || (loginType === "super" ? "Super Admin Portal" : "Campus Admin Access")}
+                        {isSuperAdminLoginRoute
+                          ? "Super Admin Portal"
+                          : tenantBranding?.name || "Campus Portal Access"}
                       </h2>
                       <p className="text-xs text-ink-soft truncate">
-                        {loginType === "super"
+                        {isSuperAdminLoginRoute
                           ? "Master infrastructure authentication"
                           : loginType === "parent"
                           ? "Parent progress & attendance access"
                           : tenantBranding?.customMessage
                           ? tenantBranding.customMessage
-                          : hasTenantContext
-                          ? "Enter your credentials to continue"
-                          : "Institution administrator sign-in"}
+                          : "Enter your credentials to continue"}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Login Type Segmented Toggle */}
-                <div className="flex p-1 rounded-xl bg-background border border-line/50">
-                  {loginTabs.map((tab) => {
-                    const TabIcon = tab.icon;
-                    const isActive = loginType === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        onClick={() => setLoginType(tab.key)}
-                        className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          isActive
-                            ? "bg-surface shadow-xs border border-line/60"
-                            : "text-ink-soft hover:text-ink"
-                        }`}
-                        style={isActive ? { color: primaryColor } : undefined}
-                      >
-                        <TabIcon className="w-3.5 h-3.5" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {!isSuperAdminLoginRoute ? (
+                  <div className="flex p-1 rounded-xl bg-background border border-line/50">
+                    {loginTabs.map((tab) => {
+                      const TabIcon = tab.icon;
+                      const isActive = loginType === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setLoginType(tab.key)}
+                          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            isActive
+                              ? "bg-surface shadow-xs border border-line/60"
+                              : "text-ink-soft hover:text-ink"
+                          }`}
+                          style={isActive ? { color: primaryColor } : undefined}
+                        >
+                          <TabIcon className="w-3.5 h-3.5" />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs font-bold text-primary w-fit">
+                    <Building2 className="w-4 h-4" />
+                    <span>Master Control Plane</span>
+                  </div>
+                )}
               </div>
 
               {/* Card Body / Form */}
@@ -570,44 +640,46 @@ const NewLogin = ({ onLogin }) => {
 
                 <form onSubmit={handleSubmit} className="space-y-3.5">
                   {/* Subdomain Input */}
-                  {subdomainLocked ? (
-                    <div 
-                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs"
-                      style={{
-                        backgroundColor: `${primaryColor}0c`,
-                        borderColor: `${primaryColor}30`,
-                        color: primaryColor,
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Link2 className="h-4 w-4 shrink-0" />
-                        <span className="font-bold font-mono">{formData.subdomain}</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-emerald-600">✓ Connected</span>
-                    </div>
-                  ) : (
-                    loginType === "tenant" && (
-                      <div className="space-y-1">
-                        <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
-                          Institution Subdomain
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
-                            <Building2 className="h-4 w-4" />
-                          </div>
-                          <input
-                            type="text"
-                            name="subdomain"
-                            value={formData.subdomain}
-                            onChange={handleChange}
-                            placeholder="e.g., apex-univ"
-                            className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
-                          />
+                  {!isSuperAdminLoginRoute && (
+                    subdomainLocked ? (
+                      <div 
+                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs"
+                        style={{
+                          backgroundColor: `${primaryColor}0c`,
+                          borderColor: `${primaryColor}30`,
+                          color: primaryColor,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Link2 className="h-4 w-4 shrink-0" />
+                          <span className="font-bold font-mono">{formData.subdomain}</span>
                         </div>
-                        <p className="text-[11px] text-ink-faint">
-                          Or sign in directly using your institution's custom link
-                        </p>
+                        <span className="text-[11px] font-semibold text-emerald-600">✓ Connected</span>
                       </div>
+                    ) : (
+                      loginType === "tenant" && (
+                        <div className="space-y-1">
+                          <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                            Institution Subdomain
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                              <Building2 className="h-4 w-4" />
+                            </div>
+                            <input
+                              type="text"
+                              name="subdomain"
+                              value={formData.subdomain}
+                              onChange={handleChange}
+                              placeholder="e.g., apex-univ"
+                              className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                            />
+                          </div>
+                          <p className="text-[11px] text-ink-faint">
+                            Or sign in directly using your institution's custom link
+                          </p>
+                        </div>
+                      )
                     )
                   )}
 
@@ -625,7 +697,7 @@ const NewLogin = ({ onLogin }) => {
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
-                        placeholder={loginType === "super" ? "superadmin@attendease.com" : "admin@institution.edu"}
+                        placeholder={isSuperAdminLoginRoute ? "superadmin@attendease.com" : loginType === "parent" ? "parent@example.com" : "admin@institution.edu"}
                         required
                         className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
@@ -669,7 +741,7 @@ const NewLogin = ({ onLogin }) => {
                         navigate("/forgot-password", {
                           state: {
                             returnTo:
-                              hasTenantContext && formData.subdomain
+                              !isSuperAdminLoginRoute && hasTenantContext && formData.subdomain
                                 ? `/login/${formData.subdomain}`
                                 : "/login",
                           },
@@ -696,7 +768,7 @@ const NewLogin = ({ onLogin }) => {
                     ) : (
                       <>
                         <span>
-                          {loginType === "super"
+                          {isSuperAdminLoginRoute
                             ? "Authorize Super Admin"
                             : loginType === "parent"
                             ? "Access Parent Portal"
@@ -710,8 +782,29 @@ const NewLogin = ({ onLogin }) => {
                   </button>
                 </form>
 
+                {/* Notice for non-super admins landing on /login */}
+                {isSuperAdminLoginRoute && (
+                  <div className="mt-4 p-4 rounded-2xl bg-background/80 border border-line/60 space-y-2 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-ink">
+                      <School className="w-4 h-4 text-primary shrink-0" />
+                      <span>Looking for your institution's portal?</span>
+                    </div>
+                    <p className="text-ink-soft leading-relaxed text-[11px]">
+                      Campus administrators, faculty, students, and parents must sign in via their institution's unique login link (e.g. <span className="font-mono font-semibold text-ink">/login/your-institution</span>).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/')}
+                      className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 pt-0.5 cursor-pointer"
+                    >
+                      <span>Return to Home Overview</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Direct Registration Shortcuts (For Tenant Context) */}
-                {hasTenantContext && loginType === "tenant" && (
+                {!isSuperAdminLoginRoute && hasTenantContext && loginType === "tenant" && (
                   <>
                     <div className="flex items-center gap-3 my-3">
                       <div className="flex-1 border-t border-line/50"></div>
@@ -723,7 +816,8 @@ const NewLogin = ({ onLogin }) => {
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => navigate("/register", { state: { userType: "student" } })}
+                        type="button"
+                        onClick={() => navigate("/register", { state: { userType: "student", subdomain: formData.subdomain || resolvedSubdomain } })}
                         className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <GraduationCap className="w-3.5 h-3.5" style={{ color: primaryColor }} />
@@ -731,7 +825,8 @@ const NewLogin = ({ onLogin }) => {
                       </button>
 
                       <button
-                        onClick={() => navigate("/register", { state: { userType: "teacher" } })}
+                        type="button"
+                        onClick={() => navigate("/register", { state: { userType: "teacher", subdomain: formData.subdomain || resolvedSubdomain } })}
                         className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <School className="w-3.5 h-3.5" style={{ color: primaryColor }} />
@@ -748,7 +843,13 @@ const NewLogin = ({ onLogin }) => {
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                   <span>256-Bit TLS Secured</span>
                 </span>
-                <span className="font-mono">{tenantBranding?.subdomain ? `${tenantBranding.subdomain}.attendease` : "AttendEase Cloud"}</span>
+                <span className="font-mono">
+                  {isSuperAdminLoginRoute
+                    ? "Master Control Plane"
+                    : tenantBranding?.subdomain
+                    ? `${tenantBranding.subdomain}.attendease`
+                    : "AttendEase Cloud"}
+                </span>
               </div>
             </div>
           </motion.div>

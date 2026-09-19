@@ -33,6 +33,7 @@ import Card from "../common/ui/Card";
 import Modal from "../common/ui/Modal";
 import Button from "../common/ui/Button";
 import StatCard from "../common/ui/StatCard";
+import { formatDateDMY, formatDateTime, getLocalTodayStr } from "../../utils/dateUtils";
 import { isBranchMatch, isBranchInList } from "../../utils/branchHelper";
 import EmptyState from "../common/ui/EmptyState";
 import DashboardHeader from "../common/ui/DashboardHeader";
@@ -746,7 +747,7 @@ const AssignSubjects = () => {
 
     const dataStr = JSON.stringify(exportData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const exportFileDefaultName = `assignments_${tenantInfo?.subdomain || 'all'}_${new Date().toISOString().split('T')[0]}.json`;
+    const exportFileDefaultName = `assignments_${tenantInfo?.subdomain || 'all'}_${getLocalTodayStr()}.json`;
 
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
@@ -1189,7 +1190,7 @@ const AssignSubjects = () => {
                           <div className="flex items-center gap-3 text-sm text-ink-soft">
                             <span className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" style={{ color: themeColors.primary }} />
-                              {new Date(group.lastAssignedDate).toLocaleDateString()}
+                              {formatDateDMY(group.lastAssignedDate)}
                             </span>
                             <span className="flex items-center gap-1">
                               <Users className="w-4 h-4" style={{ color: themeColors.primary }} />
@@ -1265,7 +1266,7 @@ const AssignSubjects = () => {
                               Section {assignment.section}
                             </p>
                             <p className="text-xs text-ink-soft">
-                              Assigned: {new Date(assignment.assignedDate).toLocaleString()}
+                              Assigned: {formatDateTime(assignment.assignedDate)}
                             </p>
                           </div>
                         </div>
@@ -1675,13 +1676,13 @@ const AssignSubjects = () => {
                 <div>
                   <p className="text-xs text-ink-faint">First Assigned</p>
                   <p className="text-sm font-medium text-ink">
-                    {new Date(selectedGroup.firstAssignedDate).toLocaleDateString()}
+                    {formatDateDMY(selectedGroup.firstAssignedDate)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-ink-faint">Last Assigned</p>
                   <p className="text-sm font-medium text-ink">
-                    {new Date(selectedGroup.lastAssignedDate).toLocaleDateString()}
+                    {formatDateDMY(selectedGroup.lastAssignedDate)}
                   </p>
                 </div>
               </div>
@@ -1698,7 +1699,7 @@ const AssignSubjects = () => {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-xs text-ink-faint">
-                        {new Date(assignment.assignedDate).toLocaleString()}
+                        {formatDateTime(assignment.assignedDate)}
                       </span>
                       {assignment.studentsUpdated > 0 && (
                         <span className="text-xs text-green-600">

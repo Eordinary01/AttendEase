@@ -240,7 +240,7 @@ const FeeManager = () => {
   const fetchStudentsForModal = async () => {
     if (students.length > 0) return;
     try {
-      const res = await api.get("/attendance/admin/students?limit=2000");
+      const res = await api.get("/users/students?limit=100");
       const list = res.data?.data || [];
       setStudents(list);
     } catch (err) {
@@ -668,7 +668,7 @@ const FeeManager = () => {
                             </span>
                           ) : cohort.earliestPendingDueDate ? (
                             <span className="text-amber-600 font-medium ml-auto flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5" /> Due {new Date(cohort.earliestPendingDueDate).toLocaleDateString()}
+                              <Clock className="w-3.5 h-3.5" /> Due {formatDateDMY(cohort.earliestPendingDueDate)}
                             </span>
                           ) : null}
                         </div>
@@ -1045,7 +1045,7 @@ const FeeManager = () => {
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Status</p><div className="mt-1">{getStatusBadge(feeDetail.fee.status)}</div></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Amount</p><p className="font-semibold text-ink">{formatCurrency(feeDetail.fee.amount)}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Paid</p><p className="font-semibold text-emerald-600">{formatCurrency(feeDetail.fee.paidAmount)}</p></div>
-              <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Due Date</p><p className="font-semibold text-ink">{new Date(feeDetail.fee.dueDate).toLocaleDateString()}</p></div>
+              <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Due Date</p><p className="font-semibold text-ink">{formatDateDMY(feeDetail.fee.dueDate)}</p></div>
               <div className="p-4 bg-background rounded-xl"><p className="text-xs text-ink-faint uppercase">Type</p><p className="font-semibold text-ink capitalize">{feeDetail.fee.feeType}</p></div>
             </div>
             <div>

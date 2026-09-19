@@ -254,8 +254,8 @@ const deleteProfilePhoto = async (req, res) => {
  */
 const getAllStudents = async (req, res) => {
   try {
-    const { page = 1, limit = 1000, section, search, courseId, course, courseName, courseCode, branch, semester, subjectId } = req.query || {};
-    const safeLimit = req.query?.limit === 'all' ? 5000 : Math.min(5000, Math.max(1, parseInt(limit, 10) || 1000));
+    const { page = 1, limit = 50, section, search, courseId, course, courseName, courseCode, branch, semester, subjectId } = req.query || {};
+    const safeLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
     const skip = (Math.max(1, parseInt(page, 10) || 1) - 1) * safeLimit;
     
     const effectiveTenantId = req.tenantId || req.user?.tenantId;
@@ -555,7 +555,54 @@ const BRANCH_ALIASES = {
     return res.status(200).json({
       success: true,
       data: [],
-      pagination: { page: 1, limit: 1000, total: 0, pages: 0 },
+      pagination: { page: 1, limit: 50, total: 0, pages: 0 },
+      error: error.message
+    });
+  }
+};
+
+/**
+ * GET /api/users/students/search
+ * Lightweight search for students (returns _id, name, rollNo, section, email)
+ * Max 20 results (capped at 50). Optimized for autocomplete and pickers.
+ */
+const searchStudents = async (req, res) => {
+  try {
+    const { q = '', limit = 20 } = req.query;
+    if (!q || !q.trim()) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const effectiveTenantId = req.tenantId || req.user?.tenantId;
+    const safeRegex = new RegExp(escapeRegExp(q.trim()), 'i');
+    
+    const query = {
+      role: 'student',
+      isActive: true,
+      $or: [
+        { name: safeRegex },
+        { rollNo: safeRegex },
+        { email: safeRegex }
+      ]
+    };
+    if (req.user?.role !== 'super_admin') {
+      query.tenantId = effectiveTenantId;
+    }
+
+    const students = await User.find(query)
+      .select('_id name rollNo section email')
+      .limit(safeLimit)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: students
+    });
+  } catch (error) {
+    logger.error('Error searching students', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search students',
       error: error.message
     });
   }
@@ -1064,6 +1111,7 @@ module.exports = {
   
   // Student management
   getAllStudents,
+  searchStudents,
   getStudentById,
   updateStudent,
   deleteStudent,

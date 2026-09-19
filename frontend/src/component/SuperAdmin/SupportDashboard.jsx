@@ -25,6 +25,7 @@ import {
   InboxIcon,
 } from 'lucide-react';
 import api from '../../utils/api';
+import { formatDateDMY, formatDateTime } from '../../utils/dateUtils';
 import { logError } from '../../utils/logger';
 import Button from '../common/ui/Button';
 import Card from '../common/ui/Card';
@@ -169,7 +170,7 @@ const SupportDashboard = () => {
   // Resolve & Reactivate
   const handleResolveReactivate = async (ticket) => {
     const resolution = resolutionInput[ticket._id] ||
-      `Account reactivated on free plan. You may now upgrade anytime. — ${new Date().toLocaleDateString()}`;
+      `Account reactivated on free plan. You may now upgrade anytime. — ${formatDateDMY(new Date())}`;
     if (!window.confirm(`Resolve ticket and reactivate tenant "${ticket.tenantName}" on the free plan?`)) return;
 
     setTicketLoading(ticket._id, true);
@@ -311,7 +312,7 @@ const SupportDashboard = () => {
                         </span>
                         <span className="text-xs text-ink-faint flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {new Date(ticket.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {formatDateTime(ticket.createdAt)}
                         </span>
                       </div>
                     </div>
@@ -352,7 +353,7 @@ const SupportDashboard = () => {
                               <p className="text-xs font-semibold text-emerald-700 mb-1">Resolution</p>
                               <p className="text-sm text-emerald-800">{ticket.resolution}</p>
                               {ticket.resolvedByName && (
-                                <p className="text-xs text-emerald-600 mt-1">By {ticket.resolvedByName} · {new Date(ticket.resolvedAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-emerald-600 mt-1">By {ticket.resolvedByName} · {formatDateDMY(ticket.resolvedAt)}</p>
                               )}
                             </div>
                           )}
@@ -365,7 +366,7 @@ const SupportDashboard = () => {
                                 {ticket.adminNotes.map(note => (
                                   <div key={note._id} className="p-2.5 bg-amber-50 border border-amber-100 rounded-lg">
                                     <p className="text-sm text-ink-soft">{note.content}</p>
-                                    <p className="text-xs text-ink-faint mt-1">{note.addedByName} · {new Date(note.addedAt).toLocaleDateString()}</p>
+                                    <p className="text-xs text-ink-faint mt-1">{note.addedByName} · {formatDateDMY(note.addedAt)}</p>
                                   </div>
                                 ))}
                               </div>

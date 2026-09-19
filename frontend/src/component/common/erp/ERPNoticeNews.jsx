@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Megaphone, History, Paperclip, ChevronRight, Bell } from "lucide-react";
 import ERPCard from "./ERPCard";
+import UniversalSpinner from "../ui/UniversalSpinner";
+import { getDateBadgeParts } from "../../../utils/dateUtils";
 
 export default function ERPNoticeNews({
   notices = [],
@@ -69,22 +71,14 @@ export default function ERPNoticeNews({
     >
       <div className="divide-y divide-line/60 overflow-y-auto max-h-56">
         {loading ? (
-          <div className="p-8 text-center text-xs text-ink-faint">
-            Loading announcements...
-          </div>
+          <UniversalSpinner size="sm" label="Loading announcements..." className="py-6" />
         ) : items.length === 0 ? (
           <div className="p-8 text-center text-xs text-ink-faint">
             No notices published yet.
           </div>
         ) : (
           items.map((n, idx) => {
-            const dateObj = new Date(n.createdAt || Date.now());
-            const monthStr = isNaN(dateObj.getTime())
-              ? "Aug"
-              : dateObj.toLocaleDateString("en-US", { month: "short" });
-            const dayNum = isNaN(dateObj.getTime())
-              ? "27"
-              : dateObj.toLocaleDateString("en-US", { day: "2-digit" });
+            const { month: monthStr, day: dayNum } = getDateBadgeParts(n.createdAt || Date.now());
 
             return (
               <div

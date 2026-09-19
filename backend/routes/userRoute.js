@@ -16,6 +16,7 @@ const {
 const {
   // Student management
   getAllStudents,
+  searchStudents,
   getStudentById,
   updateStudent: updateStudentCtrl,
   deleteStudent,
@@ -98,6 +99,12 @@ userRoute.delete('/profile/photo', authenticateToken, deleteProfilePhoto);
  * Get all students (admin + teacher; teachers see only their assigned sections)
  */
 userRoute.get('/students', authenticateToken, authorizeRoles(["admin", "teacher"]), getAllStudents);
+
+/**
+ * GET /api/users/students/search
+ * Lightweight search for students (autocomplete/pickers)
+ */
+userRoute.get('/students/search', authenticateToken, authorizeRoles(["admin", "teacher"]), searchStudents);
 
 /**
  * GET /api/users/students/:id

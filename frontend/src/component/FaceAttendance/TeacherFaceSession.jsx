@@ -24,6 +24,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import api from "../../utils/api";
+import { formatWeekday, getLocalTodayStr } from "../../utils/dateUtils";
 import { logError } from "../../utils/logger";
 import {
   getCachedSectionDescriptors,
@@ -68,6 +69,7 @@ const TeacherFaceSession = () => {
   const canvasRef = useRef(null);
   const autoMarkingRef = useRef(new Set()); // In-flight auto-marking lock to prevent duplicate calls
   const countdownStateRef = useRef({});
+  const countdownLastSeenRef = useRef({});
   const unauthorizedCooldownRef = useRef({});
   const countdownIntervalRef = useRef(null);
 
@@ -112,7 +114,7 @@ const TeacherFaceSession = () => {
   });
 
   const todayDayName = useMemo(() => {
-    return new Date().toLocaleDateString("en-US", { weekday: "long" });
+    return formatWeekday(new Date(), "long");
   }, []);
 
   // 1. Initial Load: Teacher Timetable, Assigned Subjects, and Active Sections
@@ -572,7 +574,7 @@ const TeacherFaceSession = () => {
 
         // Step 4: Pre-fetch today's already-marked attendance
         try {
-          const todayIso = new Date().toISOString().split("T")[0];
+          const todayIso = getLocalTodayStr();
           const queryParams = new URLSearchParams();
           if (!isAll) queryParams.append("section", activeSection);
           if (activeSubjectId) queryParams.append("subjectId", activeSubjectId);
@@ -732,7 +734,7 @@ const TeacherFaceSession = () => {
             const offlinePayload = {
               subjectId,
               section: targetSection,
-              date: new Date().toISOString().split("T")[0],
+              date: getLocalTodayStr(),
               timetableId,
               attendanceData: formattedAttendance,
             };
@@ -852,10 +854,12 @@ const TeacherFaceSession = () => {
   useEffect(() => {
     if (!cameraActive) {
       countdownStateRef.current = {};
+      countdownLastSeenRef.current = {};
       setCountdowns({});
       return;
     }
 
+    const now = Date.now();
     // 1. Sync Verified Faces to Countdowns
     const currentCountdowns = { ...countdownStateRef.current };
     let hasCountdownsChange = false;
@@ -874,6 +878,7 @@ const TeacherFaceSession = () => {
         (d.confidence || 0.9) >= 0.60
       ) {
         currentVerifiedIds.add(sId);
+        countdownLastSeenRef.current[sId] = now;
         if (autoMark && currentCountdowns[sId] === undefined) {
           currentCountdowns[sId] = { remainingSec: 5 };
           hasCountdownsChange = true;
@@ -887,11 +892,15 @@ const TeacherFaceSession = () => {
       }
     });
 
-    // Remove countdowns for students who left frame or dropped verification
+    // Remove countdowns only for students who have been missing for > 1500ms (grace period)
     for (const sId of Object.keys(currentCountdowns)) {
       if (!currentVerifiedIds.has(sId)) {
-        delete currentCountdowns[sId];
-        hasCountdownsChange = true;
+        const lastSeenTime = countdownLastSeenRef.current[sId] || 0;
+        if (now - lastSeenTime > 1500) {
+          delete currentCountdowns[sId];
+          delete countdownLastSeenRef.current[sId];
+          hasCountdownsChange = true;
+        }
       }
     }
 

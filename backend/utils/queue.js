@@ -8,37 +8,13 @@ try {
 }
 
 const REDIS_URL = process.env.REDIS_URL;
+const { createBullRedisClient } = require('./redisClient');
 let emailQueue = null;
 let statsQueue = null;
 
-const Redis = require('ioredis');
-
-function createBullRedisClient(type, redisUrl) {
-  const isTls = redisUrl.startsWith('rediss://') || redisUrl.includes('upstash.io');
-  const REDIS_TLS_CA = process.env.REDIS_TLS_CA;
-  const tlsConfig = isTls ? {
-    rejectUnauthorized: !REDIS_TLS_CA,
-    ...(REDIS_TLS_CA ? { ca: require('fs').readFileSync(REDIS_TLS_CA) } : {})
-  } : undefined;
-
-  const client = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    retryStrategy(times) {
-      if (times > 5) return null;
-      return Math.min(times * 200, 2000);
-    },
-    ...(tlsConfig ? { tls: tlsConfig } : {})
-  });
-
-  client.on('error', () => {});
-
-  return client;
-}
-
 if (Bull && REDIS_URL) {
   const bullOptions = {
-    createClient: (type) => createBullRedisClient(type, REDIS_URL),
+    createClient: createBullRedisClient,
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },

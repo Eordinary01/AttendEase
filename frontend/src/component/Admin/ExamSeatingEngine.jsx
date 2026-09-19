@@ -25,7 +25,8 @@ import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import Modal from "../common/ui/Modal";
 import DashboardHeader from "../common/ui/DashboardHeader";
-import { formatDateDMY } from "../../utils/dateUtils";
+import { formatDateDMY, getLocalTodayStr } from "../../utils/dateUtils";
+import { usePermissions } from "../../contexts/PermissionsContext";
 
 const BRANCH_COLORS = [
   { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" },
@@ -37,12 +38,25 @@ const BRANCH_COLORS = [
 ];
 
 const ExamSeatingEngine = () => {
-  const [examDate, setExamDate] = useState(new Date().toISOString().split("T")[0]);
+  const { can, role } = usePermissions();
+  const canGenerate = can("exam", "create");
+
+  const [examDate, setExamDate] = useState(getLocalTodayStr());
   const [shift, setShift] = useState("I");
   const [halls, setHalls] = useState([]);
   const [selectedHallIds, setSelectedHallIds] = useState([]);
   const [scheduledExams, setScheduledExams] = useState([]);
   const [scheduledDateSlots, setScheduledDateSlots] = useState([]);
+
+  const currentSlot = useMemo(() => {
+    return scheduledDateSlots.find(
+      (s) => s.date === examDate && (s.shift || "I") === shift
+    );
+  }, [scheduledDateSlots, examDate, shift]);
+
+  const isPeriodCompleted = currentSlot?.isPeriodCompleted || false;
+  const periodName = currentSlot?.periodName || null;
+  const periodEndDate = currentSlot?.periodEndDate || null;
   const [allocations, setAllocations] = useState([]);
   const [activeHallId, setActiveHallId] = useState(null);
   const [hallChartData, setHallChartData] = useState(null);
@@ -76,7 +90,7 @@ const ExamSeatingEngine = () => {
 
         // Auto-select first scheduled exam slot if today has no exams
         if (slots.length > 0) {
-          const todayStr = new Date().toISOString().split("T")[0];
+          const todayStr = getLocalTodayStr();
           const hasToday = slots.some((s) => s.date === todayStr);
           if (!hasToday) {
             setExamDate(slots[0].date);
@@ -138,6 +152,22 @@ const ExamSeatingEngine = () => {
 
   // Seating Generator Trigger
   const handleGenerate = async () => {
+    if (!canGenerate) {
+      setStatusMsg({
+        type: "error",
+        message: "You do not have permission to generate seating (requires exam:create).",
+      });
+      return;
+    }
+
+    if (isPeriodCompleted) {
+      setStatusMsg({
+        type: "error",
+        message: `Exam period ${periodName ? `"${periodName}"` : ""} ended on ${formatDateDMY(periodEndDate)}. Seating generation is disabled after exam period completion.`,
+      });
+      return;
+    }
+
     if (selectedHallIds.length === 0) {
       setStatusMsg({ type: "error", message: "Please select at least one examination hall." });
       return;
@@ -293,7 +323,7 @@ const ExamSeatingEngine = () => {
     // 3. Active Room Matrix Grid Sheet (if loaded)
     if (hallChartData && hallChartData.grid) {
       const matrixData = [];
-      matrixData.push([`EXAM SEATING MATRIX — ${hallChartData.hall?.hallCode || ""} (${hallChartData.examDate} Shift ${hallChartData.shift})`]);
+      matrixData.push([`EXAM SEATING MATRIX — ${hallChartData.hall?.hallCode || ""} (${formatDateDMY(hallChartData.examDate)} Shift ${hallChartData.shift})`]);
       matrixData.push([]);
 
       hallChartData.grid.forEach((rowSeats, rIdx) => {
@@ -386,6 +416,11 @@ const ExamSeatingEngine = () => {
 
   // ─── EXCEL IMPORT SUBMIT ───
   const handleImportSubmit = async () => {
+    if (!canGenerate) {
+      setImportError("You do not have permission to import seating allocations (requires exam:create).");
+      return;
+    }
+
     if (parsedRows.length === 0) {
       setImportError("Please select a file with valid seating data.");
       return;
@@ -435,19 +470,21 @@ const ExamSeatingEngine = () => {
                 Refresh
               </Button>
 
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={() => {
-                  setShowImportModal(true);
-                  setImportError(null);
-                  setParsedRows([]);
-                  setImportFile(null);
-                }}
-                leftIcon={Upload}
-              >
-                Import Excel
-              </Button>
+              {canGenerate && (
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => {
+                    setShowImportModal(true);
+                    setImportError(null);
+                    setParsedRows([]);
+                    setImportFile(null);
+                  }}
+                  leftIcon={Upload}
+                >
+                  Import Excel
+                </Button>
+              )}
 
               {allocations.length > 0 && (
                 <Button
@@ -498,26 +535,50 @@ const ExamSeatingEngine = () => {
                       className={`px-3 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-2 transition ${
                         isCurrent
                           ? "bg-primary text-white border-primary shadow-sm font-semibold"
+                          : slot.isPeriodCompleted
+                          ? "bg-surface text-ink-faint border-line/70 opacity-80 hover:opacity-100"
                           : "bg-surface text-ink border-line hover:bg-surface-alt"
                       }`}
                     >
                       <Calendar className="w-3 h-3" />
-                      <span>{slot.date} (Shift {slot.shift || "I"})</span>
-                      <span className={`px-1.5 py-0.2 rounded text-[10px] ${isCurrent ? "bg-white/20" : "bg-primary-soft text-primary font-bold"}`}>
-                        {slot.examsCount} Exams
-                      </span>
+                      <span>{formatDateDMY(slot.date)} (Shift {slot.shift || "I"})</span>
+                      {slot.isPeriodCompleted ? (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
+                          Ended
+                        </span>
+                      ) : (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] ${isCurrent ? "bg-white/20" : "bg-primary-soft text-primary font-bold"}`}>
+                          {slot.examsCount} Exams
+                        </span>
+                      )}
                     </button>
                   );
                 })}
               </div>
+              {isPeriodCompleted && (
+                <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <span>
+                    <strong>Exam Period Completed:</strong> The examination period {periodName ? `"${periodName}"` : ""} ended on{" "}
+                    <strong>{formatDateDMY(periodEndDate)}</strong>. Seating generation is disabled after exam period completion.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 1. Date Picker */}
             <div>
-              <label className="block text-xs font-semibold text-ink mb-1.5 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-primary" /> Examination Date
+              <label className="block text-xs font-semibold text-ink mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-primary" /> Examination Date
+                </span>
+                {examDate && (
+                  <span className="text-[11px] font-semibold text-primary">
+                    ({formatDateDMY(examDate)})
+                  </span>
+                )}
               </label>
               <input
                 type="date"
@@ -570,7 +631,7 @@ const ExamSeatingEngine = () => {
             <div className="p-3 rounded-xl bg-primary-soft/30 border border-primary-surface space-y-2">
               <div className="flex items-center justify-between text-xs font-semibold text-primary-dark">
                 <span>📚 Papers in this Slot ({scheduledExams.length}):</span>
-                <span className="text-[11px] text-ink-faint font-normal">{examDate} • Shift {shift}</span>
+                <span className="text-[11px] text-ink-faint font-normal">{formatDateDMY(examDate)} • Shift {shift}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                 {scheduledExams.map((ex) => (
@@ -641,11 +702,26 @@ const ExamSeatingEngine = () => {
 
             <Button
               onClick={handleGenerate}
-              disabled={generating || scheduledExams.length === 0}
+              disabled={generating || scheduledExams.length === 0 || isPeriodCompleted || !canGenerate}
               className="w-full sm:w-auto px-5 py-2.5 bg-primary text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm hover:bg-primary-dark transition disabled:opacity-50"
+              title={
+                !canGenerate
+                  ? "Requires exam:create permission"
+                  : isPeriodCompleted
+                  ? `Exam period ended on ${formatDateDMY(periodEndDate)}`
+                  : scheduledExams.length === 0
+                  ? "No scheduled exams for this slot"
+                  : ""
+              }
             >
               <Sparkles className="w-4 h-4" />
-              {generating ? "Computing Anti-Cheating Allocations..." : "Generate Anti-Cheating Seating"}
+              {generating
+                ? "Computing Anti-Cheating Allocations..."
+                : isPeriodCompleted
+                ? "Generation Disabled (Period Ended)"
+                : !canGenerate
+                ? "Requires Exam Create Permission"
+                : "Generate Anti-Cheating Seating"}
             </Button>
           </div>
 
@@ -728,7 +804,7 @@ const ExamSeatingEngine = () => {
                   Examination Seating Chart — {hallChartData.hall?.hallCode} ({hallChartData.hall?.name})
                 </h3>
                 <p className="text-xs text-ink-faint mt-1">
-                  Date: <strong>{hallChartData.examDate}</strong> • Shift: <strong>{hallChartData.shift}</strong> • Venue:{" "}
+                  Date: <strong>{formatDateDMY(hallChartData.examDate)}</strong> • Shift: <strong>{hallChartData.shift}</strong> • Venue:{" "}
                   <strong>{hallChartData.hall?.building} ({hallChartData.hall?.floor})</strong> • Total Candidates:{" "}
                   <strong className="text-primary">{hallChartData.totalAllocated}</strong>
                 </p>
@@ -958,7 +1034,7 @@ const ExamSeatingEngine = () => {
                         <td className="p-2 font-mono">{row.seatNumber || row["Seat Number"] || "—"}</td>
                         <td className="p-2 font-mono">{row.rollNo || row.studentRollNo || row["Roll No"] || "—"}</td>
                         <td className="p-2">{row.subjectCode || row["Subject Code"] || "—"}</td>
-                        <td className="p-2">{row.examDate || row["Exam Date"] || "—"}</td>
+                        <td className="p-2">{formatDateDMY(row.examDate || row["Exam Date"])}</td>
                         <td className="p-2">{row.shift || row["Shift"] || "I"}</td>
                       </tr>
                     ))}

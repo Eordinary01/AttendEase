@@ -15,6 +15,7 @@ import {
   purgeStaleItems,
   clearAll as idbClearAll,
 } from './idbStorage';
+import { getCookie } from './api';
 
 let syncWorker = null;
 const syncListeners = new Set();
@@ -142,30 +143,33 @@ export const triggerOfflineSync = async (token, apiUrl) => {
   const effectiveApiUrl =
     apiUrl ||
     process.env.REACT_APP_API_URL ||
-    'http://127.0.0.1:8011/api';
+    'http://localhost:8011/api';
   const effectiveToken =
     token ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
     '';
+
+  const effectiveXsrfToken = getCookie('XSRF-TOKEN') || '';
 
   if (syncWorker) {
     // Dispatch job to background Web Worker
     syncWorker.postMessage({
       type: 'START_SYNC',
       token: effectiveToken,
+      xsrfToken: effectiveXsrfToken,
       apiUrl: effectiveApiUrl,
     });
     return;
   }
 
   // Fallback for environments where Web Workers might be restricted
-  return await fallbackInlineSync(effectiveToken, effectiveApiUrl);
+  return await fallbackInlineSync(effectiveToken, effectiveApiUrl, effectiveXsrfToken);
 };
 
 /**
  * Fallback inline sync runner when Web Workers are unavailable
  */
-async function fallbackInlineSync(token, apiUrl) {
+async function fallbackInlineSync(token, apiUrl, xsrfToken) {
   const items = await idbGetAllQueueItems();
   let syncedCount = 0;
   let failedCount = 0;
@@ -205,13 +209,21 @@ async function fallbackInlineSync(token, apiUrl) {
         ? { ...cleanPayload, isOfflineSync: true }
         : { ...cleanPayload, attendanceData: normalizedAttendance, isOfflineSync: true };
 
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-offline-sync': 'true',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      if (xsrfToken) {
+        headers['X-XSRF-TOKEN'] = xsrfToken;
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-offline-sync': 'true',
-        },
+        credentials: 'include',
+        headers,
         body: JSON.stringify(body),
       });
 

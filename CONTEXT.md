@@ -227,10 +227,10 @@ OpenAPI 3.0 spec lives at `backend/docs/openapi.yaml`. It covers all 209 endpoin
 | **Student / Parent Portal** | Gate portal access behind plan check at route level |
 | **Razorpay Payment Flow** | Wire `createSubscriptionOrder` → Razorpay checkout → `verifyPayment` end-to-end |
 | **Student password reset** | Students default to `Student@123`; surface a reset flow in the UI if needed |
-| **Face Attendance — Multi-Face Detection** | Switch from `detectSingleFace` to `detectAllFaces` in `useFaceDetection.js:234-243`. Currently only the highest-confidence face is processed. |
-| **Face Attendance — Per-Track Blink Gate** | Make `isPendingBlinkRef` per-track (Map) instead of global boolean. Global flag blocks ALL descriptor computation when one face waits for blink. |
-| **Face Attendance — Track Cleanup Reset** | Reset `isPendingBlinkRef` during track cleanup at L759-778. Currently creates stuck no-descriptor state. |
-| **Face Attendance — Blink/Timeout Race** | Show "pending blink" status for borderline matches instead of "unrecognized". Blink gate delays can exceed 7s UNKNOWN_TIMEOUT_MS. |
+|| **Face Attendance — Multi-Face Detection** | Implemented: uses `detectAllFaces` with `MAX_CONCURRENT_FACES`. Per-track blink gate implemented via `pendingBlinkProofRef` Map. Track cleanup migrates blink proof and clears per-track state. Blink proof persisted via `globalBlinkProofRef` and `BLINK_PROOF_TTL_MS=20000`. |
+|| **Face Attendance — Per-Track Blink Gate** | Implemented: `pendingBlinkProofRef` Map replaces global boolean. Multi-face gate reads track-scoped blink proof. |
+|| **Face Attendance — Track Cleanup Reset** | Implemented: cleanup migrates blink proof to nearby tracks, clears `pendingBlinkProofRef` for stale tracks. |
+|| **Face Attendance — Blink/Timeout Race** | Implemented: `UNKNOWN_TIMEOUT_MS` raised to 15000; pending blink states show "👁 Live Face Required — Please Blink" instead of "Unrecognized". |
 | **Caching — Server-Side** | Wire `cacheMiddleware` to `tenant/info` (5min), `tenant/usage` (2min), `subjects/all` (5min), `timetable/section` (1min), `roles/my-permissions` (1min). Extend auth TTL 30s→5-10min. See `UPGRADE.md` C1-C10. |
 | **Caching — Client-Side** | Deduplicate `tenant/info` fetch between ThemeContext + AppShell. Cache branding in localStorage. Adopt React Query/SWR for API data caching. |
 

@@ -14,8 +14,10 @@ import Table from "../common/ui/Table";
 import Input, { Select, Textarea } from "../common/ui/Input";
 import { usePermissions } from "../../contexts/PermissionsContext";
 import BulkImportModal from "../common/ui/BulkImportModal";
+import Pagination from "../common/ui/Pagination";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 import { useToast } from "../../contexts/ToastContext";
-import { formatDateDMY, formatDateTime, formatDateReadable } from "../../utils/dateUtils";
+import { formatDateDMY, formatDateTime, formatDateReadable, getLocalTodayStr, toLocalDateStr } from "../../utils/dateUtils";
 
 const BULK_EXAMPLE = `[
   {
@@ -72,6 +74,8 @@ const ExamManager = () => {
   const [examHalls, setExamHalls] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -96,7 +100,8 @@ const ExamManager = () => {
   useEffect(() => { fetchInitial(); }, []);
 
   useEffect(() => {
-    fetchExams(selectedSection, selectedSemester, selectedCourse, selectedBranch);
+    setPage(1);
+    fetchExams(selectedSection, selectedSemester, selectedCourse, selectedBranch, 1);
   }, [selectedCourse, selectedBranch, selectedSemester, selectedSection]);
 
   useEffect(() => {
@@ -116,7 +121,7 @@ const ExamManager = () => {
         api.get("/exams/structure").catch(() => ({ data: {} })),
         api.get("/exams/periods").catch(() => ({ data: { data: [] } })),
         api.get("/exams/seating/halls?isActive=true").catch(() => ({ data: { data: [] } })),
-        api.get("/users/students?limit=2000").catch(() => ({ data: { data: [] } })),
+        api.get("/users/students?limit=50").catch(() => ({ data: { data: [] } })),
       ]);
 
       const cList = Array.isArray(coursesRes.data?.data) ? coursesRes.data.data
@@ -187,10 +192,12 @@ const ExamManager = () => {
     }
   };
 
-  const fetchExams = async (sec = selectedSection, sem = selectedSemester, crs = selectedCourse, br = selectedBranch) => {
+  const fetchExams = async (sec = selectedSection, sem = selectedSemester, crs = selectedCourse, br = selectedBranch, pageNum = page) => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      params.append("page", pageNum);
+      params.append("limit", 50);
       if (sec) params.append("section", sec);
       if (sem) params.append("semester", sem);
       if (crs) params.append("courseId", crs);
@@ -198,6 +205,9 @@ const ExamManager = () => {
       const q = params.toString() ? `?${params.toString()}` : "";
       const res = await api.get(`/exams${q}`);
       setExams(res.data.data || []);
+      if (res.data.pagination) {
+        setPagination(res.data.pagination);
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch exams");
     } finally {
@@ -347,7 +357,7 @@ const ExamManager = () => {
   const examsByDateShift = useMemo(() => {
     const map = {};
     exams.forEach((exam) => {
-      const d = exam.date?.split("T")[0] || exam.date;
+      const d = exam.date ? toLocalDateStr(exam.date) : "";
       const s = exam.shift || "I";
       const key = `${d}__${s}`;
       if (!map[key]) map[key] = [];
@@ -363,10 +373,10 @@ const ExamManager = () => {
       return Array.from({ length: 7 }, (_, i) => {
         const d = new Date(today);
         d.setDate(d.getDate() + i);
-        return d.toISOString().split("T")[0];
+        return toLocalDateStr(d);
       });
     }
-    const dates = [...new Set(exams.map((e) => (e.date || "").split("T")[0]))].sort();
+    const dates = [...new Set(exams.map((e) => (e.date ? toLocalDateStr(new Date(e.date)) : "")).filter(Boolean))].sort();
     return dates.slice(0, 14);
   }, [exams, selectedDate]);
 
@@ -420,10 +430,10 @@ const ExamManager = () => {
 
   // Active / non-expired exam periods (endDate >= today)
   const activeExamPeriods = useMemo(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalTodayStr();
     return examPeriods.filter((p) => {
       if (p.isExpired === true) return false;
-      const endStr = (p.endDate || "").split("T")[0];
+      const endStr = p.endDate ? toLocalDateStr(new Date(p.endDate)) : "";
       return !endStr || endStr >= todayStr;
     });
   }, [examPeriods]);
@@ -488,7 +498,7 @@ const ExamManager = () => {
       type: exam.examTypeCode || exam.type || "",
       shift: exam.shift || "I",
       section: exam.section || "",
-      date: exam.date?.split("T")[0] || "",
+      date: exam.date ? toLocalDateStr(exam.date) : "",
       startTime: exam.startTime || "",
       endTime: exam.endTime || "",
       maxMarks: exam.maxMarks || 100,
@@ -656,7 +666,7 @@ const ExamManager = () => {
   };
 
   const isToday = (dateStr) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalTodayStr();
     return dateStr === today;
   };
 
@@ -669,7 +679,7 @@ const ExamManager = () => {
   if (loading && exams.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-16 h-16 border-4 border-primary-soft border-t-primary rounded-full animate-spin" />
+        <UniversalSpinner size="lg" label="Loading examination records..." />
       </div>
     );
   }
@@ -909,6 +919,17 @@ const ExamManager = () => {
               </tbody>
             </table>
           </div>
+          {pagination.pages > 1 && (
+            <div className="p-4 border-t border-line">
+              <Pagination
+                pagination={pagination}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  fetchExams(selectedSection, selectedSemester, selectedCourse, selectedBranch, newPage);
+                }}
+              />
+            </div>
+          )}
         </Card>
       )}
 
@@ -1009,8 +1030,8 @@ const ExamManager = () => {
                     : "Select Period..."}
                 </option>
                 {examPeriods.map((p, i) => {
-                  const endStr = (p.endDate || "").split("T")[0];
-                  const todayStr = new Date().toISOString().split("T")[0];
+                  const endStr = p.endDate ? toLocalDateStr(new Date(p.endDate)) : "";
+                  const todayStr = getLocalTodayStr();
                   const isPast = p.isExpired || (endStr && endStr < todayStr);
                   return (
                     <option

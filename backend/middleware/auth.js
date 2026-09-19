@@ -13,9 +13,12 @@ const JWT_SECRET = process.env.JWT_SECRET;
  */
 const authenticateToken = async (req, res, next) => {
   try {
-    // Get the token from the Authorization header
+    // Get the token from the Authorization header or httpOnly cookie
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
 
     if (!token) {
       logger.warn('No token provided');
@@ -46,12 +49,12 @@ const authenticateToken = async (req, res, next) => {
     // Extract tenantId from token (if present)
     const tokenTenantId = decoded.tenantId;
 
-    // Find the user associated with the token (cached with 30s TTL)
+    // Find the user associated with the token (cached with 300s TTL)
     const userCacheKey = `user:${userId}`;
     let user = await cache.get(userCacheKey);
     if (!user) {
       user = await User.findById(userId).select('-password').lean();
-      if (user) await cache.set(userCacheKey, user, 30);
+      if (user) await cache.set(userCacheKey, user, 300);
     }
 
     if (!user) {
@@ -80,32 +83,44 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Verify token version (invalidates sessions on logout-all)
-    if (decoded.tokenVersion !== undefined && user.tokenVersion > decoded.tokenVersion) {
-      logger.warn('Token version mismatch - session invalidated', { userId: user._id });
-      return res.status(403).json({
-        success: false,
-        message: 'Session has been invalidated. Please log in again.'
-      });
+    // Enforce mandatory password rotation for newly bootstrapped/flagged accounts
+    if (user.forcePasswordChange) {
+      const allowedPaths = ['/api/auth/change-password', '/api/auth/logout', '/api/auth/me'];
+      const path = req.path || req.originalUrl || '';
+      if (!allowedPaths.some((p) => path.startsWith(p))) {
+        return res.status(403).json({
+          success: false,
+          code: 'PASSWORD_CHANGE_REQUIRED',
+          message: 'You must change your default password before accessing other features.',
+          forcePasswordChange: true,
+        });
+      }
     }
 
-    // Get tenant info if available (cached)
+    // Get tenant info if available (cached 600s, reuse req.tenant if already resolved by tenantResolver)
     let tenantInfo = null;
+    let resolvedTenant = null;
     if (user.tenantId) {
       const cacheKey = `tenant:${user.tenantId}`;
-      let tenant = await cache.get(cacheKey);
-      if (!tenant) {
-        tenant = await Tenant.findById(user.tenantId).select('name subdomain branding subscription.plan subscription.status subscription.trialEndsAt').lean();
-        if (tenant) await cache.set(cacheKey, tenant, 30);
+      if (req.tenant && (req.tenant._id || req.tenant.id) && (req.tenant._id?.toString() === user.tenantId.toString() || req.tenant.id?.toString() === user.tenantId.toString())) {
+        resolvedTenant = req.tenant;
+      } else {
+        resolvedTenant = await cache.get(cacheKey);
+        if (!resolvedTenant) {
+          resolvedTenant = await Tenant.findById(user.tenantId).lean();
+          if (resolvedTenant) await cache.set(cacheKey, resolvedTenant, 600);
+        }
       }
-      if (tenant) {
+      if (resolvedTenant) {
+        req.tenant = resolvedTenant;
+        req.tenantId = req.tenantId || resolvedTenant._id || resolvedTenant.id;
         tenantInfo = {
-          id: tenant._id,
-          name: tenant.name,
-          subdomain: tenant.subdomain,
-          branding: tenant.branding,
-          plan: tenant.subscription.plan,
-          subscriptionStatus: tenant.subscription.status
+          id: resolvedTenant._id || resolvedTenant.id,
+          name: resolvedTenant.name,
+          subdomain: resolvedTenant.subdomain,
+          branding: resolvedTenant.branding,
+          plan: resolvedTenant.subscription?.plan || resolvedTenant.plan,
+          subscriptionStatus: resolvedTenant.subscription?.status || resolvedTenant.subscriptionStatus
         };
 
         const bypassPaths = [
@@ -122,17 +137,18 @@ const authenticateToken = async (req, res, next) => {
         const isBypassed = (req.originalUrl && bypassPaths.some(p => req.originalUrl.startsWith(p))) || user.role === 'superadmin';
 
         if (!isBypassed) {
-          if (tenant.subscription.status !== 'active' && tenant.subscription.status !== 'trial') {
-            const isExpired = tenant.subscription.status === 'expired';
+          const subscription = resolvedTenant.subscription || {};
+          if (subscription.status !== 'active' && subscription.status !== 'trial') {
+            const isExpired = subscription.status === 'expired';
             return res.status(403).json({
               success: false,
-              message: isExpired ? 'Your trial has expired. Please upgrade to continue.' : `Your institution's subscription is ${tenant.subscription.status}. Please contact administrator.`,
-              subscriptionStatus: tenant.subscription.status,
+              message: isExpired ? 'Your trial has expired. Please upgrade to continue.' : `Your institution's subscription is ${subscription.status}. Please contact administrator.`,
+              subscriptionStatus: subscription.status,
               upgradeRequired: isExpired
             });
           }
 
-          if (tenant.subscription.plan === 'free' && tenant.subscription.trialEndsAt && new Date(tenant.subscription.trialEndsAt) < new Date()) {
+          if (subscription.plan === 'free' && subscription.trialEndsAt && new Date(subscription.trialEndsAt) < new Date()) {
             await Tenant.findByIdAndUpdate(user.tenantId, {
               'subscription.status': 'expired'
             });
@@ -177,8 +193,17 @@ const authenticateToken = async (req, res, next) => {
       semester: user.semester,
     };
     
-    // Attach tenant info separately for convenience
-    req.tenant = tenantInfo;
+    // Attach tenant info preserving full tenant document shape (subscription, limits, settings)
+    if (resolvedTenant) {
+      req.tenant = {
+        ...resolvedTenant,
+        id: resolvedTenant._id || resolvedTenant.id,
+        plan: resolvedTenant.subscription?.plan || resolvedTenant.plan,
+        subscriptionStatus: resolvedTenant.subscription?.status || resolvedTenant.subscriptionStatus
+      };
+    } else {
+      req.tenant = tenantInfo;
+    }
     req.tenantId = user.tenantId;
 
     // Auto-scope tenant: inject tenantId into req.query for non-super-admins

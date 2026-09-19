@@ -1,63 +1,46 @@
-const redis = require('ioredis');
+const { getSharedRedisClient } = require('../utils/redisClient');
 const logger = require('../utils/logger');
 
-const REDIS_URL = process.env.REDIS_URL;
 const CACHE_TTL = parseInt(process.env.CACHE_TTL, 10) || 60;
-const REDIS_TLS_CA = process.env.REDIS_TLS_CA; // Optional: path to CA cert for self-signed Redis
 
-let client = null;
+let client = getSharedRedisClient();
 let useRedis = false;
 const memoryCache = new Map();
 const memoryTTL = new Map();
 
 const MEMORY_CACHE_MAX_SIZE = 10000;
 
-if (REDIS_URL) {
-  const isTls = REDIS_URL.startsWith('rediss://') || REDIS_URL.includes('upstash.io');
-  const tlsConfig = isTls ? {
-    rejectUnauthorized: !REDIS_TLS_CA,
-    ...(REDIS_TLS_CA ? { ca: require('fs').readFileSync(REDIS_TLS_CA) } : {})
-  } : undefined;
-
-  client = new redis(REDIS_URL, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    autoResubscribe: false,
-    retryStrategy(times) {
-      if (times > 3) return null;
-      return Math.min(times * 200, 1000);
-    },
-    lazyConnect: true,
-    ...(tlsConfig ? { tls: tlsConfig } : {})
+if (client) {
+  if (client.status === 'ready') {
+    useRedis = true;
+  }
+  client.on('ready', () => {
+    useRedis = true;
   });
-
   client.on('error', (err) => {
     if (useRedis) {
-      logger.warn('Redis connection error, falling back to in-memory', { error: err.message });
+      logger.warn('Redis connection error in cache, falling back to in-memory', { error: err.message });
       useRedis = false;
     }
   });
-
-  client.connect().then(() => {
-    useRedis = true;
-    logger.info('Redis connected');
-  }).catch((err) => {
-    logger.warn('Redis connection failed, using in-memory cache', { error: err.message });
+  client.on('close', () => {
     useRedis = false;
-    try { client.disconnect(); } catch (e) {}
   });
 } else {
   logger.info('No REDIS_URL set, using in-memory cache');
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, expiry] of memoryTTL.entries()) {
-      if (expiry <= now) {
-        memoryCache.delete(key);
-        memoryTTL.delete(key);
-      }
-    }
-  }, 30000);
 }
+
+// Periodic cleanup of expired in-memory cache items
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, expiry] of memoryTTL.entries()) {
+    if (expiry <= now) {
+      memoryCache.delete(key);
+      memoryTTL.delete(key);
+    }
+  }
+}, 30000);
+
 
 let hits = 0;
 let misses = 0;
@@ -65,14 +48,28 @@ let misses = 0;
 async function get(key) {
   let val = null;
   if (useRedis && client) {
-    const raw = await client.get(key);
-    val = raw ? JSON.parse(raw) : null;
-  } else if (memoryTTL.has(key) && memoryTTL.get(key) <= Date.now()) {
-    memoryCache.delete(key);
-    memoryTTL.delete(key);
-    val = null;
-  } else {
-    val = memoryCache.get(key) || null;
+    try {
+      const raw = await client.get(key);
+      val = raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      logger.warn('Redis GET failed, falling back to memory', { key, error: err.message });
+      val = null;
+    }
+  }
+
+  // Check in-memory cache if Redis missed or unavailable
+  if (val === null) {
+    if (memoryTTL.has(key)) {
+      if (memoryTTL.get(key) <= Date.now()) {
+        memoryCache.delete(key);
+        memoryTTL.delete(key);
+        val = null;
+      } else {
+        val = memoryCache.get(key) || null;
+      }
+    } else {
+      val = memoryCache.get(key) || null;
+    }
   }
 
   if (val !== null) {
@@ -97,21 +94,35 @@ function getStats() {
 
 async function set(key, value, ttl = CACHE_TTL) {
   if (useRedis && client) {
-    const data = JSON.stringify(value);
-    await client.setex(key, ttl, data);
-    return;
+    try {
+      const data = JSON.stringify(value);
+      await client.setex(key, ttl, data);
+      return;
+    } catch (err) {
+      logger.warn('Redis SET failed, falling back to memory', { key, error: err.message });
+    }
   }
+
+  // LRU / FIFO eviction when reaching MAX_SIZE
   if (memoryCache.size >= MEMORY_CACHE_MAX_SIZE) {
-    return;
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey) {
+      memoryCache.delete(oldestKey);
+      memoryTTL.delete(oldestKey);
+    }
   }
+
   memoryCache.set(key, value);
   memoryTTL.set(key, Date.now() + ttl * 1000);
 }
 
 async function del(key) {
   if (useRedis && client) {
-    await client.del(key);
-    return;
+    try {
+      await client.del(key);
+    } catch (err) {
+      logger.warn('Redis DEL failed', { key, error: err.message });
+    }
   }
   memoryCache.delete(key);
   memoryTTL.delete(key);
@@ -119,11 +130,14 @@ async function del(key) {
 
 async function delPattern(pattern) {
   if (useRedis && client) {
-    const stream = client.scanStream({ match: pattern, count: 100 });
-    for await (const keys of stream) {
-      if (keys.length) await client.del(keys);
+    try {
+      const stream = client.scanStream({ match: pattern, count: 100 });
+      for await (const keys of stream) {
+        if (keys.length) await client.del(keys);
+      }
+    } catch (err) {
+      logger.warn('Redis DELPATTERN failed', { pattern, error: err.message });
     }
-    return;
   }
   const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
   for (const key of memoryCache.keys()) {

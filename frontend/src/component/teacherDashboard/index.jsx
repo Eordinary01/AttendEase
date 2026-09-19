@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   BookOpen,
   CalendarDays,
+  Shield,
 } from "lucide-react";
 
 import api from "../../utils/api";
@@ -26,6 +27,7 @@ import Button from "../common/ui/Button";
 import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
 import Modal from "../common/ui/Modal";
+import { getDateBadgeParts } from "../../utils/dateUtils";
 
 function hexToRgbStr(hex = "#6366f1") {
   const h = hex.replace("#", "");
@@ -47,7 +49,7 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
   };
 
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
+  const currentUserId = userId || localStorage.getItem("userId");
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,8 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
   const [myAssignments, setMyAssignments] = useState([]);
   const [teacherTimetable, setTeacherTimetable] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [myRoles, setMyRoles] = useState([]);
+  const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
 
   // Modals
   const [selectedFile, setSelectedFile] = useState(null);
@@ -69,18 +73,20 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
 
   // ── Fetch All Data ─────────────────────────────────────────────────────────
   const fetchData = useCallback(async (isSilent = false) => {
-    if (!token) return;
+    if (!currentUserId && !localStorage.getItem("token")) return;
     try {
       if (!isSilent) setLoading(true);
       else setRefreshing(true);
 
-      const uid = localStorage.getItem("userId");
-      const [ticketsRes, assignmentsRes, calRes, ttRes] =
+      const uid = currentUserId || localStorage.getItem("userId");
+      const [ticketsRes, assignmentsRes, calRes, ttRes, rolesRes, leavesRes] =
         await Promise.allSettled([
           api.get(`/tickets/teacher/pending`),
           uid ? api.get(`/subjects/teacher/${uid}/assignments`) : Promise.resolve({ data: {} }),
           api.get("/calendar").catch(() => ({ data: { data: [] } })),
           api.get("/timetable/teacher").catch(() => ({ data: { data: [] } })),
+          api.get("/roles/my-roles").catch(() => ({ data: {} })),
+          api.get("/leaves/teacher/pending").catch(() => ({ data: {} })),
         ]);
 
       if (ticketsRes.status === "fulfilled") {
@@ -99,13 +105,21 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
         const tList = ttRes.value.data?.data || ttRes.value.data?.timetable || ttRes.value.data || [];
         setTeacherTimetable(Array.isArray(tList) ? tList : []);
       }
+      if (rolesRes.status === "fulfilled") {
+        const rList = rolesRes.value.data?.data?.assignments || rolesRes.value.data?.data?.roles || [];
+        setMyRoles(Array.isArray(rList) ? rList : []);
+      }
+      if (leavesRes.status === "fulfilled") {
+        const lList = leavesRes.value.data?.data || [];
+        setPendingLeavesCount(Array.isArray(lList) ? lList.length : 0);
+      }
     } catch (err) {
       logError("Teacher Bento Workspace fetch", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [currentUserId]);
 
   useEffect(() => {
     fetchData();
@@ -261,6 +275,74 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
 
       {/* Main Container */}
       <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+        {/* ── Academic Mentorship & Cohort Roles Banner ── */}
+        {myRoles.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-primary/5 to-transparent border border-purple-500/20 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-600/10 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-ink">
+                    Academic Duties & Mentorship
+                  </h4>
+                  {pendingLeavesCount > 0 && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                      {pendingLeavesCount} Leave Review{pendingLeavesCount > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                  {myRoles.map((r, i) => (
+                    <span
+                      key={r._id || i}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-surface border border-line/60 text-ink shadow-2xs"
+                    >
+                      <span className="font-bold text-primary">{r.name}</span>
+                      {r.section ? (
+                        <span className="text-purple-600 font-bold">
+                          • Section {r.section}
+                        </span>
+                      ) : r.branch ? (
+                        <span className="text-indigo-600 font-bold">
+                          • {r.branch}
+                        </span>
+                      ) : (
+                        <span className="text-ink-soft text-[11px] italic">
+                          • Campus-wide
+                        </span>
+                      )}
+                      {(r.course || r.semester) && (
+                        <span className="text-ink-soft text-[11px]">
+                          ({[r.course, r.semester ? `Sem ${r.semester}` : null].filter(Boolean).join(" • ")})
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => navigate("/teacher/leaves")}
+                leftIcon={CalendarDays}
+                className="text-xs"
+              >
+                Review Section Leaves
+                {pendingLeavesCount > 0 && ` (${pendingLeavesCount})`}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {/* ── Row 1: Primary Bento (Today's Classes [2/3] + Attendance Status [1/3]) ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Today's Classes List — 2/3 width, the page's priority */}
@@ -624,10 +706,7 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
               ) : (
                 <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                   {holidays.slice(0, 5).map((h, idx) => {
-                    const dateObj = new Date(h.date || h.startDate);
-                    const monthStr = dateObj.toLocaleDateString("en-US", { month: "short" });
-                    const dayNum = dateObj.toLocaleDateString("en-US", { day: "2-digit" });
-                    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+                    const { month: monthStr, day: dayNum, weekday: dayName } = getDateBadgeParts(h.date || h.startDate);
 
                     return (
                       <div

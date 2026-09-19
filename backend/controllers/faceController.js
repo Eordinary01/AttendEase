@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 const logger = require("../utils/logger");
 const { logActivity } = require("../utils/activityLogger");
 const { toObjectId, escapeRegExp } = require("../utils/sanitize");
+const { toISODateString } = require("../utils/dateFormatter");
 const path = require("path");
 const fs = require("fs");
 
@@ -491,7 +492,7 @@ const markFaceDetection = async (req, res) => {
 
   // --- Build the classSessionId ---
   const day = currentDay;
-  const dateStr = attendanceDate.toISOString().split("T")[0];
+  const dateStr = toISODateString(attendanceDate);
   const classSessionId = `${subjectId}_${section}_${dateStr}_${timetableId}`;
 
   // --- Pre-fetch existing records for this specific timetable slot session (duplicate detection) ---

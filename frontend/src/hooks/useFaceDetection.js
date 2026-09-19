@@ -6,7 +6,7 @@ import {
 } from "../utils/biometricEvalLogger";
 import { evalLogger } from "../utils/biometricEvalLogger";
 
-const UNKNOWN_TIMEOUT_MS = 7000;
+const UNKNOWN_TIMEOUT_MS = 15000;
 const MIN_FACE_WIDTH = 80;
 const MIN_FACE_HEIGHT = 80;
 const LAPLACIAN_HARD_MIN_STANDARD = 14;
@@ -21,10 +21,10 @@ const BLINK_MAX_WINDOW_DISPLACEMENT_PX = 25.0;
 const BLINK_MAX_FACE_DISPLACEMENT_PX = 15.0;
 const BLINK_MAX_MOTION_BLUR_LAP_DROP = 0.45;
 
-const NOSE_STATIONARY_MAX_DISPLACEMENT_PX = 3.5; // Eyelids move, nose tip stays immobile during blink
-const BILATERAL_MAX_DISCREPANCY = 0.05; // Left and right drop ratios must match within 5% (blocks phone tilts)
-const RELATIVE_BLINK_DROP_RATIO = 0.22; // 22% drop relative to individual baseline
-const BASELINE_FLOOR_EAR = 0.190; // Natural floor for narrow/almond eyes
+const NOSE_STATIONARY_MAX_DISPLACEMENT_PX = 5.5; // Relaxed: tolerate micro-postural sway while blocking handheld movement
+const BILATERAL_MAX_DISCREPANCY = 0.10; // Relaxed: 10% asymmetry accommodates natural eyelid variance
+const RELATIVE_BLINK_DROP_RATIO = 0.18; // 18% drop from individual baseline
+const BASELINE_FLOOR_EAR = 0.185; // Natural floor for narrow/almond eyes
 const BASELINE_CEILING_EAR = 0.380;
 
 const SPOOF_HISTORY_FRAMES = 6;
@@ -39,8 +39,8 @@ const BAND_B_THRESHOLD = 0.42;
 const AMBIGUITY_MARGIN_MIN = 0.045;
 const TRACK_MAX_MATCH_DIST_PX = 45;
 const LOCK_MAX_DESCRIPTOR_DRIFT = 0.22;
-const BLINK_PROOF_TTL_MS = 1200;
-const LOCK_DURATION_MS = 15000;
+const BLINK_PROOF_TTL_MS = 6000; // 6.0s: outlasts 3000ms consensus + render jitter without stale spoof banking
+const LOCK_DURATION_MS = 60000; // Extended: 60s lock prevents redundant recompute
 
 const DETECTOR_OPTIONS = (() => {
   try {
@@ -112,11 +112,8 @@ function cleanupTrackState(trackId, refs) {
   refs.faceLockRef.current.delete(trackId);
   refs.baselineEARRef.current.delete(trackId);
   refs.lockDescriptorRef.current.delete(trackId);
-  for (const [sid, lock] of refs.studentLockRef.current.entries()) {
-    if (lock.trackKey === trackId) {
-      refs.studentLockRef.current.delete(sid);
-    }
-  }
+  refs.pendingBlinkProofRef.current.delete(trackId);
+  // Note: studentLockRef entries are kept across track drops until lock.expiresAt
 }
 
 function computeMotionMetrics(validHist, now) {
@@ -210,6 +207,8 @@ export default function useFaceDetection({
   const consensusBufferRef = useRef(new Map());
   const livenessHistoryRef = useRef(new Map());
   const blinkConfirmedRef = useRef(new Map());
+  const pendingBlinkProofRef = useRef(new Map()); // Per-track blink awaiting consensus/verification
+  const sessionLivenessRef = useRef(new Map()); // Identity-scoped session proof (persists across track drops)
   const faceTracksRef = useRef(new Map());
   const faceLockRef = useRef(new Map());
   const baselineEARRef = useRef(new Map());
@@ -221,7 +220,7 @@ export default function useFaceDetection({
   const canvasSizeRef = useRef({ w: 0, h: 0 });
   const nextTrackIdRef = useRef(1);
 
-  const trackRefs = { consensusBufferRef, livenessHistoryRef, unknownTrackerRef, faceLockRef, baselineEARRef, lockDescriptorRef, studentLockRef };
+  const trackRefs = { consensusBufferRef, livenessHistoryRef, unknownTrackerRef, faceLockRef, baselineEARRef, lockDescriptorRef, studentLockRef, pendingBlinkProofRef };
 
   useEffect(() => { knownDescRef.current = knownDescriptors; }, [knownDescriptors]);
   useEffect(() => { markedIdsRef.current = markedIds; }, [markedIds]);
@@ -319,6 +318,7 @@ export default function useFaceDetection({
               const drift = descriptorDistance(t.lastDescriptor, otherT.lastDescriptor);
               if (drift < 0.35) {
                 blinkConfirmedRef.current.set(otherId, blinkConfirmedRef.current.get(tId));
+                pendingBlinkProofRef.current.set(otherId, now);
                 break;
               }
             }
@@ -326,11 +326,20 @@ export default function useFaceDetection({
         }
         faceTracksRef.current.delete(tId);
         blinkConfirmedRef.current.delete(tId);
+        pendingBlinkProofRef.current.delete(tId);
         cleanupTrackState(tId, trackRefs);
       }
     }
     for (const [key, ts] of globalBlinkProofRef.current.entries()) {
       if (now - ts > BLINK_PROOF_TTL_MS) globalBlinkProofRef.current.delete(key);
+    }
+    for (const [key, ts] of pendingBlinkProofRef.current.entries()) {
+      if (now - ts > BLINK_PROOF_TTL_MS) pendingBlinkProofRef.current.delete(key);
+    }
+    for (const [sid, lock] of studentLockRef.current.entries()) {
+      if (now >= lock.expiresAt) {
+        studentLockRef.current.delete(sid);
+      }
     }
 
     if (now - lastDetectStartRef.current < MIN_INFERENCE_INTERVAL_MS) {
@@ -402,10 +411,59 @@ export default function useFaceDetection({
           const trackId = `trk_${nextTrackIdRef.current++}`;
           matchedTrack = { trackId, firstSeen: now, lastSeen: now, centerX: cx, centerY: cy, width: box.width, height: box.height, consecutiveFrames: 1 };
           faceTracksRef.current.set(trackId, matchedTrack);
+
+          // Fast session and student lock reassociation on track creation:
+          // Check if newly detected face matches an active student lock or recently seen session identity
+          for (const [sId, lock] of studentLockRef.current.entries()) {
+            if (now < lock.expiresAt) {
+              const lockedDesc = lockDescriptorRef.current.get(lock.trackKey);
+              const sRec = sessionLivenessRef.current.get(String(sId));
+              const refDesc = lockedDesc || sRec?.lastDescriptor;
+              let descMatch = false;
+              if (det.descriptor && refDesc) {
+                const drift = descriptorDistance(det.descriptor, refDesc);
+                descMatch = drift <= LOCK_MAX_DESCRIPTOR_DRIFT;
+              }
+              const refCx = sRec?.centerX;
+              const refCy = sRec?.centerY;
+              const spatialDist = (refCx !== undefined && refCy !== undefined) ? Math.hypot(cx - refCx, cy - refCy) : Infinity;
+              if (descMatch || (spatialDist < 55 && now - (sRec?.lastSeen || 0) < 3000)) {
+                matchedTrack.lockedStudentId = sId;
+                lock.trackKey = trackId;
+                faceLockRef.current.set(trackId, lock);
+                if (det.descriptor) lockDescriptorRef.current.set(trackId, Array.from(det.descriptor));
+                if (sRec?.provenAt && (now - sRec.provenAt < BLINK_PROOF_TTL_MS)) {
+                  blinkConfirmedRef.current.set(trackId, sRec.provenAt);
+                  pendingBlinkProofRef.current.set(trackId, sRec.provenAt);
+                }
+                break;
+              }
+            }
+          }
+          if (!matchedTrack.lockedStudentId) {
+            for (const [sId, sRec] of sessionLivenessRef.current.entries()) {
+              if (now - (sRec.lastSeen || 0) < 3500) {
+                const spatialDist = Math.hypot(cx - sRec.centerX, cy - sRec.centerY);
+                let descMatch = false;
+                if (det.descriptor && sRec.lastDescriptor) {
+                  const drift = descriptorDistance(det.descriptor, sRec.lastDescriptor);
+                  descMatch = drift <= 0.32;
+                }
+                if (descMatch || (spatialDist < 55 && (!det.descriptor || !sRec.lastDescriptor))) {
+                  matchedTrack.lockedStudentId = sId;
+                  if (sRec.provenAt && (now - sRec.provenAt < BLINK_PROOF_TTL_MS)) {
+                    blinkConfirmedRef.current.set(trackId, sRec.provenAt);
+                    pendingBlinkProofRef.current.set(trackId, sRec.provenAt);
+                  }
+                  break;
+                }
+              }
+            }
+          }
         }
 
         const trackKey = matchedTrack.trackId;
-        if (matchedTrack.consecutiveFrames < 2) continue;
+        if (matchedTrack.consecutiveFrames < 2 && !matchedTrack.lockedStudentId) continue;
 
         const existingLock = faceLockRef.current.get(trackKey) || (matchedTrack.lockedStudentId ? studentLockRef.current.get(matchedTrack.lockedStudentId) : null);
 
@@ -414,7 +472,7 @@ export default function useFaceDetection({
 
           let lockIsDescriptorValid = true;
           if (det.descriptor && det.descriptor.length > 0) {
-            const lockedDesc = lockDescriptorRef.current.get(trackKey);
+            const lockedDesc = lockDescriptorRef.current.get(trackKey) || sessionLivenessRef.current.get(String(existingLock.studentId))?.lastDescriptor;
             if (lockedDesc) {
               const drift = descriptorDistance(det.descriptor, lockedDesc);
               lockIsDescriptorValid = drift <= LOCK_MAX_DESCRIPTOR_DRIFT;
@@ -442,6 +500,7 @@ export default function useFaceDetection({
               studentId: existingLock.studentId, name: existingLock.name, displayName,
               rollNo: existingLock.rollNo || "", section: existingLock.section || "",
               trackKey, status, color, confidence: existingLock.confidence, box,
+              livenessStage: status,
               landmarks: det.landmarks, rawDescriptor: det.descriptor ? Array.from(det.descriptor) : [],
               rawEuclideanDistance: freshDist, medianDistance: parseFloat(freshDist.toFixed(4)),
               consensusFrames: 5, closestCandidate: null,
@@ -503,8 +562,10 @@ export default function useFaceDetection({
           baselineData = { baseline: 0.24, samples: [], leftSamples: [], rightSamples: [], leftBaseline: 0.24, rightBaseline: 0.24 };
           baselineEARRef.current.set(trackKey, baselineData);
         }
-        // Sample baseline whenever face is in good frontal pose and eyes are naturally open (>= 0.185)
-        if (ear.avgEAR >= 0.185 && isGoodPose && baselineData.samples.length < 15) {
+        // Sample baseline whenever face is in good frontal pose and eyes are naturally open (>= 0.185).
+        // Guard: If an early blink dip is occurring, skip sampling to avoid depressing baseline.
+        const isEarlyBlinkDip = (baselineData.samples.length >= 3 && ear.avgEAR < (baselineData.baseline || 0.24) * 0.84);
+        if (ear.avgEAR >= 0.185 && isGoodPose && !isEarlyBlinkDip && baselineData.samples.length < 15) {
           baselineData.samples.push(ear.avgEAR);
           baselineData.leftSamples.push(ear.leftEAR || ear.avgEAR);
           baselineData.rightSamples.push(ear.rightEAR || ear.avgEAR);
@@ -514,7 +575,7 @@ export default function useFaceDetection({
           baselineData.leftBaseline = parseFloat((sumL / baselineData.leftSamples.length).toFixed(4));
           const sumR = baselineData.rightSamples.reduce((a, b) => a + b, 0);
           baselineData.rightBaseline = parseFloat((sumR / baselineData.rightSamples.length).toFixed(4));
-        } else if (ear.avgEAR >= baselineData.baseline * 0.85 && isGoodPose && baselineData.samples.length >= 15) {
+        } else if (ear.avgEAR >= baselineData.baseline * 0.85 && isGoodPose && !isEarlyBlinkDip && baselineData.samples.length >= 15) {
           baselineData.baseline = parseFloat((0.95 * baselineData.baseline + 0.05 * ear.avgEAR).toFixed(4));
           baselineData.leftBaseline = parseFloat((0.95 * baselineData.leftBaseline + 0.05 * (ear.leftEAR || ear.avgEAR)).toFixed(4));
           baselineData.rightBaseline = parseFloat((0.95 * baselineData.rightBaseline + 0.05 * (ear.rightEAR || ear.avgEAR)).toFixed(4));
@@ -568,18 +629,18 @@ export default function useFaceDetection({
         const leftDropRatio = currentLeftBase > 0 ? leftDropAmount / currentLeftBase : 0;
         const rightDropRatio = currentRightBase > 0 ? rightDropAmount / currentRightBase : 0;
 
-        const isBilateralDrop = leftDropRatio >= 0.18 && rightDropRatio >= 0.18;
-        const isBilateralSymmetric = Math.abs(leftDropRatio - rightDropRatio) <= BILATERAL_MAX_DISCREPANCY;
-
         const dropAmount = currentBaseline - minEAR;
         const dropRatio = currentBaseline > 0 ? dropAmount / currentBaseline : 0;
+
+        const isBilateralDrop = (leftDropRatio >= 0.15 && rightDropRatio >= 0.15) || (dropRatio >= 0.18 && leftDropRatio >= 0.12 && rightDropRatio >= 0.12);
+        const isBilateralSymmetric = Math.abs(leftDropRatio - rightDropRatio) <= BILATERAL_MAX_DISCREPANCY;
 
         const faceDispX = matchedTrack.prevCenterX !== undefined ? Math.abs(cx - matchedTrack.prevCenterX) : 0;
         const faceDispY = matchedTrack.prevCenterY !== undefined ? Math.abs(cy - matchedTrack.prevCenterY) : 0;
         const currentFaceDisp = Math.hypot(faceDispX, faceDispY);
         const isInstantMotionFree = currentFaceDisp < BLINK_MAX_FACE_DISPLACEMENT_PX;
 
-        // Relative closed-eye state: 22% dip from person's baseline OR absolute <= 0.185
+        // Relative closed-eye state: 18% dip from person's baseline OR absolute <= 0.185
         const reachedClosedEyeState = (minEAR <= currentBaseline * (1 - RELATIVE_BLINK_DROP_RATIO)) || (minEAR <= 0.185 && dropRatio >= 0.20);
         const hadOpenEyeBaseline = currentBaseline >= BASELINE_FLOOR_EAR && maxEAR >= (BASELINE_FLOOR_EAR + 0.01);
         const hasSignificantDrop = dropAmount >= 0.028 || dropRatio >= 0.18;
@@ -600,9 +661,30 @@ export default function useFaceDetection({
 
         if (isTrueBlink) {
           blinkConfirmedRef.current.set(trackKey, now);
+          pendingBlinkProofRef.current.set(trackKey, now); // mark pending proof for current/new tracks
+          globalBlinkProofRef.current.set(trackKey, now); // persist blink proof independently of track lifetime
+          if (matchedTrack.lockedStudentId) {
+            const sIdStr = String(matchedTrack.lockedStudentId);
+            const sRec = sessionLivenessRef.current.get(sIdStr) || {};
+            sessionLivenessRef.current.set(sIdStr, {
+              ...sRec,
+              studentId: matchedTrack.lockedStudentId,
+              provenAt: now,
+              lastSeen: now,
+              centerX: cx,
+              centerY: cy,
+            });
+          }
         }
 
-        const lastBlinkTimeCheck = blinkConfirmedRef.current.get(trackKey) || 0;
+        const candidateSessionRec = matchedTrack.lockedStudentId ? sessionLivenessRef.current.get(String(matchedTrack.lockedStudentId)) : null;
+        const lastSessionBlinkTime = candidateSessionRec?.provenAt || 0;
+        const lastBlinkTimeCheck = Math.max(
+          blinkConfirmedRef.current.get(trackKey) || 0,
+          pendingBlinkProofRef.current.get(trackKey) || 0,
+          globalBlinkProofRef.current.get(trackKey) || 0,
+          lastSessionBlinkTime
+        );
         const hasBlinked = (now - lastBlinkTimeCheck < BLINK_PROOF_TTL_MS);
         // Live open-eyes gate: Living open eyes produce EAR >= 0.185.
         // If EAR < 0.185 and no dynamic blink transition (earRange < 0.030), face has closed/sleeping eyes.
@@ -621,20 +703,10 @@ export default function useFaceDetection({
         const faceLock = faceLockRef.current.get(trackKey);
         const isFaceLocked = faceLock && now < faceLock.expiresAt;
 
-        // Multi-face gate: when 2+ faces present, only faces with blink proof can match
-        const lastBlinkTime = blinkConfirmedRef.current.get(trackKey) || 0;
-        const hasTrackBlinkProof = (now - lastBlinkTime < BLINK_PROOF_TTL_MS);
-        const multiFaceGateActive = currentFaceCount >= 2 && !isLocked && !isFaceLocked;
-
         if (!isLocked && !isFaceLocked && det.descriptor && det.descriptor.length > 0) {
-          if (multiFaceGateActive && !hasTrackBlinkProof) {
-            // Multi-face without blink proof: show waiting state, don't match
-            matchResult = null;
-          } else {
-            matchResult = matchDescriptor(det.descriptor);
-            matchedTrack.lastMatchResult = matchResult;
-            matchedTrack.lastDescriptorTime = now;
-          }
+          matchResult = matchDescriptor(det.descriptor);
+          matchedTrack.lastMatchResult = matchResult;
+          matchedTrack.lastDescriptorTime = now;
         }
 
         const singleFrameMatch = matchResult?.bestMatch || null;
@@ -677,7 +749,17 @@ export default function useFaceDetection({
 
           if (dominantCount >= 2 && isBandB && marginOk) {
             const candidateMatch = dominantVotes[0]?.match;
-            if (hasBlinked) {
+            const candidateStudentId = candidateMatch?.studentId;
+            const isCandidateAlreadyMarked =
+              candidateStudentId &&
+              markedIdsRef.current &&
+              (markedIdsRef.current.has(candidateStudentId) || markedIdsRef.current.has(String(candidateStudentId)));
+
+            // Session liveness continuity check
+            const sessionRec = candidateStudentId ? sessionLivenessRef.current.get(String(candidateStudentId)) : null;
+            const hasSessionLiveness = sessionRec && (now - sessionRec.provenAt < BLINK_PROOF_TTL_MS);
+
+            if (hasBlinked || hasSessionLiveness || (isCandidateAlreadyMarked && isBandA)) {
               if (isBandA && dominantCount >= 2) {
                 match = candidateMatch;
               } else if (dominantCount >= 3) {
@@ -692,6 +774,7 @@ export default function useFaceDetection({
         }
 
         let status = "scanning";
+        let livenessStage = "scanning";
         let color = "#38bdf8";
         let studentId = null;
         let confidence = 0;
@@ -700,10 +783,21 @@ export default function useFaceDetection({
         if (!livenessPassed) {
           status = "scanning";
           color = "#f59e0b";
-          if (isStaticSpoof) displayName = "✖ Static photo / shake detected";
-          else if (!hasOpenEyes) displayName = "👁 Open Eyes / Face Camera";
-          else if (!isSharpEnough) displayName = "Scanning — Hold still / check lighting";
-          else displayName = "Scanning Face...";
+          if (isStaticSpoof) {
+            status = "unrecognized";
+            livenessStage = "unrecognized";
+            displayName = "✖ Static photo / shake detected";
+            color = "#ef4444";
+          } else if (!hasOpenEyes) {
+            livenessStage = "awaiting_blink";
+            displayName = "👁 Open Eyes / Face Camera";
+          } else if (!isSharpEnough) {
+            livenessStage = "scanning";
+            displayName = "Scanning — Hold still / check lighting";
+          } else {
+            livenessStage = "scanning";
+            displayName = "Scanning Face...";
+          }
         } else if (match) {
           studentId = match.studentId;
           confidence = match.confidence;
@@ -713,10 +807,12 @@ export default function useFaceDetection({
 
           if (isAlreadyMarked) {
             status = "already_marked";
+            livenessStage = "already_marked";
             color = "#10b981";
             displayName = `✓ ${match.name} (Marked)`;
           } else {
             status = "verified";
+            livenessStage = "verified";
             color = "#22c55e";
             displayName = `✓ ${match.name} (${Math.round(confidence * 100)}%)`;
           }
@@ -727,14 +823,32 @@ export default function useFaceDetection({
             lockDescriptorRef.current.set(trackKey, det.descriptor ? Array.from(det.descriptor) : null);
             studentLockRef.current.set(match.studentId, { studentId: match.studentId, name: match.name, rollNo: match.rollNo || "", section: match.section || "", confidence: match.confidence, lockedAt: now, expiresAt: now + LOCK_DURATION_MS, trackKey });
           }
+
+          // Persist identity into session continuity registry
+          sessionLivenessRef.current.set(sIdStr, {
+            studentId: match.studentId,
+            name: match.name,
+            rollNo: match.rollNo || "",
+            section: match.section || "",
+            confidence: match.confidence,
+            lastDescriptor: det.descriptor ? Array.from(det.descriptor) : null,
+            centerX: cx,
+            centerY: cy,
+            lastSeen: now,
+            provenAt: now,
+            isMarked: isAlreadyMarked,
+          });
+
           unknownTrackerRef.current.delete(trackKey);
         } else if (consensusPendingBlink) {
           if (hasBlinked) {
             status = "scanning";
+            livenessStage = "blink_confirmed";
             color = "#f59e0b";
             displayName = "✓ Blink detected — Verifying identity...";
           } else {
             status = "scanning";
+            livenessStage = "awaiting_blink";
             color = "#38bdf8";
             displayName = "👁 Live Face Required — Please Blink";
           }
@@ -747,12 +861,19 @@ export default function useFaceDetection({
           const hasLikelyCandidate = closestCandidate && closestCandidate.distance < 0.50;
           if (timeUnmatched > UNKNOWN_TIMEOUT_MS && !hasLikelyCandidate) {
             status = "unrecognized";
+            livenessStage = "unrecognized";
             color = "#ef4444";
             displayName = "✖ Unrecognized Face";
+          } else if (hasBlinked) {
+            status = "scanning";
+            livenessStage = "blink_confirmed";
+            color = "#f59e0b";
+            displayName = "✓ Blink detected — Verifying identity...";
           } else {
             status = "scanning";
-            color = "#f59e0b";
-            displayName = "Scanning Face...";
+            livenessStage = "awaiting_blink";
+            color = "#38bdf8";
+            displayName = "👁 Live Face Required — Please Blink";
           }
         }
 
@@ -763,6 +884,7 @@ export default function useFaceDetection({
           rollNo: match?.rollNo || "",
           section: match?.section || "",
           trackKey, status, color, confidence, box,
+          livenessStage,
           landmarks: det.landmarks,
           rawDescriptor: det.descriptor ? Array.from(det.descriptor) : [],
           rawEuclideanDistance: rawDistance,
@@ -888,6 +1010,8 @@ export default function useFaceDetection({
     faceLockRef.current.clear();
     baselineEARRef.current.clear();
     globalBlinkProofRef.current.clear();
+    pendingBlinkProofRef.current.clear();
+    sessionLivenessRef.current.clear();
     studentLockRef.current.clear();
     lockDescriptorRef.current.clear();
     unknownTrackerRef.current.clear();

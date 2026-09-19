@@ -8,6 +8,8 @@
  * produced by this logger without assumptions, estimates, or synthetic extrapolation.
  */
 
+import { getLocalTodayStr } from "./dateUtils";
+
 // Helper to compute Eye Aspect Ratio (EAR) from 68-point landmarks
 export function computeEAR(landmarks) {
   if (!landmarks || !landmarks.positions || landmarks.positions.length < 68) {
@@ -216,7 +218,7 @@ class BiometricEvalLogger {
     return this.sessionMeta;
   }
 
-  downloadSessionMeta(filename = `biometric_eval_sessions_${new Date().toISOString().slice(0, 10)}.json`) {
+  downloadSessionMeta(filename = `biometric_eval_sessions_${getLocalTodayStr()}.json`) {
     const content = JSON.stringify(this.sessionMeta, null, 2);
     const blob = new Blob([content], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -340,7 +342,7 @@ class BiometricEvalLogger {
     return [headers.join(","), ...rows].join("\n");
   }
 
-  downloadCSV(filename = `biometric_eval_raw_log_${new Date().toISOString().slice(0, 10)}.csv`) {
+  downloadCSV(filename = `biometric_eval_raw_log_${getLocalTodayStr()}.csv`) {
     const csvContent = this.exportCSV();
     if (!csvContent) return false;
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });

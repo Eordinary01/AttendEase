@@ -28,6 +28,10 @@ import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
 import Modal from "../common/ui/Modal";
 import { Input, Select, Textarea } from "../common/ui/Input";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
+import { formatDateReadable, formatDateTime, getDateBadgeParts, getLocalTodayStr } from "../../utils/dateUtils";
+import AtRiskGauge from "./AtRiskGauge";
+import { useNotifications } from "../../contexts/NotificationContext";
 
 function hexToRgbStr(hex = "#6366f1") {
   const h = hex.replace("#", "");
@@ -49,18 +53,19 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
   };
 
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
+  const currentUserId = localStorage.getItem("userId") || localStorage.getItem("token");
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Data states
+  const { alerts = [] } = useNotifications();
   const [profile, setProfile] = useState(null);
   const [attendance, setAttendance] = useState(null);
+  const [deficitTrajectory, setDeficitTrajectory] = useState(null);
   const [subjectStats, setSubjectStats] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [alerts, setAlerts] = useState([]);
   const [timetable, setTimetable] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [enrolledSubjects, setEnrolledSubjects] = useState([]);
@@ -75,19 +80,19 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
   const [ticketForm, setTicketForm] = useState({
     subjectId: "",
     reasonDescription: "",
-    absenceDate: new Date().toISOString().split("T")[0],
+    absenceDate: getLocalTodayStr(),
     files: [],
   });
   const [submittingTicket, setSubmittingTicket] = useState(false);
 
   // ── Fetch All Data ─────────────────────────────────────────────────────────
   const fetchData = useCallback(async (isSilent = false) => {
-    if (!token) return;
+    if (!currentUserId) return;
     try {
       if (!isSilent) setLoading(true);
       else setRefreshing(true);
 
-      const [profRes, attRes, tickRes, alertRes, calRes, subRes] =
+      const [profRes, attRes, tickRes, alertRes, calRes, subRes, trajRes] =
         await Promise.allSettled([
           api.get("/users/profile"),
           api.get("/attendance/student/stats").catch(() => api.get("/attendance/stats")),
@@ -95,6 +100,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
           api.get("/alerts"),
           api.get("/calendar").catch(() => ({ data: { data: [] } })),
           api.get("/subjects/student/enrolled").catch(() => api.get("/subjects/all")),
+          api.get("/attendance/analytics/deficit").catch(() => null),
         ]);
 
       let userSec = "A";
@@ -115,6 +121,10 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
         setSubjectStats(Array.isArray(statsList) ? statsList : []);
       }
 
+      if (trajRes && trajRes.status === "fulfilled" && trajRes.value?.data?.data) {
+        setDeficitTrajectory(trajRes.value.data.data);
+      }
+
       if (tickRes.status === "fulfilled") {
         const tData = tickRes.value.data;
         setTickets(
@@ -126,11 +136,6 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
             ? tData
             : []
         );
-      }
-
-      if (alertRes.status === "fulfilled") {
-        const aList = alertRes.value.data?.data || alertRes.value.data || [];
-        setAlerts(Array.isArray(aList) ? aList : []);
       }
 
       if (calRes.status === "fulfilled") {
@@ -162,7 +167,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [currentUserId]);
 
   useEffect(() => {
     fetchData();
@@ -335,7 +340,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
       setTicketForm({
         subjectId: "",
         reasonDescription: "",
-        absenceDate: new Date().toISOString().split("T")[0],
+        absenceDate: getLocalTodayStr(),
         files: [],
       });
       fetchData(true);
@@ -350,15 +355,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
   if (loading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div
-            className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto"
-            style={{ borderColor: `${primary}30`, borderTopColor: primary }}
-          />
-          <p className="text-xs font-semibold text-ink-soft tracking-wider uppercase">
-            Loading Workspace...
-          </p>
-        </div>
+        <UniversalSpinner size="lg" label="Loading Workspace..." />
       </div>
     );
   }
@@ -401,6 +398,19 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
 
       {/* Main Container */}
       <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+        {/* Phase 9: 75% Attendance Deficit Trajectory & Early Warning */}
+        <AtRiskGauge
+          riskLevel={
+            deficitTrajectory?.riskLevel ||
+            (overallPercent === null ? "no-data" : overallPercent >= 75 ? "good" : overallPercent >= 65 ? "warning" : "critical")
+          }
+          attendancePercentage={deficitTrajectory?.attendancePercentage ?? (overallPercent || 0)}
+          classesRequired={deficitTrajectory?.classesRequired ?? (overallPercent !== null && overallPercent < 75 ? Math.max(0, Math.ceil((0.75 * (totalClasses || 60) - (attendedClasses || 0)) / 0.25)) : 0)}
+          remainingClasses={deficitTrajectory?.remainingClasses ?? Math.max(0, (deficitTrajectory?.projectedClasses || 60) - (totalClasses || 0))}
+          alertMessage={deficitTrajectory?.alertMessage}
+          isMathematicallyImpossible={deficitTrajectory?.isMathematicallyImpossible}
+        />
+
         {/* ── Row 1: Primary Bento (Attendance Hero [2/3] + Today's Schedule [1/3]) ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Attendance Hero Card — 2/3 width, the page's priority */}
@@ -635,10 +645,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
               ) : (
                 <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                   {holidays.slice(0, 5).map((h, idx) => {
-                    const dateObj = new Date(h.date || h.startDate);
-                    const monthStr = dateObj.toLocaleDateString("en-US", { month: "short" });
-                    const dayNum = dateObj.toLocaleDateString("en-US", { day: "2-digit" });
-                    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+                    const { month: monthStr, day: dayNum, weekday: dayName } = getDateBadgeParts(h.date || h.startDate);
 
                     return (
                       <div
@@ -711,12 +718,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
                           {a.title || "Institution Notice"}
                         </h4>
                         <span className="text-[10px] text-ink-faint shrink-0">
-                          {a.createdAt
-                            ? new Date(a.createdAt).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                              })
-                            : "Recent"}
+                          {formatDateReadable(a.createdAt, false, "Recent")}
                         </span>
                       </div>
                       <p className="text-[11px] text-ink-soft line-clamp-2 leading-relaxed">
@@ -730,7 +732,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
 
             {alerts.length > 4 && (
               <button
-                onClick={() => setSelectedNotice(alerts[0])}
+                onClick={() => navigate("/student/alerts")}
                 className="text-xs text-primary font-semibold hover:underline text-left pt-2 border-t border-line/40"
               >
                 View all {alerts.length} notices →
@@ -801,13 +803,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
                         </p>
                         <div className="flex items-center justify-between text-[11px] text-ink-soft">
                           <span>
-                            {t.absentDate
-                              ? new Date(t.absentDate).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                              : "Date specified"}
+                            {formatDateReadable(t.absentDate, false, "Date specified")}
                           </span>
                           {t.proofDocuments && t.proofDocuments.length > 0 && (
                             <button
@@ -908,8 +904,7 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
       >
         <div className="space-y-3">
           <p className="text-xs text-ink-faint">
-            Published on{" "}
-            {selectedNotice?.createdAt ? new Date(selectedNotice.createdAt).toLocaleString() : ""}
+            Published on {formatDateTime(selectedNotice?.createdAt, "")}
           </p>
           <div className="p-4 bg-background rounded-2xl border border-line text-xs text-ink leading-relaxed whitespace-pre-wrap">
             {selectedNotice?.message}

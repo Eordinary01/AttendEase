@@ -23,6 +23,7 @@ import {
   Loader2,
   Shield,
   Upload,
+  Plus,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Button from "../common/ui/Button";
@@ -98,6 +99,19 @@ const ManageTeachers = () => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [teacherRoles, setTeacherRoles] = useState([]);
 
+  // Academic Structure & Scoping State for Custom Roles (Option B)
+  const [courses, setCourses] = useState([]);
+  const [activeSectionsList, setActiveSectionsList] = useState([]);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignRoleId, setAssignRoleId] = useState("");
+  const [isBeyondClass, setIsBeyondClass] = useState(false);
+  const [assignCourseId, setAssignCourseId] = useState("");
+  const [assignBranch, setAssignBranch] = useState("");
+  const [assignSemester, setAssignSemester] = useState("1");
+  const [assignSection, setAssignSection] = useState("A");
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignError, setAssignError] = useState("");
+
   const { modalProps, openUpgradeForError } = useUpgradeModal();
 
   const [formData, setFormData] = useState({
@@ -120,6 +134,7 @@ const ManageTeachers = () => {
     fetchTenantInfo();
     fetchTeachers();
     fetchRoles();
+    fetchAcademicData();
   }, []);
 
   useEffect(() => {
@@ -140,6 +155,27 @@ const ManageTeachers = () => {
       }
     } catch (error) {
       logError("Fetch Tenant Info", error);
+    }
+  };
+
+  const fetchAcademicData = async () => {
+    try {
+      const [coursesRes, sectionsRes] = await Promise.all([
+        api.get("/academic/courses").catch(() => ({ data: { data: [] } })),
+        api.get("/admin/active-sections").catch(() => ({ data: { data: [] } })),
+      ]);
+
+      const courseList = coursesRes.data?.data || [];
+      setCourses(courseList);
+
+      const activeSecList = sectionsRes.data?.data || sectionsRes.data?.sections || [];
+      const combinedSections = [...new Set([...activeSecList, "A", "B", "C", "D", "E"])]
+        .filter(Boolean)
+        .map(s => String(s).toUpperCase())
+        .sort();
+      setActiveSectionsList(combinedSections);
+    } catch (err) {
+      logError("Fetch Academic Data", err);
     }
   };
 
@@ -186,25 +222,101 @@ const ManageTeachers = () => {
     }
   };
 
-  const handleAssignRole = async (roleId) => {
-    if (!selectedTeacher) return;
-    try {
-      await api.post('/roles/assign', {
-        teacherId: selectedTeacher._id,
-        roleId,
-      });
-      fetchTeacherRoles(selectedTeacher._id);
-      setSuccessMessage("Role assigned successfully");
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to assign role");
+  const openAssignRoleModal = (roleId = "", teacher = null) => {
+    setAssignError("");
+    if (teacher) {
+      setSelectedTeacher(teacher);
+      fetchTeacherRoles(teacher._id);
+    } else if (!selectedTeacher && teachers.length > 0) {
+      setSelectedTeacher(teachers[0]);
+      fetchTeacherRoles(teachers[0]._id);
+    }
+    if (availableRoles.length === 0) {
+      fetchRoles();
+    }
+    const chosenRoleId = roleId || availableRoles[0]?._id || "";
+    setAssignRoleId(chosenRoleId);
+
+    const role = availableRoles.find(r => r._id === chosenRoleId);
+    const isBroadRole = role ? /hod|head|dean|director|coordinator|controller|proctor/i.test(role.name) : false;
+    setIsBeyondClass(isBroadRole);
+
+    const defaultCourse = courses[0];
+    setAssignCourseId(defaultCourse?._id || "");
+    setAssignBranch(defaultCourse?.branches?.[0]?.name || "");
+    setAssignSemester(isBroadRole ? "" : "1");
+    setAssignSection(isBroadRole ? "" : (activeSectionsList[0] || "A"));
+    setAssignModalOpen(true);
+  };
+
+  const handleRoleSelectionChange = (newRoleId) => {
+    setAssignRoleId(newRoleId);
+    const role = availableRoles.find(r => r._id === newRoleId);
+    if (role) {
+      const isBroadRole = /hod|head|dean|director|coordinator|controller|proctor/i.test(role.name);
+      setIsBeyondClass(isBroadRole);
+      if (isBroadRole) {
+        setAssignSection("");
+        setAssignSemester("");
+      } else {
+        if (!assignSemester) setAssignSemester("1");
+        if (!assignSection) setAssignSection(activeSectionsList[0] || "A");
+      }
     }
   };
 
-  const handleUnassignRole = async (roleId) => {
+  const handleCourseSelectionChange = (newCourseId) => {
+    setAssignCourseId(newCourseId);
+    const course = courses.find(c => c._id === newCourseId);
+    const firstBranch = course?.branches?.[0]?.name || "";
+    setAssignBranch(firstBranch);
+    if (!isBeyondClass) {
+      setAssignSemester("1");
+    }
+  };
+
+  const handleConfirmAssignRole = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedTeacher || !assignRoleId) return;
+    if (!isBeyondClass && !assignSection) {
+      setAssignError("Please select an academic section for this class role.");
+      return;
+    }
+
+    try {
+      setAssignLoading(true);
+      setAssignError("");
+      await api.post('/roles/assign', {
+        teacherId: selectedTeacher._id,
+        roleId: assignRoleId,
+        courseId: assignCourseId || null,
+        branch: assignBranch || "",
+        semester: assignSemester ? Number(assignSemester) : null,
+        section: isBeyondClass ? "" : assignSection.trim().toUpperCase(),
+        isPrimary: !isBeyondClass,
+      });
+
+      fetchTeacherRoles(selectedTeacher._id);
+      fetchTeachers();
+      setAssignModalOpen(false);
+      setSuccessMessage("Role and academic duties assigned successfully");
+    } catch (err) {
+      setAssignError(err.response?.data?.message || "Failed to assign role");
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const handleUnassignRole = async (roleId, assignmentId, section) => {
     if (!selectedTeacher) return;
     try {
-      await api.delete(`/roles/assign/${selectedTeacher._id}/${roleId}`);
+      const params = new URLSearchParams();
+      if (assignmentId) params.append("assignmentId", assignmentId);
+      if (section) params.append("section", section);
+      const queryStr = params.toString() ? `?${params.toString()}` : "";
+      await api.delete(`/roles/assign/${selectedTeacher._id}/${roleId || assignmentId}${queryStr}`);
       fetchTeacherRoles(selectedTeacher._id);
+      fetchTeachers();
       setSuccessMessage("Role unassigned successfully");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to unassign role");
@@ -414,14 +526,50 @@ const ManageTeachers = () => {
       ),
     },
     {
-      header: "Roles",
+      header: "Roles & Duties",
       cell: (row) => {
-        const assignedCount = row.customRoles?.length || 0;
+        const assigned = row.customRoles || [];
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-background border border-line/50 text-ink-soft">
-            <Shield className="w-3 h-3 text-primary" />
-            {assignedCount > 0 ? `${assignedCount} role${assignedCount > 1 ? 's' : ''}` : 'None'}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+            {assigned.length > 0 ? (
+              assigned.map((cr, idx) => (
+                <span
+                  key={cr._id || idx}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20"
+                >
+                  <Shield className="w-2.5 h-2.5" />
+                  {cr.roleId?.name || "Role"}
+                  {cr.section ? (
+                    <span className="text-[10px] bg-primary/20 px-1 rounded">
+                      Sec {cr.section}
+                    </span>
+                  ) : cr.branch ? (
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-600 px-1 rounded">
+                      {cr.branch}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-surface-alt px-1 rounded text-ink-soft">
+                      Campus
+                    </span>
+                  )}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-ink-faint italic">No roles</span>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openAssignRoleModal("", row);
+              }}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-surface border border-line text-ink-soft hover:text-primary hover:border-primary/40 transition cursor-pointer"
+              title="Assign another role"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              Assign
+            </button>
+          </div>
         );
       },
     },
@@ -429,6 +577,13 @@ const ManageTeachers = () => {
       header: "Actions",
       cell: (row) => (
         <div className="flex items-center gap-1.5 justify-end">
+          <button
+            onClick={() => openAssignRoleModal("", row)}
+            className="p-1.5 hover:bg-primary/10 rounded-lg text-primary hover:text-primary-dark transition cursor-pointer"
+            title="Assign Role & Academic Duties (Mentor / Advisor)"
+          >
+            <Shield className="w-4 h-4 text-primary" />
+          </button>
           <button
             onClick={() => viewTeacherDetails(row)}
             className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
@@ -474,6 +629,14 @@ const ManageTeachers = () => {
         meta={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your campus"}`}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={Shield}
+              onClick={() => openAssignRoleModal()}
+            >
+              Assign Role / Duties
+            </Button>
             <Button
               variant="subtle"
               size="sm"
@@ -644,33 +807,77 @@ const ManageTeachers = () => {
             </div>
 
             <div className="p-4 bg-background rounded-2xl border border-line/50">
-              <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-primary" />
-                Administrative Roles
-              </p>
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  Administrative Roles & Academic Duties
+                </p>
+                {availableRoles.length > 0 && (
+                  <button
+                    onClick={() => openAssignRoleModal()}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:text-primary/80 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Assign Role
+                  </button>
+                )}
+              </div>
+
               {teacherRoles.length > 0 ? (
-                <div className="space-y-1.5 mb-3">
+                <div className="space-y-2 mb-3">
                   {teacherRoles.map(tr => (
-                    <div key={tr._id} className="flex items-center justify-between p-2 bg-surface rounded-xl border border-line/50">
-                      <div>
-                        <p className="text-xs font-bold text-ink">{tr.roleId?.name || "Role"}</p>
-                        {tr.roleId?.description && <p className="text-[11px] text-ink-soft">{tr.roleId.description}</p>}
+                    <div key={tr._id} className="p-3 bg-surface rounded-xl border border-line/50 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-ink">{tr.roleId?.name || "Role"}</p>
+                          {tr.isPrimary && (
+                            <Badge tone="purple" size="sm">Primary</Badge>
+                          )}
+                          {tr.section && (
+                            <Badge tone="primary" size="sm">Section {tr.section}</Badge>
+                          )}
+                          {tr.courseId && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              {tr.courseId?.code || tr.courseId?.name}
+                            </span>
+                          )}
+                          {tr.branch && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              {tr.branch}
+                            </span>
+                          )}
+                          {tr.semester && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              Sem {tr.semester}
+                            </span>
+                          )}
+                        </div>
+                        {tr.roleId?.description && (
+                          <p className="text-[11px] text-ink-soft mt-0.5 truncate">{tr.roleId.description}</p>
+                        )}
                       </div>
-                      <button onClick={() => handleUnassignRole(tr.roleId?._id)} className="p-1 hover:bg-rose-500/10 text-rose-500 rounded-lg transition cursor-pointer" title="Remove role">
+                      <button
+                        onClick={() => handleUnassignRole(tr.roleId?._id, tr._id, tr.section)}
+                        className="p-1.5 hover:bg-rose-500/10 text-rose-500 rounded-lg transition cursor-pointer shrink-0"
+                        title="Remove role assignment"
+                      >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-ink-soft mb-3">No additional administrative roles assigned.</p>
+                <p className="text-xs text-ink-soft mb-3">No administrative or cohort roles assigned yet.</p>
               )}
+
               {availableRoles.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-bold text-ink-faint uppercase mb-1.5">Assign Role:</p>
+                  <p className="text-[11px] font-bold text-ink-faint uppercase mb-1.5">Quick Assign:</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {availableRoles.filter(r => !teacherRoles.some(tr => tr.roleId?._id === r._id)).map(role => (
-                      <button key={role._id} onClick={() => handleAssignRole(role._id)}
+                    {availableRoles.map(role => (
+                      <button
+                        key={role._id}
+                        onClick={() => openAssignRoleModal(role._id)}
                         className="px-2.5 py-1 bg-surface border border-primary/30 text-primary hover:bg-primary/10 rounded-lg text-xs font-bold transition cursor-pointer"
                       >
                         + {role.name}
@@ -705,6 +912,269 @@ const ManageTeachers = () => {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Role Assignment & Academic Scoping Modal (Option B) */}
+      <Modal
+        isOpen={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        title={selectedTeacher ? `Assign Role: ${selectedTeacher.name}` : "Assign Role"}
+        size="md"
+      >
+        <form onSubmit={handleConfirmAssignRole} className="space-y-4 pt-1">
+          {assignError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-semibold">
+              {assignError}
+            </div>
+          )}
+
+          {/* Faculty Member Selector */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-soft mb-1">
+              Faculty Member *
+            </label>
+            <Select
+              value={selectedTeacher?._id || ""}
+              onChange={(e) => {
+                const found = teachers.find(t => t._id === e.target.value);
+                setSelectedTeacher(found || null);
+                if (found) fetchTeacherRoles(found._id);
+              }}
+              className="text-xs"
+              required
+            >
+              <option value="">-- Choose Faculty Member --</option>
+              {teachers.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.name} ({t.email})
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-soft mb-1">
+              Select Role *
+            </label>
+            <Select
+              value={assignRoleId}
+              onChange={(e) => handleRoleSelectionChange(e.target.value)}
+              className="text-xs"
+              required
+            >
+              <option value="">-- Choose Role --</option>
+              {availableRoles.map((r) => (
+                <option key={r._id} value={r._id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {teacherRoles.length > 0 && (
+            <div className="p-3 bg-surface-alt/40 rounded-xl border border-line/60 space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">
+                Currently Assigned Duties for this Faculty
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {teacherRoles.map((tr) => (
+                  <span
+                    key={tr._id}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs bg-surface border border-line text-ink"
+                  >
+                    <Shield className="w-3 h-3 text-primary" />
+                    <span className="font-semibold">{tr.roleId?.name || "Role"}</span>
+                    {tr.section ? (
+                      <span className="text-[10px] font-bold bg-primary/10 text-primary px-1 rounded">
+                        Sec {tr.section}
+                      </span>
+                    ) : tr.branch ? (
+                      <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 px-1 rounded">
+                        {tr.branch}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-ink-soft italic">Campus-wide</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleUnassignRole(tr.roleId?._id, tr._id, tr.section)}
+                      className="text-rose-500 hover:text-rose-700 ml-1 p-0.5 hover:bg-rose-500/10 rounded cursor-pointer"
+                      title="Unassign this duty"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3.5 bg-surface-alt/50 rounded-xl border border-line/60 space-y-3">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isBeyondClass}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsBeyondClass(checked);
+                  if (checked) {
+                    setAssignSection("");
+                    setAssignSemester("");
+                  } else {
+                    if (!assignSemester) setAssignSemester("1");
+                    if (!assignSection) setAssignSection(activeSectionsList[0] || "A");
+                  }
+                }}
+                className="mt-0.5 rounded border-line text-primary focus:ring-primary h-4 w-4"
+              />
+              <div>
+                <span className="text-xs font-bold text-ink">
+                  Role applies beyond a single class (Department / Institution-wide)
+                </span>
+                <p className="text-[11px] text-ink-soft mt-0.5">
+                  Enable this for broad leadership roles like HOD, Deputy HOD, Dean, or Coordinator.
+                  Leave unchecked for class-specific roles like Academic Mentor or Class Advisor.
+                </p>
+              </div>
+            </label>
+
+            <div className="space-y-3 pt-2.5 border-t border-line/50">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                  isBeyondClass
+                    ? "bg-indigo-500/10 text-indigo-600 border border-indigo-500/20"
+                    : "bg-primary/10 text-primary border border-primary/20"
+                }`}>
+                  {isBeyondClass ? "Department / Institution-wide Scope" : "Class / Section Scope"}
+                </span>
+              </div>
+
+              {/* Course Dropdown */}
+              <div>
+                <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                  Course / Program {!isBeyondClass && "*"}
+                </label>
+                <Select
+                  value={assignCourseId}
+                  onChange={(e) => handleCourseSelectionChange(e.target.value)}
+                  className="text-xs"
+                  required={!isBeyondClass}
+                >
+                  <option value="">{isBeyondClass ? "All Programs / Campus-wide" : "-- Choose Course --"}</option>
+                  {courses.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name} {c.code ? `(${c.code})` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Branch & Semester Dropdowns */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    {isBeyondClass ? "Department / Branch" : "Branch / Stream"}
+                  </label>
+                  <Select
+                    value={assignBranch}
+                    onChange={(e) => setAssignBranch(e.target.value)}
+                    className="text-xs"
+                  >
+                    <option value="">{isBeyondClass ? "All Departments / General" : "All Branches / General"}</option>
+                    {courses
+                      .find((c) => c._id === assignCourseId)
+                      ?.branches?.filter((b) => b.isActive !== false)
+                      .map((b) => (
+                        <option key={b._id || b.name} value={b.name}>
+                          {b.name} {b.code ? `(${b.code})` : ""}
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    Semester {isBeyondClass && "(Optional)"}
+                  </label>
+                  <Select
+                    value={assignSemester}
+                    onChange={(e) => setAssignSemester(e.target.value)}
+                    className="text-xs"
+                  >
+                    {isBeyondClass && (
+                      <option value="">All Semesters / Across Dept</option>
+                    )}
+                    {(() => {
+                      const curCourse = courses.find((c) => c._id === assignCourseId);
+                      const curBranch = curCourse?.branches?.find(
+                        (b) => b.name?.toLowerCase() === (assignBranch || "").toLowerCase()
+                      );
+                      const totalSems =
+                        curBranch?.totalSemesters ||
+                        (curCourse?.durationYears ? curCourse.durationYears * 2 : 8);
+                      return Array.from({ length: totalSems }, (_, idx) => idx + 1).map((s) => (
+                        <option key={s} value={String(s)}>
+                          Semester {s}
+                        </option>
+                      ));
+                    })()}
+                  </Select>
+                </div>
+              </div>
+
+              {/* Section Dropdown (HIDDEN when isBeyondClass is true) */}
+              {!isBeyondClass && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    Academic Section *
+                  </label>
+                  <Select
+                    value={assignSection}
+                    onChange={(e) => setAssignSection(e.target.value)}
+                    className="text-xs"
+                    required={!isBeyondClass}
+                  >
+                    <option value="">-- Choose Section --</option>
+                    {activeSectionsList.map((sec) => (
+                      <option key={sec} value={sec}>
+                        Section {sec}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-[10px] text-ink-faint mt-1">
+                    Specific class cohort this teacher will mentor or advise.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line/50">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAssignModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={assignLoading}
+            >
+              {assignLoading ? (
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Assigning...</span>
+                </div>
+              ) : (
+                "Confirm & Assign Role"
+              )}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       <BulkImportModal

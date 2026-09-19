@@ -4,6 +4,7 @@ import { GraduationCap, TrendingUp, BookOpen, Award, AlertCircle, CheckCircle, X
 import { Link } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import api from "../../utils/api";
+import { formatDateDMY } from "../../utils/dateUtils";
 import StatCard from "../common/ui/StatCard";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
@@ -186,7 +187,7 @@ export default function ParentDashboard() {
                     </p>
                     <p className="text-xs text-ink-soft mt-0.5">
                       {r.examId?.title} | {r.examId?.type}
-                      {r.examId?.semester ? ` | Sem ${r.examId.semester}` : ""} | {r.examId?.date ? new Date(r.examId.date).toLocaleDateString() : ""}
+                      {r.examId?.semester ? ` | Sem ${r.examId.semester}` : ""}{r.examId?.date ? ` | ${formatDateDMY(r.examId.date)}` : ""}
                     </p>
                   </div>
                   <div className="text-right">

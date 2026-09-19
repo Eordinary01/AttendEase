@@ -34,6 +34,7 @@ import Modal from '../common/ui/Modal';
 import Input, { Textarea } from '../common/ui/Input';
 import Button from '../common/ui/Button';
 import DashboardHeader from '../common/ui/DashboardHeader';
+import UniversalSpinner from '../common/ui/UniversalSpinner';
 import { formatDateDMY } from '../../utils/dateUtils';
 
 const Profile = ({ userId }) => {
@@ -59,7 +60,7 @@ const Profile = ({ userId }) => {
   const [verifyMsg, setVerifyMsg] = useState(null);
   const [verifyError, setVerifyError] = useState(null);
 
-  const token = localStorage.getItem('token');
+  const currentUserId = userId || localStorage.getItem('userId');
   const DEFAULT_IMAGE = 'https://ui-avatars.com/api/?background=6366f1&color=fff&bold=true';
 
   useEffect(() => {
@@ -68,8 +69,8 @@ const Profile = ({ userId }) => {
         setIsLoading(true);
         setError(null);
 
-        if (!token) {
-          logError("Fetch User", 'No authentication token found');
+        if (!currentUserId && !localStorage.getItem('token')) {
+          logError("Fetch User", 'No active session found');
           setError('Please login again');
           setIsLoading(false);
           return;
@@ -86,6 +87,7 @@ const Profile = ({ userId }) => {
           setError('Session expired. Please login again.');
           setTimeout(() => {
             localStorage.removeItem('token');
+            localStorage.removeItem('userId');
             window.location.href = '/login';
           }, 2000);
         } else {
@@ -97,7 +99,7 @@ const Profile = ({ userId }) => {
     };
 
     fetchUser();
-  }, [userId, token]);
+  }, [userId, currentUserId]);
 
   const initFormData = (userData) => {
     setEditedFormData({
@@ -473,10 +475,7 @@ const Profile = ({ userId }) => {
 };
 
 const LoadingSpinner = () => (
-  <div className="flex flex-col justify-center items-center py-24 gap-3">
-    <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-    <span className="text-xs font-semibold text-ink-soft">Loading account details...</span>
-  </div>
+  <UniversalSpinner size="lg" label="Loading account details..." className="py-24" />
 );
 
 const ErrorDisplay = ({ error }) => (

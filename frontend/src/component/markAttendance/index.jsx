@@ -22,7 +22,7 @@ import {
   Lock,
 } from "lucide-react";
 import api from "../../utils/api";
-import { format } from "date-fns";
+import { formatDateReadable, getLocalTodayStr } from "../../utils/dateUtils";
 import { useTheme } from "../../contexts/ThemeContexts";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -47,8 +47,16 @@ function hexToRgbStr(hex = "#6366f1") {
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-// Mirrors backend: new Date("yyyy-mm-dd") is parsed as UTC midnight, then getUTCDay().
-const getDayOfWeek = (dateStr) => WEEKDAYS[new Date(dateStr).getUTCDay()];
+// Parse calendar date parts directly so day-of-week is identical across all timezones without UTC offset shift
+const getDayOfWeek = (dateStr) => {
+  if (!dateStr) return "Monday";
+  const parts = String(dateStr).split("T")[0].split("-").map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return WEEKDAYS[new Date(parts[0], parts[1] - 1, parts[2]).getDay()];
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? "Monday" : WEEKDAYS[d.getDay()];
+};
 
 export default function MarkAttendance() {
   const { colors } = useTheme();
@@ -65,9 +73,7 @@ export default function MarkAttendance() {
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
-  const [selectedDate, setSelectedDate] = useState(
-    format(new Date(), "yyyy-MM-dd")
-  );
+  const [selectedDate, setSelectedDate] = useState(getLocalTodayStr());
   const [students, setStudents] = useState([]);
   const [attendanceData, setAttendanceData] = useState({});
   const [filterRollNo, setFilterRollNo] = useState("");
@@ -94,8 +100,9 @@ export default function MarkAttendance() {
   const hasFetchedSubjects = useRef(false);
   const abortControllerRef = useRef(null);
 
-  const token = localStorage.getItem("token");
   const teacherId = localStorage.getItem("userId");
+  const isAuthenticated = Boolean(teacherId || localStorage.getItem("role") || localStorage.getItem("token"));
+  const token = localStorage.getItem("token") || "";
 
   const triggerSync = async () => {
     const currentPending = await getPendingSyncCount();
@@ -154,11 +161,11 @@ export default function MarkAttendance() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   // Fetch teacher subjects - only once on mount
   useEffect(() => {
-    if (token && !hasFetchedSubjects.current) {
+    if (isAuthenticated && !hasFetchedSubjects.current) {
       hasFetchedSubjects.current = true;
       fetchTeacherSubjects();
     }
@@ -168,7 +175,7 @@ export default function MarkAttendance() {
         abortControllerRef.current.abort();
       }
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   // Update selected subject and section when assignment changes
   useEffect(() => {
@@ -378,7 +385,7 @@ export default function MarkAttendance() {
             classSlots: response.data.classSlots || []
           });
 
-          showToast(`📋 Existing attendance loaded for ${format(new Date(selectedDate.replace(/-/g, '/')), "MMMM d, yyyy")}`);
+          showToast(`📋 Existing attendance loaded for ${formatDateReadable(selectedDate, false)}`);
         } else {
           resetAttendanceDefault();
         }
@@ -528,7 +535,7 @@ export default function MarkAttendance() {
     });
   }, [students, filterRollNo]);
 
-  if (!token) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center p-6">
         <Card padding="lg" className="max-w-md w-full text-center">
@@ -546,11 +553,11 @@ export default function MarkAttendance() {
     <div className="space-y-6" style={cssVars}>
       <DashboardHeader
         greeting="Classroom Attendance Register"
-        meta={`Record live roll states for scheduled timetable slots (${format(new Date(), "EEEE, MMM d, yyyy")})`}
+        meta={`Record live roll states for scheduled timetable slots (${formatDateReadable(new Date(), true)})`}
         actions={
           <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-line/60 shadow-sm text-xs font-semibold text-ink-soft">
             <Calendar className="w-3.5 h-3.5 text-primary" />
-            {format(new Date(), "MMM d, yyyy")}
+            {formatDateReadable(new Date(), false)}
           </div>
         }
       />
@@ -674,7 +681,7 @@ export default function MarkAttendance() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            max={format(new Date(), "yyyy-MM-dd")}
+            max={getLocalTodayStr()}
             className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition bg-surface text-ink"
             required
           />

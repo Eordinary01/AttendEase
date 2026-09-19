@@ -1,6 +1,7 @@
 // src/component/SuperAdmin/SuperAdminMonitoring.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { formatDateTime } from "../../utils/dateUtils";
 import {
   Activity,
   RefreshCw,
@@ -206,7 +207,7 @@ const SuperAdminMonitoring = () => {
       {
         header: "Time",
         cell: (row) => (
-          <span className="text-xs text-ink-soft whitespace-nowrap" title={format(new Date(row.createdAt), "PPpp")}>
+          <span className="text-xs text-ink-soft whitespace-nowrap" title={formatDateTime(row.createdAt)}>
             {formatDistanceToNow(new Date(row.createdAt), { addSuffix: true })}
           </span>
         ),

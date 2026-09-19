@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../utils/api";
+import { formatDateDMY, formatDateTime } from "../../utils/dateUtils";
 import { logError } from "../../utils/logger";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
@@ -549,7 +550,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
                           {log.ip || "127.0.0.1"}
                         </td>
                         <td className="py-3 pl-4 text-right text-ink-soft whitespace-nowrap text-[11px]">
-                          {new Date(log.createdAt).toLocaleString()}
+                          {formatDateTime(log.createdAt)}
                         </td>
                       </tr>
                     ))
@@ -794,7 +795,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
                       </select>
                     </td>
                     <td className="py-3 px-4 text-ink-soft text-[11px] whitespace-nowrap">
-                      {new Date(lead.createdAt).toLocaleDateString()}
+                      {formatDateDMY(lead.createdAt)}
                     </td>
                     <td className="py-3 pl-4 text-right">
                       <button

@@ -33,6 +33,7 @@ import EmptyState from "../common/ui/EmptyState";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import SubjectCard from "../Subjects/SubjectsCard";
 import PricingModal from "../common/PricingModal";
+import { formatDateDMY, formatDateTime, getLocalTodayStr } from "../../utils/dateUtils";
 import { useUpgradeModal } from "../../utils/billing";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
@@ -454,7 +455,7 @@ const ManageSubjects = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `subjects_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `subjects_${getLocalTodayStr()}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -873,7 +874,7 @@ const ManageSubjects = () => {
                     <div key={idx} className="flex items-center justify-between p-2 bg-surface rounded-lg border border-line">
                       <div>
                         <p className="font-medium text-ink">{assignment.teacherName}</p>
-                        <p className="text-xs text-ink-soft">Assigned: {new Date(assignment.assignedDate).toLocaleDateString()}</p>
+                        <p className="text-xs text-ink-soft">Assigned: {formatDateDMY(assignment.assignedDate)}</p>
                       </div>
                       <span
                         className="px-2 py-1 rounded text-xs"
@@ -902,7 +903,7 @@ const ManageSubjects = () => {
               <div className="grid md:grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-ink-soft">Created:</span>{' '}
-                  <span className="text-ink">{new Date(selectedSubject.createdAt).toLocaleString()}</span>
+                  <span className="text-ink">{formatDateTime(selectedSubject.createdAt)}</span>
                 </div>
                 <div>
                   <span className="text-ink-soft">Created By:</span>{' '}
@@ -911,7 +912,7 @@ const ManageSubjects = () => {
                 {selectedSubject.updatedAt && (
                   <div>
                     <span className="text-ink-soft">Last Updated:</span>{' '}
-                    <span className="text-ink">{new Date(selectedSubject.updatedAt).toLocaleString()}</span>
+                    <span className="text-ink">{formatDateTime(selectedSubject.updatedAt)}</span>
                   </div>
                 )}
               </div>

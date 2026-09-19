@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
+import { toLocalDateStr } from "../../utils/dateUtils";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import Button from "../common/ui/Button";
@@ -552,7 +553,7 @@ const TenantSettings = () => {
                   <Input
                     label="Academic Year Start"
                     type="date"
-                    value={formData.settings.academicYearStart?.split('T')[0] || ""}
+                    value={formData.settings.academicYearStart ? toLocalDateStr(formData.settings.academicYearStart) : ""}
                     onChange={(e) =>
                       handleInputChange("settings", "academicYearStart", e.target.value)
                     }
@@ -560,7 +561,7 @@ const TenantSettings = () => {
                   <Input
                     label="Academic Year End"
                     type="date"
-                    value={formData.settings.academicYearEnd?.split('T')[0] || ""}
+                    value={formData.settings.academicYearEnd ? toLocalDateStr(formData.settings.academicYearEnd) : ""}
                     onChange={(e) =>
                       handleInputChange("settings", "academicYearEnd", e.target.value)
                     }

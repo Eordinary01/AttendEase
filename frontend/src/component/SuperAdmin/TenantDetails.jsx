@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/api";
+import { formatDateDMY } from "../../utils/dateUtils";
 import { logError } from "../../utils/logger";
 import { motion } from "framer-motion";
 import {
@@ -242,7 +243,7 @@ const TenantDetails = () => {
       header: "Date",
       cell: (row) => (
         <span className="text-ink-faint text-xs">
-          {row.paidAt ? new Date(row.paidAt).toLocaleDateString() : row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
+          {formatDateDMY(row.paidAt || row.createdAt)}
         </span>
       ),
     },
@@ -289,7 +290,7 @@ const TenantDetails = () => {
       {/* Header */}
       <DashboardHeader
         greeting={tenant.name}
-        meta={`${tenant.subdomain}.attendease.com • Joined ${new Date(tenant.createdAt).toLocaleDateString()}`}
+        meta={`${tenant.subdomain}.attendease.com • Joined ${formatDateDMY(tenant.createdAt)}`}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -369,13 +370,13 @@ const TenantDetails = () => {
                   <InfoRow
                     icon={<Calendar className="w-3.5 h-3.5" />}
                     label="Start Date"
-                    value={tenant.subscription?.startDate ? new Date(tenant.subscription.startDate).toLocaleDateString() : "—"}
+                    value={formatDateDMY(tenant.subscription?.startDate)}
                   />
                   {tenant.subscription?.status === "trial" && (
                     <InfoRow
                       icon={<Calendar className="w-3.5 h-3.5" />}
                       label="Trial Ends"
-                      value={tenant.subscription?.trialEndsAt ? new Date(tenant.subscription.trialEndsAt).toLocaleDateString() : "—"}
+                      value={formatDateDMY(tenant.subscription?.trialEndsAt)}
                     />
                   )}
                 </div>

@@ -33,6 +33,7 @@ import { logError } from "../../utils/logger";
 import { useTheme } from "../../contexts/ThemeContexts";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import StatValue from "../common/ui/StatValue";
+import { getDateBadgeParts } from "../../utils/dateUtils";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Modal from "../common/ui/Modal";
@@ -40,6 +41,7 @@ import Table from "../common/ui/Table";
 import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
 import Skeleton from "../common/ui/Skeleton";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 import { formatDateDMY } from "../../utils/dateUtils";
 
 export default function AdminDashboard({ role, userId, userName, userEmail }) {
@@ -148,7 +150,7 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
   const fetchEnrollments = useCallback(async () => {
     try {
       setLoadingStudents(true);
-      const response = await api.get("/admin/enrollments?limit=2000");
+      const response = await api.get("/admin/enrollments?limit=100");
       if (response.data.success) {
         const data = response.data.data;
         const list = Array.isArray(data?.enrollments)
@@ -167,6 +169,23 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
     }
   }, []);
 
+  const [atRiskSummary, setAtRiskSummary] = useState({ warningCount: 0, criticalCount: 0, impossibleCount: 0 });
+
+  const fetchRiskSummary = useCallback(async () => {
+    try {
+      const res = await api.get("/reports/attendance");
+      if (res.data?.success && res.data?.data?.summary) {
+        setAtRiskSummary({
+          warningCount: res.data.data.summary.warningCount || 0,
+          criticalCount: res.data.data.summary.criticalCount || 0,
+          impossibleCount: res.data.data.summary.impossibleCount || 0,
+        });
+      }
+    } catch (e) {
+      // Non-critical background fetch
+    }
+  }, []);
+
   const loadAll = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -178,12 +197,13 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
         fetchSubscriptionInfo(),
         fetchEnrollments(),
         fetchCalendar(),
+        fetchRiskSummary(),
       ]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchAllStats, fetchTenantInfo, fetchSubscriptionInfo, fetchEnrollments, fetchCalendar]);
+  }, [fetchAllStats, fetchTenantInfo, fetchSubscriptionInfo, fetchEnrollments, fetchCalendar, fetchRiskSummary]);
 
   useEffect(() => {
     const userRole = localStorage.getItem("role");
@@ -192,7 +212,7 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
       setLoading(false);
       return;
     }
-    if (!localStorage.getItem("token")) {
+    if (!localStorage.getItem("token") && !localStorage.getItem("userId")) {
       setError("Please login again");
       setLoading(false);
       return;
@@ -244,18 +264,7 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
   if (loading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div
-            className="w-10 h-10 border-3 border-t-transparent rounded-full animate-spin mx-auto"
-            style={{
-              borderColor: `${themeColors.primary}30`,
-              borderTopColor: themeColors.primary,
-            }}
-          />
-          <p className="text-xs font-semibold text-ink-soft tracking-wider uppercase">
-            Loading Institution Workspace...
-          </p>
-        </div>
+        <UniversalSpinner size="lg" label="Loading Institution Workspace..." />
       </div>
     );
   }
@@ -331,12 +340,12 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
       {/* Main Container */}
       <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
         {/* ── Row 1: Primary Metrics Bento (5-Column) ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-          {/* Total Students — 2 cols, the page's priority */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Total Students — 1 col */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="md:col-span-2 rounded-2xl bg-surface border border-line/70 p-5 shadow-sm space-y-3"
+            className="rounded-2xl bg-surface border border-line/70 p-5 shadow-sm space-y-3"
           >
             <StatValue
               value={totalStudents.toLocaleString()}
@@ -344,20 +353,19 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
               subtitle={`${registered.toLocaleString()} registered / active`}
               progress={totalStudents > 0 ? (registered / totalStudents) * 100 : 0}
               progressColor="primary"
-              variant="hero"
-              accent
+              variant="compact"
             />
             {pendingRegistrations > 0 && (
               <div className="flex items-center justify-between text-xs pt-1 border-t border-line/40">
-                <span className="text-amber-600 font-semibold">
-                  {pendingRegistrations} pending biometric registration
+                <span className="text-amber-600 font-semibold truncate">
+                  {pendingRegistrations} pending biometrics
                 </span>
                 <button
                   onClick={() => {
                     setStudentFilter("pending");
                     setShowStudentsModal(true);
                   }}
-                  className="text-primary font-bold hover:underline"
+                  className="text-primary font-bold hover:underline shrink-0 ml-1"
                 >
                   Inspect →
                 </button>
@@ -419,6 +427,41 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
                 pendingRegistrations > 0
                   ? { text: "Action Needed", tone: "warning" }
                   : undefined
+              }
+            />
+          </motion.div>
+
+          {/* Phase 9: At-Risk & Dropout Warnings — 1 col */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            onClick={() => navigate("/admin/reports")}
+            className={`rounded-2xl p-5 space-y-2 flex flex-col justify-center cursor-pointer transition ${
+              (atRiskSummary.criticalCount > 0 || atRiskSummary.impossibleCount > 0)
+                ? "border border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50"
+                : atRiskSummary.warningCount > 0
+                ? "border border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50"
+                : "border border-line/50 bg-surface hover:border-line"
+            }`}
+          >
+            <StatValue
+              value={(atRiskSummary.criticalCount + atRiskSummary.warningCount).toLocaleString()}
+              label="At-Risk (<75%)"
+              subtitle={
+                atRiskSummary.impossibleCount > 0
+                  ? `${atRiskSummary.impossibleCount} mathematically impossible`
+                  : `${atRiskSummary.criticalCount} critical dropout risk`
+              }
+              variant="compact"
+              status={
+                atRiskSummary.impossibleCount > 0
+                  ? { text: "Critical", tone: "danger" }
+                  : atRiskSummary.criticalCount > 0
+                  ? { text: "High Risk", tone: "danger" }
+                  : atRiskSummary.warningCount > 0
+                  ? { text: "Warning", tone: "warning" }
+                  : { text: "All Good", tone: "success" }
               }
             />
           </motion.div>
@@ -656,10 +699,7 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
               ) : (
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                   {holidays.slice(0, 5).map((h, idx) => {
-                    const dateObj = new Date(h.date || h.startDate);
-                    const monthStr = dateObj.toLocaleDateString("en-US", { month: "short" });
-                    const dayNum = dateObj.toLocaleDateString("en-US", { day: "2-digit" });
-                    const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+                    const { month: monthStr, day: dayNum, weekday: dayName } = getDateBadgeParts(h.date || h.startDate);
 
                     return (
                       <div
@@ -833,10 +873,7 @@ export default function AdminDashboard({ role, userId, userName, userEmail }) {
         {/* Student Table */}
         <div className="max-h-[52vh] overflow-y-auto pr-1">
           {loadingStudents ? (
-            <div className="py-12 text-center text-ink-soft space-y-2">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary" />
-              <p className="text-xs font-semibold">Loading student enrollment records...</p>
-            </div>
+            <UniversalSpinner label="Loading student enrollment records..." />
           ) : filteredStudents.length === 0 ? (
             <EmptyState
               title="No students found"

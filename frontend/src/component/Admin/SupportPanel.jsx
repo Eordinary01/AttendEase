@@ -20,6 +20,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import api from "../../utils/api";
+import { formatDateReadable } from "../../utils/dateUtils";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
@@ -347,7 +348,7 @@ const SupportPanel = () => {
                       </span>
                       <span className="text-xs text-ink-faint flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(ticket.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {formatDateReadable(ticket.createdAt, false)}
                       </span>
                     </div>
                   </div>

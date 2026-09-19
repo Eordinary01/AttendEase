@@ -19,6 +19,7 @@ import {
   Loader,
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContexts";
+import UniversalSpinner from "./ui/UniversalSpinner";
 import {
   getResourceLabel,
   getRecommendedPlan,
@@ -332,10 +333,7 @@ const PricingModal = ({
 
             {/* Loading */}
             {loading && (
-              <div className="flex flex-col items-center justify-center py-16">
-                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                <p className="text-gray-500 text-sm">Loading plans…</p>
-              </div>
+              <UniversalSpinner size="lg" label="Loading plans…" className="py-16" />
             )}
 
             {/* Error (initial load failure) — show retry prompt */}

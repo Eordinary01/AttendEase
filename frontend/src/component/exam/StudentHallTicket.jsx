@@ -21,6 +21,7 @@ import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 import { formatDateDMY, formatDateReadable } from "../../utils/dateUtils";
 
 const StudentHallTicket = () => {
@@ -82,11 +83,7 @@ const StudentHallTicket = () => {
 
   if (loading) {
     return (
-      <div className="py-24 text-center text-ink-faint animate-pulse space-y-3">
-        <Award className="w-12 h-12 mx-auto text-primary opacity-50" />
-        <p className="font-bold text-sm text-ink">Verifying Academic Periods & Generating Signed Admit Card...</p>
-        <p className="text-xs text-ink-faint">Validating scheduled exams, course curriculum, and security keys</p>
-      </div>
+      <UniversalSpinner size="lg" label="Verifying Academic Periods & Generating Signed Admit Card..." className="py-24" />
     );
   }
 
@@ -175,9 +172,7 @@ const StudentHallTicket = () => {
 
       {/* Switching Loader */}
       {switching && (
-        <div className="py-12 text-center text-ink-faint animate-pulse">
-          <p className="text-xs font-semibold">Loading admit card for selected exam period...</p>
-        </div>
+        <UniversalSpinner size="sm" label="Loading admit card for selected exam period..." className="py-6" />
       )}
 
       {/* Warning/Error Notice when Exams are NOT created by Admin for this Period */}

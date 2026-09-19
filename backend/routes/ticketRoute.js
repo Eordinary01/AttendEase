@@ -1,8 +1,7 @@
-// routes/ticketRoute.js
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, teacherAuth, studentAuth, adminAuth } = require('../middleware/auth');
-const upload = require('../middleware/multer');
+const upload = require('../middleware/leaveMulter');
 const validate = require("../middleware/validate");
 const { body, param } = require("express-validator");
 const {

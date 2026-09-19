@@ -189,9 +189,18 @@ const deleteFromCloudinary = async (publicId, resourceType = 'image') => {
   return false;
 };
 
+/**
+ * Tenant-scoped folder helper generators
+ */
+const getTicketFolder = (tenantId) => `attendease/tickets/${tenantId || 'global'}`;
+const getLeaveFolder = (tenantId) => `attendease/leaves/${tenantId || 'global'}`;
+
 module.exports = {
   cloudinary,
   isCloudinaryConfigured,
   uploadToCloudinary,
   deleteFromCloudinary,
+  getTicketFolder,
+  getLeaveFolder,
 };
+

@@ -38,10 +38,17 @@ export const PermissionsProvider = ({ role, children }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchCustomPermissions = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    // Platform and tenant admins are implicitly allowed everything. Unauthenticated users skip API calls.
-    if (!token || !role || role === "super_admin" || role === "admin") {
+    const hasAuth = localStorage.getItem("token") || localStorage.getItem("userId");
+    // Unauthenticated users skip API calls.
+    if (!hasAuth || !role) {
       setCustomPermissions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Platform and tenant admins are implicitly granted full access sentinel
+    if (role === "super_admin" || role === "admin") {
+      setCustomPermissions("all");
       setLoading(false);
       return;
     }

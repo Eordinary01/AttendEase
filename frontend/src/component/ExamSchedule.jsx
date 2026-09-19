@@ -6,6 +6,7 @@ import Badge from "./common/ui/Badge";
 import DashboardHeader from "./common/ui/DashboardHeader";
 import EmptyState from "./common/ui/EmptyState";
 import { Select } from "./common/ui/Input";
+import UniversalSpinner from "./common/ui/UniversalSpinner";
 import { formatDateReadable, formatDateDMY } from "../utils/dateUtils";
 
 const ExamSchedule = ({ role }) => {
@@ -85,7 +86,7 @@ const ExamSchedule = ({ role }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <UniversalSpinner size="lg" label="Loading exam schedule..." />
       </div>
     );
   }

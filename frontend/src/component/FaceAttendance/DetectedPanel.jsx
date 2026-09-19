@@ -92,8 +92,8 @@ export default function DetectedPanel({
         const isBorderline = isUnrecognized && candidate && candidate.isBorderline;
         const isCandidateMarked = candidate && markedIds && markedIds.has(String(candidate.studentId));
 
-        const isBlinkDetected = Boolean(d.displayName && d.displayName.includes("Blink detected"));
-        const isBlinkPending = Boolean(d.displayName && d.displayName.includes("Blink to verify"));
+        const isBlinkDetected = d.livenessStage === "blink_confirmed" || Boolean(d.displayName && d.displayName.includes("Blink detected"));
+        const isBlinkPending = d.livenessStage === "awaiting_blink" || Boolean(d.displayName && (d.displayName.includes("Please Blink") || d.displayName.includes("Live Face") || d.displayName.includes("Blink to verify")));
 
         // Countdown info for this student
         const countdownInfo = countdowns[studentIdStr];
@@ -210,7 +210,7 @@ export default function DetectedPanel({
                       </span>
                     ) : isBlinkPending ? (
                       <span className="text-sky-600 dark:text-sky-400 font-medium flex items-center gap-1">
-                        <Eye className="w-3 h-3 text-sky-500" /> Identity confirmed — Blink eyes to verify
+                        <Eye className="w-3 h-3 text-sky-500" /> Live Face Required — Please Blink to verify
                       </span>
                     ) : isUnrecognized ? (
                       cooldownRemaining > 0 ? (

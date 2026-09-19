@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Crown, Lock, Loader2 } from "lucide-react";
 import api from "../../utils/api";
 import PricingModal from "./PricingModal";
+import UniversalSpinner from "./ui/UniversalSpinner";
 import { useUpgradeModal } from "../../utils/billing";
 
 let cachedPlanData = null;
@@ -74,7 +75,7 @@ const PlanGate = ({ requiredModule, children }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <UniversalSpinner size="lg" label="Checking subscription access..." />
       </div>
     );
   }

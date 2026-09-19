@@ -15,19 +15,19 @@ router.get("/my-hall-ticket", seatingController.getMyHallTicket);
 router.get("/halls", seatingController.getHalls);
 router.post(
   "/halls",
-  authorizeRoles(["admin", "super_admin"]),
+  authorizeRoles(["admin", "super_admin", "teacher"]),
   requirePermission("exam:create"),
   seatingController.createHall
 );
 router.put(
   "/halls/:id",
-  authorizeRoles(["admin", "super_admin"]),
+  authorizeRoles(["admin", "super_admin", "teacher"]),
   requirePermission("exam:update"),
   seatingController.updateHall
 );
 router.delete(
   "/halls/:id",
-  authorizeRoles(["admin", "super_admin"]),
+  authorizeRoles(["admin", "super_admin", "teacher"]),
   requirePermission("exam:delete"),
   seatingController.deleteHall
 );
@@ -41,13 +41,13 @@ router.get(
 );
 router.post(
   "/generate",
-  authorizeRoles(["admin", "super_admin"]),
+  authorizeRoles(["admin", "super_admin", "teacher"]),
   requirePermission("exam:create"),
   seatingController.generateSeating
 );
 router.post(
   "/import-excel",
-  authorizeRoles(["admin", "super_admin"]),
+  authorizeRoles(["admin", "super_admin", "teacher"]),
   requirePermission("exam:create"),
   seatingController.importSeatingAllocations
 );

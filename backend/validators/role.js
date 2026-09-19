@@ -71,6 +71,30 @@ const assignRole = [
     .withMessage('Role ID is required')
     .isMongoId()
     .withMessage('Invalid role ID format'),
+  body('courseId')
+    .optional({ nullable: true, checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid course ID format'),
+  body('branch')
+    .optional({ nullable: true })
+    .isString()
+    .trim(),
+  body('semester')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((val) => {
+      if (val === null || val === undefined || val === '') return true;
+      const num = Number(val);
+      return !isNaN(num) && num >= 1 && num <= 16;
+    })
+    .withMessage('Semester must be a valid number between 1 and 16'),
+  body('section')
+    .optional({ nullable: true })
+    .isString()
+    .trim(),
+  body('isPrimary')
+    .optional({ nullable: true })
+    .isBoolean()
+    .withMessage('isPrimary must be a boolean'),
 ];
 
 const unassignRole = [
@@ -81,7 +105,7 @@ const unassignRole = [
     .withMessage('Invalid teacher ID format'),
   param('roleId')
     .notEmpty()
-    .withMessage('Role ID is required')
+    .withMessage('Role ID or Assignment ID is required')
     .isMongoId()
     .withMessage('Invalid role ID format'),
 ];

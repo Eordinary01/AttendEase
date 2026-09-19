@@ -8,6 +8,12 @@ const path = require('path');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const logger = require("../utils/logger");
+const { uploadToCloudinary, getTicketFolder } = require("../utils/cloudinary");
+const { toISODateString } = require("../utils/dateFormatter");
+const {
+  publishTicketEvent,
+  publishAttendanceCorrected,
+} = require("../events/publishers");
 require('dotenv').config();
 
 /**
@@ -351,7 +357,7 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     }
 
-    // 6. Handle uploaded proof documents
+    // 6. Handle uploaded proof documents (Cloudinary with local fallback)
     const proofDocuments = [];
     if (req.files && req.files.length > 0) {
       if (req.files.length > 5) {
@@ -361,18 +367,29 @@ const createAbsenceProofTicket = async (req, res) => {
         });
       }
 
-      req.files.forEach(file => {
+      for (const file of req.files) {
         const fileId = new mongoose.Types.ObjectId();
+        let uploadRes = null;
+        if (file.buffer) {
+          uploadRes = await uploadToCloudinary(file.buffer, {
+            folder: getTicketFolder(tenantId),
+            originalName: file.originalname,
+            resourceType: 'auto',
+          });
+        }
         proofDocuments.push({
           _id: fileId,
-          filename: file.filename,
+          filename: file.filename || (uploadRes ? uploadRes.publicId : file.originalname),
           originalName: file.originalname,
+          url: uploadRes ? uploadRes.url : '',
+          publicId: uploadRes ? uploadRes.publicId : '',
           fileType: req.body.fileType || 'other',
           fileSize: file.size,
+          bytes: uploadRes?.bytes || file.size,
           mimeType: file.mimetype,
           uploadedAt: Date.now()
         });
-      });
+      }
     } else {
       return res.status(400).json({
         success: false,
@@ -409,6 +426,8 @@ const createAbsenceProofTicket = async (req, res) => {
     });
 
     await newTicket.save();
+
+    publishTicketEvent(tenantId, 'ticket.created', newTicket);
 
     return res.status(201).json({
       success: true,
@@ -510,6 +529,7 @@ const getPendingAbsenceTickets = async (req, res) => {
           _id: doc._id,
           filename: doc.filename,
           originalName: doc.originalName,
+          url: doc.url || '',
           fileType: doc.fileType,
           fileSize: doc.fileSize,
           mimeType: doc.mimeType,
@@ -613,6 +633,8 @@ const verifyAbsenceProof = async (req, res) => {
     }
 
     await ticket.save();
+
+    publishTicketEvent(tenantId, 'ticket.status_changed', ticket);
 
     return res.status(200).json({
       success: true,
@@ -730,7 +752,7 @@ const markAttendanceAfterVerification = async (req, res) => {
         remarks: `Marked present based on absence proof verification (Ticket: ${ticket._id})`,
         semester: subject.semester,
         createdBy: teacherId,
-        classSessionId: `${ticket.subjectId}_${ticket.student.section}_${ticket.absentDate.toISOString().split('T')[0]}`
+        classSessionId: `${ticket.subjectId}_${ticket.student.section}_${toISODateString(ticket.absentDate)}`
       });
     }
 
@@ -742,6 +764,15 @@ const markAttendanceAfterVerification = async (req, res) => {
     ticket.attendanceMarkedAt = Date.now();
     ticket.status = 'attendance-updated';
     await ticket.save();
+
+    publishAttendanceCorrected(tenantId, {
+      attendanceId: attendance._id,
+      studentId: ticket.studentId,
+      subjectId: ticket.subjectId,
+      status: 'present',
+      date: ticket.absentDate,
+    });
+    publishTicketEvent(tenantId, 'ticket.status_changed', ticket);
 
     return res.status(200).json({
       success: true,
@@ -821,6 +852,7 @@ const getStudentAbsenceTickets = async (req, res) => {
           id: doc._id,
           _id: doc._id,
           originalName: doc.originalName,
+          url: doc.url || '',
           fileType: doc.fileType,
           fileSize: doc.fileSize
         })),
@@ -1075,8 +1107,19 @@ const getUploadedFile = async (req, res) => {
       });
     }
 
-    // Check if file exists
-    const filePath = path.join(__dirname, '../uploads/', file.filename);
+    // 1. If stored in Cloudinary, redirect to secure URL
+    if (file.url && (file.url.startsWith('http://') || file.url.startsWith('https://'))) {
+      return res.redirect(file.url);
+    }
+
+    // 2. Resolve local file path (handles legacy '../uploads/filename' or new '/uploads/tickets/filename')
+    let filePath = '';
+    if (file.url && file.url.startsWith('/uploads/')) {
+      filePath = path.join(__dirname, '..', file.url);
+    } else if (file.filename) {
+      filePath = path.join(__dirname, '../uploads/', file.filename);
+    }
+
     try {
       await fs.access(filePath);
     } catch (err) {

@@ -7,7 +7,8 @@ import StatCard from "./common/ui/StatCard";
 import DashboardHeader from "./common/ui/DashboardHeader";
 import EmptyState from "./common/ui/EmptyState";
 import Table from "./common/ui/Table";
-import { formatDateDMY } from "../utils/dateUtils";
+import UniversalSpinner from "./common/ui/UniversalSpinner";
+import { formatDateDMY, formatDateReadable } from "../utils/dateUtils";
 
 const FeePortal = () => {
   const [fees, setFees] = useState([]);
@@ -96,7 +97,7 @@ const FeePortal = () => {
     },
     {
       header: "Date",
-      cell: (row) => <span className="text-ink-soft text-xs">{new Date(row.transactionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+      cell: (row) => <span className="text-ink-soft text-xs">{formatDateReadable(row.transactionDate, false)}</span>
     },
     {
       header: "Status",
@@ -107,10 +108,7 @@ const FeePortal = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-center">
-          <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-ink-soft font-medium text-xs">Loading fee records...</p>
-        </div>
+        <UniversalSpinner size="lg" label="Loading fee records..." />
       </div>
     );
   }

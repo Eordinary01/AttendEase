@@ -1,5 +1,7 @@
 import React from "react";
 import ERPCard from "./ERPCard";
+import UniversalSpinner from "../ui/UniversalSpinner";
+import { getDateBadgeParts } from "../../../utils/dateUtils";
 
 const TYPE_TONES = {
   holiday: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
@@ -30,23 +32,15 @@ export default function ERPHolidayList({
     >
       <div className="divide-y divide-line/60 overflow-y-auto max-h-56">
         {loading ? (
-          <div className="p-8 text-center text-xs text-ink-faint">
-            Loading holiday schedule...
-          </div>
+          <UniversalSpinner size="sm" label="Loading holiday schedule..." className="py-6" />
         ) : sortedItems.length === 0 ? (
           <div className="p-8 text-center text-xs text-ink-faint">
             No holiday records found
           </div>
         ) : (
           sortedItems.map((h, idx) => {
-            const dateObj = new Date(h.date || h.startDate);
-            const monthStr = isNaN(dateObj.getTime())
-              ? "Aug"
-              : dateObj.toLocaleDateString("en-US", { month: "short" });
-            const dayNum = isNaN(dateObj.getTime())
-              ? "27"
-              : dateObj.toLocaleDateString("en-US", { day: "2-digit" });
-            const dayName = h.day || (isNaN(dateObj.getTime()) ? "Monday" : dateObj.toLocaleDateString("en-US", { weekday: "long" }));
+            const { month: monthStr, day: dayNum, weekdayLong } = getDateBadgeParts(h.date || h.startDate);
+            const dayName = h.day || (weekdayLong !== "—" ? weekdayLong : "Monday");
             const typeKey = (h.type || "holiday").toLowerCase();
             const toneStyle = TYPE_TONES[typeKey] || TYPE_TONES.holiday;
 

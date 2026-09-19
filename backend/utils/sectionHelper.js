@@ -88,8 +88,70 @@ const validateSectionsExist = async (tenantId, requestedSections) => {
   };
 };
 
+/**
+ * Resolves distinct uppercase assigned sections for a teacher user across
+ * assignedSubjects, customRoles, and active Timetable slots.
+ * @param {Object} teacherUser - req.user or teacher document
+ * @param {string|ObjectId} tenantId
+ * @returns {Promise<Array<string>>}
+ */
+const getTeacherAssignedSections = async (teacherUser, tenantId) => {
+  if (!teacherUser) return [];
+  const sections = new Set();
+
+  const customRoles = teacherUser.customRoles || [];
+  const hasBeyondClassRole = customRoles.some((cr) => cr && (!cr.section || String(cr.section).trim() === ""));
+  if (hasBeyondClassRole && tenantId) {
+    const allSecs = await getActiveTenantSections(tenantId);
+    if (allSecs && allSecs.length > 0) {
+      return allSecs;
+    }
+  }
+
+  (teacherUser.assignedSubjects || []).forEach((a) => {
+    if (a.section) sections.add(String(a.section).trim().toUpperCase());
+  });
+  (teacherUser.customRoles || []).forEach((cr) => {
+    if (cr.section) sections.add(String(cr.section).trim().toUpperCase());
+  });
+
+  const teacherId = teacherUser._id || teacherUser.id;
+  if (sections.size === 0 && teacherId) {
+    const User = require("../models/User");
+    const fresh = await User.findById(teacherId).select("assignedSubjects customRoles").lean();
+    if (fresh?.customRoles?.some((cr) => cr && (!cr.section || String(cr.section).trim() === "")) && tenantId) {
+      const allSecs = await getActiveTenantSections(tenantId);
+      if (allSecs && allSecs.length > 0) {
+        return allSecs;
+      }
+    }
+    (fresh?.assignedSubjects || []).forEach((a) => {
+      if (a.section) sections.add(String(a.section).trim().toUpperCase());
+    });
+    (fresh?.customRoles || []).forEach((cr) => {
+      if (cr.section) sections.add(String(cr.section).trim().toUpperCase());
+    });
+  }
+
+  if (teacherId && tenantId) {
+    const Timetable = require("../models/Timetable");
+    const timetableSecs = await Timetable.distinct("section", {
+      tenantId,
+      teacherId,
+      isActive: true,
+    });
+    timetableSecs.forEach((s) => {
+      if (s) sections.add(String(s).trim().toUpperCase());
+    });
+  }
+
+  return Array.from(sections).filter(Boolean).sort();
+};
+
 module.exports = {
   getActiveTenantSections,
   invalidateTenantSectionsCache,
   validateSectionsExist,
+  getTeacherAssignedSections,
 };
+

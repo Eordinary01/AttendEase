@@ -11,7 +11,8 @@ const {
   updateAlert,
   deleteAlert,
   getAlertStats,
-  markAlertAsRead
+  markAlertAsRead,
+  markAllAlertsAsRead
 } = require('../controllers/alertController');
 
 const createAlertValidator = [
@@ -122,6 +123,9 @@ router.get('/', getAlertsValidator, getAlerts);
 
 // Get alert statistics (admins see their tenant stats)
 router.get('/stats', getAlertStats);
+
+// Mark all alerts as read
+router.post('/mark-all-read', markAllAlertsAsRead);
 
 // Mark alert as read
 router.post('/:alertId/read', markAlertAsRead);

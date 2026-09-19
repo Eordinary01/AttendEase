@@ -70,6 +70,9 @@ export default function FaceOverlay({
 
   if (hasFace) {
     if (isMultiFace) {
+      const anyBlinkConfirmed = detected.some((d) => d.livenessStage === "blink_confirmed" || (d.displayName && d.displayName.includes("Blink detected")));
+      const anyAwaitingBlink = detected.some((d) => d.livenessStage === "awaiting_blink" || (d.displayName && (d.displayName.includes("Blink") || d.displayName.includes("Live Face"))));
+
       if (verifiedCount > 0) {
         boxStateClass = "verified";
         statusText = autoMark
@@ -80,6 +83,14 @@ export default function FaceOverlay({
         boxStateClass = "verified";
         statusText = `✓ ${alreadyMarkedCount} Student${alreadyMarkedCount > 1 ? "s" : ""} Already Marked`;
         icon = <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />;
+      } else if (anyBlinkConfirmed) {
+        boxStateClass = "challenge";
+        statusText = "✓ Blink detected — Verifying identity...";
+        icon = <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
+      } else if (anyAwaitingBlink) {
+        boxStateClass = "challenge";
+        statusText = "👁 Live Face Required — Please Blink";
+        icon = <Eye className="w-3.5 h-3.5 text-sky-400 animate-pulse" />;
       } else {
         boxStateClass = unrecognizedCount > 0 ? "unrecognized" : "checking";
         statusText =
@@ -94,14 +105,14 @@ export default function FaceOverlay({
       const sId = String(single.studentId || "");
       const cdSingle = countdowns[sId];
       const singleCountdown = typeof cdSingle === "object" ? (cdSingle?.remainingSec ?? 5) : (cdSingle ?? 5);
-      const isBorderline = single.status === "unrecognized" && single.closestCandidate?.isBorderline;
+      const isBorderline = (single.status === "unrecognized" || single.livenessStage === "unrecognized") && single.closestCandidate?.isBorderline;
       const qualityHint = single.quality?.qualityHint;
 
-      if (single.status === "already_marked") {
+      if (single.status === "already_marked" || single.livenessStage === "already_marked") {
         boxStateClass = "verified";
         statusText = `✓ Attendance already marked for ${single.name}`;
         icon = <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />;
-      } else if (single.status === "verified") {
+      } else if (single.status === "verified" || single.livenessStage === "verified") {
         boxStateClass = "verified";
         statusText = autoMark
           ? `✓ Verified: ${single.name} · Auto-marking in ${singleCountdown}s`
@@ -111,11 +122,13 @@ export default function FaceOverlay({
         boxStateClass = "borderline";
         statusText = `Likely: ${single.closestCandidate.name} · Confirm attendance in panel below`;
         icon = <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />;
-      } else if (single.status === "unrecognized") {
+      } else if (single.status === "unrecognized" || single.livenessStage === "unrecognized") {
         const cdRem = unauthorizedCooldowns[single.trackKey || single.name || 0] || 0;
         boxStateClass = "unrecognized";
         statusText = cdRem > 0
           ? `✖ Out-of-Roster Student · Cooldown (${cdRem}s)`
+          : (single.displayName && single.displayName.includes("Static"))
+          ? single.displayName
           : `✖ Unrecognized Face (Not enrolled in Sec ${activeSection})`;
         icon = <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />;
       } else if (challengeStep && challengeStep !== "verified") {
@@ -124,13 +137,13 @@ export default function FaceOverlay({
         if (challengeStep === "turn_left") icon = <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />;
         else if (challengeStep === "turn_right") icon = <ArrowRight className="w-3.5 h-3.5 text-amber-400" />;
         else if (challengeStep === "blink") icon = <Eye className="w-3.5 h-3.5 text-amber-400" />;
-      } else if (single.displayName && single.displayName.includes("Blink detected")) {
+      } else if (single.livenessStage === "blink_confirmed" || (single.displayName && single.displayName.includes("Blink detected"))) {
         boxStateClass = "challenge";
-        statusText = single.displayName;
+        statusText = single.displayName || "✓ Blink detected — Verifying identity...";
         icon = <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
-      } else if (single.displayName && single.displayName.includes("Blink to verify")) {
+      } else if (single.livenessStage === "awaiting_blink" || (single.displayName && (single.displayName.includes("Blink") || single.displayName.includes("Live Face")))) {
         boxStateClass = "challenge";
-        statusText = single.displayName;
+        statusText = single.displayName || "👁 Live Face Required — Please Blink";
         icon = <Eye className="w-3.5 h-3.5 text-sky-400 animate-pulse" />;
       } else {
         boxStateClass = "checking";
@@ -148,10 +161,19 @@ export default function FaceOverlay({
 
   if (hasFace) {
     if (isMultiFace) {
+      const anyBlinkConfirmed = detected.some((d) => d.livenessStage === "blink_confirmed" || (d.displayName && d.displayName.includes("Blink detected")));
+      const anyAwaitingBlink = detected.some((d) => d.livenessStage === "awaiting_blink" || (d.displayName && (d.displayName.includes("Blink") || d.displayName.includes("Live Face"))));
+
       topBadgeText = verifiedCount > 0 && autoMark
         ? `MULTI-FACE: ${verifiedCount} READY (AUTO-MARK IN ${minCountdown}s)`
-        : `MULTI-FACE: ${detected.length} DETECTED (${verifiedCount} READY)`;
-      topBadgeClass = verifiedCount > 0 ? "live" : "detecting";
+        : verifiedCount > 0
+        ? `MULTI-FACE: ${detected.length} DETECTED (${verifiedCount} READY)`
+        : anyBlinkConfirmed
+        ? `MULTI-FACE: BLINK DETECTED`
+        : anyAwaitingBlink
+        ? `MULTI-FACE: AWAITING BLINK`
+        : `MULTI-FACE: ${detected.length} DETECTED`;
+      topBadgeClass = verifiedCount > 0 ? "live" : (anyBlinkConfirmed || anyAwaitingBlink) ? "challenge" : "detecting";
     } else if (alreadyMarkedCount > 0) {
       topBadgeText = "ALREADY MARKED";
       topBadgeClass = "live";
@@ -165,13 +187,15 @@ export default function FaceOverlay({
     } else if (detected[0]?.status === "unrecognized" && detected[0]?.closestCandidate?.isBorderline) {
       topBadgeText = `BORDERLINE MATCH`;
       topBadgeClass = "challenge";
-    } else if (detected[0]?.status === "scanning") {
-      topBadgeText = detected[0]?.displayName?.includes("Blink detected")
+    } else if (detected[0]?.status === "scanning" || detected[0]?.livenessStage) {
+      const stage = detected[0]?.livenessStage;
+      const dName = detected[0]?.displayName || "";
+      topBadgeText = (stage === "blink_confirmed" || dName.includes("Blink detected"))
         ? "BLINK VERIFIED"
-        : detected[0]?.displayName?.includes("Blink to verify")
+        : (stage === "awaiting_blink" || dName.includes("Blink") || dName.includes("Live Face"))
         ? "AWAITING BLINK"
         : "CONSENSUS SCAN...";
-      topBadgeClass = detected[0]?.displayName?.includes("Blink detected") ? "challenge" : "detecting";
+      topBadgeClass = (stage === "blink_confirmed" || stage === "awaiting_blink" || dName.includes("Blink") || dName.includes("Live Face")) ? "challenge" : "detecting";
     } else if (challengeStep && challengeStep !== "verified") {
       topBadgeText = `CHALLENGE (${livenessScore || 50}%)`;
       topBadgeClass = "challenge";

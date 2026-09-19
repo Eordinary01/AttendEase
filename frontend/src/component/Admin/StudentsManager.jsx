@@ -12,9 +12,10 @@ import Input, { Select } from "../common/ui/Input";
 import Skeleton from "../common/ui/Skeleton";
 import { usePermissions } from "../../contexts/PermissionsContext";
 
-const StudentsManager = () => {
+const StudentsManager = ({ role }) => {
   const { can } = usePermissions();
   const canWrite = can("students:write");
+  const isTeacher = role === "teacher";
   const [students, setStudents] = useState([]);
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState("");
@@ -254,7 +255,7 @@ const StudentsManager = () => {
                 onChange={(e) => setSelectedSection(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
-                <option value="">All Sections</option>
+                <option value="">{isTeacher ? "All Assigned Sections" : "All Sections"}</option>
                 {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
               </select>
             </div>

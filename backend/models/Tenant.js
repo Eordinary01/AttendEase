@@ -128,6 +128,8 @@ const tenantSchema = new mongoose.Schema({
   
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   isActive: { type: Boolean, default: true },
+  isDemo: { type: Boolean, default: false },
+  isSandbox: { type: Boolean, default: false },
   deletedAt: Date
   
 }, { timestamps: true });
@@ -135,6 +137,7 @@ const tenantSchema = new mongoose.Schema({
 // Indexes
 tenantSchema.index({ subdomain: 1 });
 tenantSchema.index({ domain: 1 });
+tenantSchema.index({ isDemo: 1 });
 tenantSchema.index({ 'subscription.status': 1 });
 tenantSchema.index({ 'subscription.endDate': 1 });
 

@@ -14,6 +14,7 @@ const emailService = require("../utils/emailService");
 const { validatePassword } = require("../utils/passwordValidation");
 const { isLockedOut, recordFailedAttempt, clearAttempts } = require("../utils/accountLockout");
 const cache = require("../middleware/cache");
+const { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, generateXsrfToken } = require("../utils/cookieConfig");
 require('dotenv').config();
 
 const { JWT_SECRET } = process.env;
@@ -153,11 +154,17 @@ const login = async (req, res) => {
       userAgent: req.headers['user-agent'],
     });
 
+    const xsrfToken = generateXsrfToken();
+    // Dual-mode authentication:
+    // 1. setAuthCookies attaches httpOnly accessToken/refreshToken cookies and readable XSRF-TOKEN.
+    // 2. We also return `token` in JSON body for mobile clients and frontend localStorage consumers.
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
-      refreshToken: rawRefreshToken,
+      xsrfToken,
       user: {
         id: user._id,
         name: user.name,
@@ -221,6 +228,7 @@ const superAdminLogin = async (req, res) => {
     });
 
     if (!superAdmin) {
+      logger.warn(`[SECURITY ALERT] Super admin account auto-bootstrapped for email: ${email.toLowerCase()}. Requiring password change.`);
       const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
       superAdmin = new User({
         name: 'Super Administrator',
@@ -229,7 +237,8 @@ const superAdminLogin = async (req, res) => {
         role: 'super_admin',
         isActive: true,
         emailVerified: true,
-        profileComplete: true
+        profileComplete: true,
+        forcePasswordChange: true
       });
       await superAdmin.save();
     }
@@ -285,17 +294,22 @@ const superAdminLogin = async (req, res) => {
       userAgent: req.headers['user-agent'],
     });
 
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.json({
       success: true,
       message: 'Super admin login successful',
       token,
-      refreshToken: rawRefreshToken,
+      xsrfToken,
+      forcePasswordChange: Boolean(superAdmin.forcePasswordChange),
       user: {
         id: superAdmin._id,
         name: superAdmin.name,
         email: superAdmin.email,
         role: 'super_admin',
-        isSuperAdmin: true
+        isSuperAdmin: true,
+        forcePasswordChange: Boolean(superAdmin.forcePasswordChange)
       }
     });
   } catch (error) {
@@ -497,11 +511,14 @@ const registerStudent = async (req, res) => {
     });
 
     logger.info('Student registration completed', { userId: newUser._id, tenantId });
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.status(201).json({
       success: true,
       message: 'Student registered successfully',
       token,
-      refreshToken: rawRefreshToken,
+      xsrfToken,
       user: {
         id: newUser._id,
         name: newUser.name,
@@ -659,11 +676,14 @@ const registerTeacherFirstLogin = async (req, res) => {
 
     logger.info('Teacher activation completed', { teacherId: teacher._id, tenantId });
 
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.status(200).json({
       success: true,
       message: 'Password set successfully. You are now logged in.',
       token,
-      refreshToken: rawRefreshToken,
+      xsrfToken,
       user: {
         id: teacher._id,
         name: teacher.name,
@@ -789,6 +809,7 @@ const changePassword = async (req, res) => {
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
+    user.forcePasswordChange = false;
     await user.save();
 
     // Invalidate user cache
@@ -813,18 +834,20 @@ const changePassword = async (req, res) => {
  */
 const logout = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = getRefreshTokenFromCookie(req);
     if (refreshToken) {
       const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
       await RefreshToken.findOneAndUpdate({ tokenHash }, { revoked: true });
       logger.info('Refresh token revoked on logout', { userId: req.user?.userId });
     }
+    clearAuthCookies(res);
     return res.status(200).json({
       success: true,
       message: 'Logged out successfully'
     });
   } catch (error) {
     logger.error('Logout error', { error: error.message });
+    clearAuthCookies(res);
     return res.status(200).json({
       success: true,
       message: 'Logged out successfully'
@@ -1011,11 +1034,15 @@ const mobileLogin = async (req, res) => {
       ipAddress: req.ip,
     });
 
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
       refreshToken: rawRefreshToken,
+      xsrfToken,
       user: {
         id: user._id,
         name: user.name,
@@ -1133,11 +1160,14 @@ const parentLogin = async (req, res) => {
       deviceFingerprint: req.headers['x-device-fingerprint'] || req.headers['user-agent'],
     });
 
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, token, rawRefreshToken, xsrfToken);
+
     return res.status(200).json({
       success: true,
       message: 'Parent login successful',
       token,
-      refreshToken: rawRefreshToken,
+      xsrfToken,
       user: {
         id: user._id,
         name: user.name,
@@ -1279,17 +1309,23 @@ const logoutAllSessions = async (req, res) => {
     // Invalidate user cache
     await cache.del(`user:${user._id}`);
 
+    clearAuthCookies(res);
     return res.status(200).json({ success: true, message: 'All other sessions logged out. Please log in again.' });
   } catch (error) {
     logger.error('Logout all sessions error', { error: error.message });
+    clearAuthCookies(res);
     return res.status(500).json({ success: false, message: 'Failed to logout sessions' });
   }
 };
 
 const refresh = async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = getRefreshTokenFromCookie(req);
   if (!refreshToken) {
-    return res.status(400).json({ success: false, message: 'Refresh token is required' });
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired refresh token',
+      code: 'REFRESH_TOKEN_MISSING'
+    });
   }
 
   try {
@@ -1297,12 +1333,20 @@ const refresh = async (req, res) => {
     const storedToken = await RefreshToken.findOne({ tokenHash, revoked: false });
 
     if (!storedToken || storedToken.expiresAt < new Date()) {
-      return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token',
+        code: 'REFRESH_TOKEN_INVALID'
+      });
     }
 
     const user = await User.findById(storedToken.userId);
     if (!user || !user.isActive) {
-      return res.status(401).json({ success: false, message: 'User not found or account inactive' });
+      return res.status(401).json({
+        success: false,
+        message: 'User not found or account inactive',
+        code: 'USER_INACTIVE'
+      });
     }
 
     // Revoke old refresh token (Replay Protection)
@@ -1335,14 +1379,22 @@ const refresh = async (req, res) => {
       deviceFingerprint: req.headers['x-device-fingerprint'] || req.headers['user-agent'],
     });
 
+    const xsrfToken = generateXsrfToken();
+    setAuthCookies(res, newToken, newRawRefreshToken, xsrfToken);
+
     return res.status(200).json({
       success: true,
+      message: 'Token refreshed',
       token: newToken,
-      refreshToken: newRawRefreshToken,
+      xsrfToken,
     });
   } catch (err) {
     logger.error('Refresh token error', { error: err.message });
-    return res.status(500).json({ success: false, message: 'Failed to refresh token' });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to refresh token',
+      code: 'REFRESH_ERROR'
+    });
   }
 };
 

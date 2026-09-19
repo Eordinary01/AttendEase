@@ -28,6 +28,8 @@ import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import { Select, Textarea } from "../common/ui/Input";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
+import { getLocalTodayStr } from "../../utils/dateUtils";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPES = [
@@ -197,7 +199,7 @@ export default function Ticket() {
   const [formData, setFormData] = useState({
     subjectId: "",
     teacherId: "",
-    absentDate: new Date().toISOString().split("T")[0],
+    absentDate: getLocalTodayStr(),
     reason: "medical",
     reasonDescription: ""
   });
@@ -214,7 +216,7 @@ export default function Ticket() {
     localStorage.getItem("lastTicketSubmitTime") || null
   );
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = getLocalTodayStr();
 
   // 1. Fetch User Data and Student Subjects with Assigned Teachers
   useEffect(() => {
@@ -411,10 +413,7 @@ export default function Ticket() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-28">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-10 w-10 text-primary animate-spin" />
-          <p className="text-sm font-medium text-ink-soft">Loading your semester subjects and teachers...</p>
-        </div>
+        <UniversalSpinner size="lg" label="Loading your semester subjects and teachers..." />
       </div>
     );
   }

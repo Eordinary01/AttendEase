@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import api from '../../utils/api';
 import { logError } from '../../utils/logger';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { formatDateReadable, getLocalTodayStr } from '../../utils/dateUtils';
 import {
   Calendar,
   Loader2,
@@ -40,6 +40,7 @@ import Badge from '../common/ui/Badge';
 import Button from '../common/ui/Button';
 import EmptyState from '../common/ui/EmptyState';
 import Modal from '../common/ui/Modal';
+import UniversalSpinner from '../common/ui/UniversalSpinner';
 
 function hexToRgbStr(hex = "#6366f1") {
   const h = hex.replace("#", "");
@@ -49,31 +50,7 @@ function hexToRgbStr(hex = "#6366f1") {
   return `${r} ${g} ${b}`;
 }
 
-const safeFormatDate = (dateVal, formatStr = 'MMM dd, yyyy') => {
-  if (!dateVal) return 'N/A';
-  try {
-    if (dateVal instanceof Date) {
-      return format(dateVal, formatStr);
-    }
-    const d = new Date(dateVal);
-    if (!isNaN(d.getTime())) {
-      return format(d, formatStr);
-    }
-    if (typeof dateVal === 'string' && dateVal.includes('-') && !dateVal.includes('T')) {
-      const parts = dateVal.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2], 10);
-        return format(new Date(year, month, day), formatStr);
-      }
-    }
-    return 'N/A';
-  } catch (err) {
-    logError("Safe Format Date", err);
-    return 'N/A';
-  }
-};
+const safeFormatDate = (dateVal) => formatDateReadable(dateVal, false, 'N/A');
 
 const AttendanceOverview = () => {
   const { colors } = useTheme();
@@ -92,7 +69,7 @@ const AttendanceOverview = () => {
   const [teacherSubjects, setTeacherSubjects] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(getLocalTodayStr());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
@@ -110,16 +87,17 @@ const AttendanceOverview = () => {
 
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('role');
+  const hasAuth = Boolean(userRole || localStorage.getItem('userId') || token);
 
   useEffect(() => {
-    if (token) {
+    if (hasAuth) {
       if (userRole === 'teacher') {
         fetchTeacherSubjects();
       } else {
         fetchAttendanceSummary();
       }
     }
-  }, [token, userRole]);
+  }, [hasAuth, userRole]);
 
   useEffect(() => {
     if (userRole === 'teacher' && selectedSubject && selectedSection) {
@@ -310,10 +288,7 @@ const AttendanceOverview = () => {
   if (isLoading && attendanceSummary.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin mx-auto mb-4 text-ink-faint" />
-          <p className="text-ink-soft font-semibold text-sm">Loading attendance data...</p>
-        </div>
+        <UniversalSpinner size="lg" label="Loading attendance data..." />
       </div>
     );
   }
@@ -489,11 +464,17 @@ const AttendanceOverview = () => {
                         {getSortIcon('classesAttended')}
                       </div>
                     </th>
-                    <th className="py-3.5 pr-6 cursor-pointer" onClick={() => sortData('attendancePercentage')}>
+                    <th className="py-3.5 cursor-pointer" onClick={() => sortData('attendancePercentage')}>
                       <div className="flex items-center gap-1">
                         <Percent className="w-3.5 h-3.5 text-ink-faint" />
                         Attendance %
                         {getSortIcon('attendancePercentage')}
+                      </div>
+                    </th>
+                    <th className="py-3.5 pr-6">
+                      <div className="flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-ink-faint" />
+                        Risk / Trajectory
                       </div>
                     </th>
                   </tr>
@@ -510,7 +491,7 @@ const AttendanceOverview = () => {
                       <td className="py-4 text-ink-soft">Section {student.section}</td>
                       <td className="py-4 text-ink-soft">{student.totalClasses || 0}</td>
                       <td className="py-4 text-ink-soft">{student.classesAttended || 0}</td>
-                      <td className="py-4 pr-6">
+                      <td className="py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-1 bg-line rounded-full h-1.5">
                             <div
@@ -522,6 +503,30 @@ const AttendanceOverview = () => {
                             {(student.attendancePercentage || 0).toFixed(1)}%
                           </Badge>
                         </div>
+                      </td>
+                      <td className="py-4 pr-6">
+                        {(() => {
+                          const pct = student.attendancePercentage || 0;
+                          const tot = student.totalClasses || 0;
+                          const pres = student.classesAttended || 0;
+                          if (tot === 0) return <Badge tone="neutral" size="sm">No Data</Badge>;
+                          if (pct >= 75) return <Badge tone="success" size="sm">Good (≥75%)</Badge>;
+                          const needed = Math.max(0, Math.ceil((0.75 * tot - pres) / 0.25));
+                          if (pct >= 65) {
+                            return (
+                              <div className="flex items-center gap-1">
+                                <Badge tone="warning" size="sm">Warning</Badge>
+                                <span className="text-[11px] font-bold text-amber-500 font-mono">+{needed}</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-1">
+                              <Badge tone="danger" size="sm">Critical</Badge>
+                              <span className="text-[11px] font-bold text-rose-500 font-mono">+{needed}</span>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}

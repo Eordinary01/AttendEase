@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FileText, Check, Save, Send, FileUp } from "lucide-react";
 import api from "../utils/api";
+import { formatDateDMY } from "../utils/dateUtils";
 import Card from "./common/ui/Card";
 import Badge from "./common/ui/Badge";
 import DashboardHeader from "./common/ui/DashboardHeader";
@@ -10,6 +11,7 @@ import Button from "./common/ui/Button";
 import { Select } from "./common/ui/Input";
 import { usePermissions } from "../contexts/PermissionsContext";
 import BulkImportModal from "./common/ui/BulkImportModal";
+import UniversalSpinner from "./common/ui/UniversalSpinner";
 
 const BULK_RESULTS_COLUMNS = [
   { key: "subjectCode", label: "Subject Code", required: true, description: "Subject code of the exam. Must match the selected exam", example: "CSE101" },
@@ -123,7 +125,11 @@ const GradeManager = ({ role }) => {
   };
 
   if (loading && results.length === 0) {
-    return <div className="flex items-center justify-center py-24"><div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" /></div>;
+    return (
+      <div className="flex items-center justify-center py-24">
+        <UniversalSpinner size="lg" label="Loading grades & evaluation..." />
+      </div>
+    );
   }
 
   const gradeColumns = [
@@ -372,7 +378,7 @@ const GradeManager = ({ role }) => {
                     <div>
                       <h4 className="font-semibold text-ink text-sm">{exam.title}</h4>
                       <p className="text-xs text-ink-soft mt-0.5">{exam.subjectName} • Sec {exam.section}</p>
-                      <p className="text-xs text-ink-faint">{exam.date ? new Date(exam.date).toLocaleDateString() : ""} • Shift {exam.shift || "I"}</p>
+                      <p className="text-xs text-ink-faint">{exam.date ? formatDateDMY(exam.date) : ""} • Shift {exam.shift || "I"}</p>
                     </div>
                     <Badge tone={exam.resultStatus === "published" ? "success" : "warning"}>
                       {exam.resultStatus === "published" ? "Published" : "Draft"}
@@ -409,7 +415,7 @@ const GradeManager = ({ role }) => {
                       {r.examId?.semester ? <span className="ml-2 text-xs text-ink-faint">Sem {r.examId.semester}</span> : null}
                     </p>
                     <p className="text-xs text-ink-faint mt-1">
-                      {r.examId?.type} | {r.examId?.date ? new Date(r.examId.date).toLocaleDateString() : ""} | Section {r.examId?.section}
+                      {r.examId?.type} | {r.examId?.date ? formatDateDMY(r.examId.date) : ""} | Section {r.examId?.section}
                     </p>
                   </div>
                   <div className="text-right">

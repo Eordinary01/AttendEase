@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { BarChart3, Download, AlertCircle, Check, CalendarRange } from "lucide-react";
 import api from "../../utils/api";
+import { getLocalTodayStr } from "../../utils/dateUtils";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
@@ -70,7 +71,7 @@ const ReportsManager = () => {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.download = `attendance-report-${new Date().toISOString().split("T")[0]}.csv`;
+      link.download = `attendance-report-${getLocalTodayStr()}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -83,10 +84,20 @@ const ReportsManager = () => {
     }
   };
 
-  const statusBadge = (status) => {
+  const [riskFilter, setRiskFilter] = useState("all");
+
+  const filteredRows = React.useMemo(() => {
+    if (!data?.rows) return [];
+    if (!riskFilter || riskFilter === "all") return data.rows;
+    if (riskFilter === "impossible") return data.rows.filter(r => r.isMathematicallyImpossible);
+    return data.rows.filter(r => (r.riskLevel || r.status) === riskFilter);
+  }, [data?.rows, riskFilter]);
+
+  const statusBadge = (status, isImpossible = false) => {
+    if (isImpossible) return <Badge tone="danger" size="sm">Impossible</Badge>;
     const map = { good: "success", warning: "warning", critical: "danger", "no-data": "neutral" };
     const label = { good: "Good", warning: "Warning", critical: "Critical", "no-data": "No Data" };
-    return <Badge tone={map[status]} size="sm">{label[status]}</Badge>;
+    return <Badge tone={map[status] || "neutral"} size="sm">{label[status] || status}</Badge>;
   };
 
   const columns = [
@@ -96,13 +107,22 @@ const ReportsManager = () => {
     { header: "Attendance Ratio", cell: (r) => <span className="text-xs font-semibold text-ink-soft">{r.presentCount} / {r.totalClasses} classes</span> },
     { header: "Compliance", cell: (r) => (
       <div className="flex items-center gap-2">
-        <div className="w-20 h-1.5 bg-line/60 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full ${r.percentage >= 75 ? "bg-emerald-500" : r.percentage >= 60 ? "bg-amber-500" : r.percentage > 0 ? "bg-rose-500" : "bg-ink-faint"}`} style={{ width: `${Math.min(100, r.percentage)}%` }} />
+        <div className="w-16 h-1.5 bg-line/60 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${r.percentage >= 75 ? "bg-emerald-500" : r.percentage >= 65 ? "bg-amber-500" : r.percentage > 0 ? "bg-rose-500" : "bg-ink-faint"}`} style={{ width: `${Math.min(100, r.percentage)}%` }} />
         </div>
         <span className="text-xs font-bold text-ink">{r.percentage}%</span>
       </div>
     ) },
-    { header: "Risk Status", cell: (r) => statusBadge(r.status) },
+    { header: "Classes Needed", cell: (r) => (
+      r.isMathematicallyImpossible ? (
+        <span className="text-xs font-bold text-rose-500 font-mono">Impossible</span>
+      ) : r.classesRequired > 0 ? (
+        <span className="text-xs font-bold text-amber-500 font-mono">+{r.classesRequired} needed</span>
+      ) : (
+        <span className="text-xs font-semibold text-emerald-500 font-mono">0 (Good)</span>
+      )
+    ) },
+    { header: "Risk Status", cell: (r) => statusBadge(r.riskLevel || r.status, r.isMathematicallyImpossible) },
   ];
 
   return (
@@ -130,7 +150,7 @@ const ReportsManager = () => {
 
       {/* Filter Toolbar Card */}
       <Card padding="md" bordered>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
             <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Section</label>
             <select 
@@ -140,6 +160,20 @@ const ReportsManager = () => {
             >
               <option value="">All Sections</option>
               {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">Risk Filter</label>
+            <select
+              value={riskFilter}
+              onChange={e => setRiskFilter(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="all">All Risk Levels</option>
+              <option value="good">Good (≥75%)</option>
+              <option value="warning">Warning (65%-74%)</option>
+              <option value="critical">Critical (&lt;65%)</option>
+              <option value="impossible">Mathematically Impossible</option>
             </select>
           </div>
           <div>
@@ -183,15 +217,15 @@ const ReportsManager = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
             <StatCard label="Total Students" value={data.summary.totalStudents} tone="primary" />
             <StatCard label="Average Attendance" value={`${data.summary.averageAttendance}%`} tone="info" />
-            <StatCard label="Total Classes Logged" value={data.summary.totalClasses} tone="secondary" />
-            <StatCard label="Critical Attendance (<60%)" value={data.summary.criticalCount} tone={data.summary.criticalCount > 0 ? "danger" : "success"} />
+            <StatCard label="At Risk / Critical" value={(data.summary.warningCount || 0) + (data.summary.criticalCount || 0)} tone={(data.summary.warningCount || 0) + (data.summary.criticalCount || 0) > 0 ? "warning" : "success"} />
+            <StatCard label="Mathematically Impossible" value={data.summary.impossibleCount || 0} tone={data.summary.impossibleCount > 0 ? "danger" : "success"} />
           </div>
 
-          {data.rows.length === 0 ? (
-            <EmptyState title="No Report Records" description="No attendance records match the chosen filter range." icon={CalendarRange} />
+          {filteredRows.length === 0 ? (
+            <EmptyState title="No Matching Records" description="No student records match the selected filters or risk criteria." icon={CalendarRange} />
           ) : (
             <Card padding="none" bordered className="overflow-hidden">
-              <Table columns={columns} data={data.rows} rowKey="id" />
+              <Table columns={columns} data={filteredRows} rowKey="id" />
             </Card>
           )}
         </>

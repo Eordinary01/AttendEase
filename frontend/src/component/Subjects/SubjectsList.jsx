@@ -1,6 +1,7 @@
 // src/components/Subject/SubjectList.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../utils/api';
+import { formatDateDMY } from '../../utils/dateUtils';
 import { logError } from '../../utils/logger';
 import SubjectCard from './SubjectsCard';
 import SubjectFilters from './SubjectsFilters';
@@ -475,7 +476,7 @@ const SubjectsList = ({ role, userId, userName, userEmail }) => {
                               Section {assignment.section}
                             </p>
                             <p className="text-xs text-ink-soft">
-                              Assigned: {new Date(assignment.assignedDate).toLocaleDateString()}
+                              Assigned: {formatDateDMY(assignment.assignedDate)}
                             </p>
                           </div>
                         </div>
@@ -574,7 +575,7 @@ const SubjectsList = ({ role, userId, userName, userEmail }) => {
                         <div key={idx} className="flex items-center justify-between text-sm">
                           <span className="text-ink-soft">Section {assignment.section}</span>
                           <span className="text-ink-soft">
-                            {new Date(assignment.assignedDate).toLocaleDateString()}
+                            {formatDateDMY(assignment.assignedDate)}
                           </span>
                           <span className="text-green-600">
                             {assignment.studentsCount || 0} students

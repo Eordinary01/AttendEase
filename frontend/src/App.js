@@ -13,6 +13,9 @@ import { onAuthError } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContexts";
 import { PermissionsProvider, usePermissions } from "./contexts/PermissionsContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import { DemoProvider } from "./contexts/DemoContext";
+import { isDemoActive, getDemoSession } from "./utils/demoSandbox";
 import ErrorBoundary from "./component/common/ErrorBoundary";
 import { getPostLogoutPath } from "./utils/loginPath";
 
@@ -35,6 +38,7 @@ const SubjectList = lazy(() => import("./component/Subjects/SubjectsList"));
 const StudentSubjects = lazy(() => import("./component/Subjects/StudentsSubjects"));
 const TeacherSubjects = lazy(() => import("./component/Subjects/TeachersSubjects"));
 const TeacherAlerts = lazy(() => import("./component/Teacher/TeacherAlerts"));
+const StudentAlerts = lazy(() => import("./component/Student/StudentAlerts"));
 const TeacherFaceSession = lazy(() => import("./component/FaceAttendance/TeacherFaceSession"));
 const FaceRegistration = lazy(() => import("./component/FaceAttendance/FaceRegistration"));
 const LandingPage = lazy(() => import("./component/Landing/LandingPage"));
@@ -70,6 +74,9 @@ const AcademicStructure = lazy(() => import("./component/Admin/AcademicStructure
 const CalendarManager = lazy(() => import("./component/Admin/CalendarManager"));
 const ForgotPassword = lazy(() => import("./component/Auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("./component/Auth/ResetPassword"));
+const LeaveApplication = lazy(() => import("./component/Student/LeaveApplication"));
+const LeaveApprovalQueue = lazy(() => import("./component/Teacher/LeaveApprovalQueue"));
+const LeaveManagement = lazy(() => import("./component/Admin/LeaveManagement"));
 
 const PageLoader = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
@@ -170,22 +177,66 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user data from localStorage
-    const token = localStorage.getItem("token");
+    // Purge any legacy refreshToken from localStorage (refreshToken is strictly an httpOnly cookie)
+    localStorage.removeItem("refreshToken");
+
+    // Load user data from localStorage or active demo session
     const userRole = localStorage.getItem("role");
     const storedUserId = localStorage.getItem("userId");
     const storedUserName = localStorage.getItem("userName");
     const storedUserEmail = localStorage.getItem("userEmail");
 
-    if (token && userRole) {
+    if (storedUserId && userRole) {
       setIsAuthenticated(true);
       setRole(userRole);
       setUserId(storedUserId);
       setUserName(storedUserName || "");
       setUserEmail(storedUserEmail || "");
+    } else if (isDemoActive()) {
+      const demo = getDemoSession();
+      if (demo && demo.role) {
+        setIsAuthenticated(true);
+        setRole(demo.role);
+        setUserId(`demo-${demo.role}`);
+        setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
+        setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
+      }
     }
 
     setLoading(false);
+
+    const handleAuthSync = () => {
+      const userRole = localStorage.getItem("role");
+      const storedUserId = localStorage.getItem("userId");
+      const storedUserName = localStorage.getItem("userName");
+      const storedUserEmail = localStorage.getItem("userEmail");
+
+      if (storedUserId && userRole) {
+        setIsAuthenticated(true);
+        setRole(userRole);
+        setUserId(storedUserId);
+        setUserName(storedUserName || "");
+        setUserEmail(storedUserEmail || "");
+      } else if (isDemoActive()) {
+        const demo = getDemoSession();
+        if (demo && demo.role) {
+          setIsAuthenticated(true);
+          setRole(demo.role);
+          setUserId(`demo-${demo.role}`);
+          setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
+          setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
+        }
+      } else {
+        setIsAuthenticated(false);
+        setRole("");
+        setUserId(null);
+        setUserName("");
+        setUserEmail("");
+      }
+    };
+
+    window.addEventListener("attendease:auth-changed", handleAuthSync);
+    return () => window.removeEventListener("attendease:auth-changed", handleAuthSync);
   }, []);
 
   // Listen for 401 token expiry → auto-logout
@@ -201,8 +252,10 @@ const App = () => {
   }, []);
 
   const handleLogin = (token, role, userId, userName, userEmail) => {
-    // Store all user data
-    localStorage.setItem("token", token);
+    if (token) {
+      localStorage.setItem("token", token);
+    }
+    localStorage.removeItem("refreshToken");
     localStorage.setItem("role", role);
     localStorage.setItem("userId", userId);
     localStorage.setItem("userName", userName);
@@ -307,6 +360,8 @@ const App = () => {
     <ErrorBoundary>
     <ThemeProvider>
     <ToastProvider>
+    <DemoProvider>
+    <NotificationProvider isAuthenticated={isAuthenticated} role={role}>
     <PermissionsProvider role={role}>
     <Router>
       <PublicHeader
@@ -410,10 +465,38 @@ const App = () => {
           }
         />
         <Route
+          path="/leaves"
+          element={
+            <Protected requiredRole="student">
+              <LeaveApplication />
+            </Protected>
+          }
+        />
+        <Route
           path="/student/subjects"
           element={
             <Protected requiredRole="student">
               <StudentSubjects userId={userId} userName={userName} userEmail={userEmail} />
+            </Protected>
+          }
+        />
+        <Route
+          path="/student/alerts"
+          element={
+            <Protected requiredRole="student">
+              <PlanGate requiredModule="alerts">
+                <StudentAlerts />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/student/announcements"
+          element={
+            <Protected requiredRole="student">
+              <PlanGate requiredModule="alerts">
+                <StudentAlerts />
+              </PlanGate>
             </Protected>
           }
         />
@@ -444,12 +527,30 @@ const App = () => {
           }
         />
         <Route
-          path="/teacher/announcements"
+          path="/teacher/alerts"
           element={
-            <Protected requiredRole="teacher" requiredPermission="alerts:create">
+            <Protected requiredRole="teacher">
               <PlanGate requiredModule="alerts">
                 <TeacherAlerts />
               </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/teacher/announcements"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="alerts">
+                <TeacherAlerts />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/teacher/leaves"
+          element={
+            <Protected requiredRole="teacher">
+              <LeaveApprovalQueue />
             </Protected>
           }
         />
@@ -536,7 +637,15 @@ const App = () => {
           path="/admin/calendar"
           element={
             <Protected requiredRole="admin">
-              <CalendarManager />
+              <CalendarManager role={role} />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/leaves"
+          element={
+            <Protected requiredRole={["admin", "super_admin"]}>
+              <LeaveManagement />
             </Protected>
           }
         />
@@ -619,6 +728,16 @@ const App = () => {
           element={
             <Protected>
               <AttendanceHistory role={role} />
+            </Protected>
+          }
+        />
+
+        {/* Academic Calendar Route - Accessible to all authenticated users */}
+        <Route
+          path="/calendar"
+          element={
+            <Protected>
+              <CalendarManager role={role} />
             </Protected>
           }
         />
@@ -785,7 +904,7 @@ const App = () => {
         <Route
           path="/fees"
           element={
-            <Protected>
+            <Protected requiredRole="student">
               <PlanGate requiredModule="financeManagement">
                 <FeePortal role={role} userId={userId} />
               </PlanGate>
@@ -876,6 +995,8 @@ const App = () => {
       </Suspense>
     </Router>
     </PermissionsProvider>
+    </NotificationProvider>
+    </DemoProvider>
     </ToastProvider>
     </ThemeProvider>
     </ErrorBoundary>

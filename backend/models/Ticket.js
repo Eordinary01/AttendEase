@@ -7,7 +7,7 @@ const proofDocumentSchema = new mongoose.Schema({
   },
   filename: {
     type: String,
-    required: true
+    default: ""
   },
   originalName: {
     type: String,
@@ -19,7 +19,16 @@ const proofDocumentSchema = new mongoose.Schema({
     default: 'other'
   },
   fileSize: Number,
+  bytes: Number,
   mimeType: String,
+  url: {
+    type: String,
+    default: ""
+  },
+  publicId: {
+    type: String,
+    default: ""
+  },
   uploadedAt: {
     type: Date,
     default: Date.now

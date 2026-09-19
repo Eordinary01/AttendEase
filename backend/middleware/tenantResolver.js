@@ -9,6 +9,7 @@ const tenantResolver = async (req, res, next) => {
     '/api/tenant/register', '/api/landing',
     '/api/billing/plans',
     '/api/super-admin', '/api/admin/super', '/api/admin/plans',
+    '/api/demo',
   ];
   if (skipPaths.some(path => req.originalUrl?.startsWith(path) || req.path?.startsWith(path))) {
     return next();
@@ -61,7 +62,7 @@ const tenantResolver = async (req, res, next) => {
       tenant = await cache.get(cacheKey);
       if (!tenant) {
         tenant = await Tenant.findById(jwtTenantId).lean();
-        if (tenant) await cache.set(cacheKey, tenant, 30);
+        if (tenant) await cache.set(cacheKey, tenant, 600);
       }
 
       // SECURITY GUARANTEE: An authenticated user MUST strictly resolve to THEIR tenant.
@@ -83,7 +84,7 @@ const tenantResolver = async (req, res, next) => {
         tenant = await cache.get(cacheKey);
         if (!tenant) {
           tenant = await Tenant.findById(targetId).lean();
-          if (tenant) await cache.set(cacheKey, tenant, 30);
+          if (tenant) await cache.set(cacheKey, tenant, 600);
         }
       }
     }
@@ -96,7 +97,7 @@ const tenantResolver = async (req, res, next) => {
         tenant = await cache.get(cacheKey);
         if (!tenant) {
           tenant = await Tenant.findById(tenantId).lean();
-          if (tenant) await cache.set(cacheKey, tenant, 30);
+          if (tenant) await cache.set(cacheKey, tenant, 600);
         }
       }
 
@@ -110,7 +111,7 @@ const tenantResolver = async (req, res, next) => {
             tenant = await cache.get(cacheKey);
             if (!tenant) {
               tenant = await Tenant.findOne({ subdomain }).lean();
-              if (tenant) await cache.set(cacheKey, tenant, 30);
+              if (tenant) await cache.set(cacheKey, tenant, 600);
             }
           }
         }

@@ -1025,7 +1025,10 @@ const getTeacherSubjects = async (req, res) => {
   const { teacherId } = req.params;
   const { section, semester } = req.query;
 
-  if (!teacherId) {
+  // In demo mode or when 'me' is specified, resolve to the current user's authenticated identity
+  const targetTeacherId = (teacherId === 'me' || req.user?.demo || !teacherId) ? req.user?._id : teacherId;
+
+  if (!targetTeacherId) {
     return res.status(400).json({
       message: "Teacher ID is required",
     });
@@ -1037,14 +1040,14 @@ const getTeacherSubjects = async (req, res) => {
     const tenantId = req.user?.tenantId || req.tenantId;
 
     // Check permissions
-    if (requesterRole !== "admin" && requesterRole !== "super_admin" && requesterId !== String(teacherId)) {
+    if (requesterRole !== "admin" && requesterRole !== "super_admin" && !req.user?.demo && requesterId !== String(targetTeacherId)) {
       return res.status(403).json({
         message: "You do not have permission to view this information",
       });
     }
 
     const teacher = await User.findOne({
-      _id: teacherId,
+      _id: targetTeacherId,
       tenantId: tenantId,
     }).populate("assignedSubjects.subjectId");
 

@@ -20,6 +20,7 @@ import Modal from "../common/ui/Modal";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import StatCard from "../common/ui/StatCard";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 
 const ExamHallManager = () => {
   const [halls, setHalls] = useState([]);
@@ -232,7 +233,7 @@ const ExamHallManager = () => {
 
       {/* Hall Cards Grid */}
       {loading ? (
-        <div className="text-center py-16 text-ink-faint animate-pulse">Loading exam halls...</div>
+        <UniversalSpinner label="Loading exam halls..." />
       ) : filteredHalls.length === 0 ? (
         <Card padding="lg" className="text-center py-12 text-ink-faint space-y-4">
           <Building2 className="w-12 h-12 mx-auto text-primary opacity-60" />

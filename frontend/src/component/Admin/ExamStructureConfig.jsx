@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Settings, Plus, Trash2, Save, Layers, Clock, CalendarRange } from "lucide-react";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
+import { toLocalDateStr } from "../../utils/dateUtils";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import Card from "../common/ui/Card";
 import Button from "../common/ui/Button";
@@ -205,8 +206,8 @@ const ExamStructureContent = () => {
             <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-background border border-line/50">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
                 <Input label="Period Name" value={period.name} onChange={(e) => updatePeriod(idx, "name", e.target.value)} placeholder="e.g. Mid-Sem 1" />
-                <Input label="Start Date" type="date" value={period.startDate?.split("T")[0] || ""} onChange={(e) => updatePeriod(idx, "startDate", e.target.value)} />
-                <Input label="End Date" type="date" value={period.endDate?.split("T")[0] || ""} onChange={(e) => updatePeriod(idx, "endDate", e.target.value)} />
+                <Input label="Start Date" type="date" value={period.startDate ? toLocalDateStr(period.startDate) : ""} onChange={(e) => updatePeriod(idx, "startDate", e.target.value)} />
+                <Input label="End Date" type="date" value={period.endDate ? toLocalDateStr(period.endDate) : ""} onChange={(e) => updatePeriod(idx, "endDate", e.target.value)} />
                 <Input label="Exam Type Code" value={period.examTypeCode || ""} onChange={(e) => updatePeriod(idx, "examTypeCode", e.target.value)} placeholder="e.g. inTerm1" />
               </div>
               <button onClick={() => removePeriod(idx)} className="p-2 text-ink-faint hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer">

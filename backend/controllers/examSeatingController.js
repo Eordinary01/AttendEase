@@ -9,6 +9,10 @@ const Subject = require("../models/Subject");
 const Tenant = require("../models/Tenant");
 const Enrollment = require("../models/Enrollment");
 const logger = require("../utils/logger");
+const cache = require("../middleware/cache");
+const { getPagination, paginatedResponse } = require("../middleware/paginate");
+const { toISODateString, getTodayISODateString } = require("../utils/dateFormatter");
+const { publishExamEvent } = require("../events/publishers");
 
 const BRANCH_ALIASES = {
   "CSE": ["CSE", "CS", "COMPUTER SCIENCE", "COMPUTER SCIENCE & ENGINEERING", "COMPUTER SCIENCE AND ENGINEERING"],
@@ -63,7 +67,7 @@ function generateTicketQR(tenantId, allocation) {
     studentId: String(allocation.studentId),
     hallCode: allocation.hallCode,
     seatNumber: allocation.seatNumber,
-    examDate: new Date(allocation.examDate).toISOString().split("T")[0],
+    examDate: toISODateString(allocation.examDate),
     shift: allocation.shift,
     timestamp: Date.now(),
   };
@@ -231,6 +235,93 @@ exports.deleteHall = async (req, res) => {
 };
 
 /**
+ * ─── EXAM PERIOD RESOLUTION & GATING HELPER ───
+ * Caches tenant exam periods for 60 seconds to eliminate repeated DB reads.
+ */
+const resolveExamPeriodForDate = async (tenantId, dateStr, shift = null, examPeriodId = null) => {
+  const cacheKey = `tenant-exam-periods:${tenantId}`;
+  let periodDefs = null;
+
+  try {
+    periodDefs = await cache.get(cacheKey);
+  } catch (err) {
+    logger.debug("Cache get failed for exam periods", { error: err.message });
+  }
+
+  if (!periodDefs) {
+    const tenant = await Tenant.findById(tenantId).select("settings.examPeriods").lean();
+    periodDefs = tenant?.settings?.examPeriods || [];
+    try {
+      await cache.set(cacheKey, periodDefs, 60);
+    } catch (err) {
+      logger.debug("Cache set failed for exam periods", { error: err.message });
+    }
+  }
+
+  if (!periodDefs || periodDefs.length === 0) {
+    return {
+      hasPeriodsConfigured: false,
+      matchedPeriod: null,
+      periodName: null,
+      isCompleted: false,
+      isActive: true,
+      periodEndDate: null,
+    };
+  }
+
+  const normalizedDate = toISODateString(dateStr);
+  const todayKey = getTodayISODateString();
+
+  let matched = null;
+
+  // 1. Match by explicit examPeriodId if provided
+  if (examPeriodId) {
+    matched = periodDefs.find(
+      (p) => String(p._id || p.id) === String(examPeriodId) || String(p.name).toLowerCase() === String(examPeriodId).toLowerCase()
+    );
+  }
+
+  // 2. Match by date timeline range
+  if (!matched && normalizedDate) {
+    matched = periodDefs.find((p) => {
+      const sKey = toISODateString(p.startDate) || null;
+      const eKey = toISODateString(p.endDate) || null;
+      if (!sKey || !eKey) return false;
+      return normalizedDate >= sKey && normalizedDate <= eKey;
+    });
+  }
+
+  // 3. Fallback to single configured period
+  if (!matched && periodDefs.length === 1) {
+    matched = periodDefs[0];
+  }
+
+  if (!matched) {
+    return {
+      hasPeriodsConfigured: true,
+      matchedPeriod: null,
+      periodName: null,
+      isCompleted: false,
+      isActive: true,
+      periodEndDate: null,
+    };
+  }
+
+  const endKey = toISODateString(matched.endDate) || null;
+  const isCompleted = endKey ? endKey < todayKey : false;
+  const isActive = matched.isActive !== false;
+
+  return {
+    hasPeriodsConfigured: true,
+    matchedPeriod: matched,
+    periodName: matched.name,
+    isCompleted,
+    isActive,
+    periodEndDate: endKey,
+  };
+};
+
+/**
  * ─── SCHEDULED EXAM DATES DISCOVERY ───
  */
 exports.getScheduledExamDates = async (req, res) => {
@@ -240,7 +331,7 @@ exports.getScheduledExamDates = async (req, res) => {
       tenantId,
       status: { $ne: "cancelled" },
     })
-      .select("date shift title subjectName subjectCode section branch courseId semester room")
+      .select("date shift title subjectName subjectCode section branch courseId semester room examPeriodId")
       .sort({ date: 1, shift: 1 })
       .lean();
 
@@ -248,7 +339,7 @@ exports.getScheduledExamDates = async (req, res) => {
 
     exams.forEach((exam) => {
       if (!exam.date) return;
-      const dateStr = new Date(exam.date).toISOString().split("T")[0];
+      const dateStr = toISODateString(exam.date);
       const shift = exam.shift || "I";
       const key = `${dateStr}__${shift}`;
 
@@ -266,8 +357,21 @@ exports.getScheduledExamDates = async (req, res) => {
       entry.exams.push(exam);
     });
 
-    const result = Array.from(dateMap.values());
-    res.json({ success: true, data: result });
+    const entries = Array.from(dateMap.values());
+    for (const entry of entries) {
+      const periodRes = await resolveExamPeriodForDate(
+        tenantId,
+        entry.date,
+        entry.shift,
+        entry.exams[0]?.examPeriodId
+      );
+      entry.periodName = periodRes.periodName || null;
+      entry.isPeriodCompleted = periodRes.isCompleted || false;
+      entry.isPeriodActive = periodRes.isActive;
+      entry.periodEndDate = periodRes.periodEndDate || null;
+    }
+
+    res.json({ success: true, data: entries });
   } catch (err) {
     logger.error("getScheduledExamDates error", { error: err.message });
     res.status(500).json({ success: false, message: "Failed to fetch scheduled exam dates." });
@@ -290,7 +394,7 @@ exports.generateSeating = async (req, res) => {
       });
     }
 
-    const dateStr = typeof examDate === "string" ? examDate.split("T")[0] : new Date(examDate).toISOString().split("T")[0];
+    const dateStr = toISODateString(examDate);
     const startUtc = new Date(`${dateStr}T00:00:00.000Z`);
     const endUtc = new Date(`${dateStr}T23:59:59.999Z`);
     const startWindow = new Date(startUtc.getTime() - 14 * 3600 * 1000);
@@ -305,7 +409,7 @@ exports.generateSeating = async (req, res) => {
     }).lean();
 
     const scheduledExams = rawScheduledExams.filter((e) => {
-      const eDateStr = new Date(e.date).toISOString().split("T")[0];
+      const eDateStr = toISODateString(e.date);
       return eDateStr === dateStr || (e.date >= startUtc && e.date <= endUtc);
     });
 
@@ -314,6 +418,32 @@ exports.generateSeating = async (req, res) => {
         success: false,
         message: `No scheduled exams found for date ${dateStr} and shift ${shift}.`,
       });
+    }
+
+    // Early Gate: Verify target exam period completion & status
+    const periodRes = await resolveExamPeriodForDate(
+      tenantId,
+      dateStr,
+      shift,
+      scheduledExams[0]?.examPeriodId
+    );
+
+    if (periodRes.matchedPeriod) {
+      if (!periodRes.isActive) {
+        return res.status(400).json({
+          success: false,
+          code: "PERIOD_INACTIVE",
+          message: `Exam period "${periodRes.periodName}" is marked inactive. Seating generation is disabled.`,
+        });
+      }
+
+      if (periodRes.isCompleted) {
+        return res.status(400).json({
+          success: false,
+          code: "PERIOD_COMPLETED",
+          message: `Exam period "${periodRes.periodName}" has ended on ${periodRes.periodEndDate}. Seating generation is disabled after exam period completion.`,
+        });
+      }
     }
 
     // 2. Fetch selected Halls
@@ -479,6 +609,13 @@ exports.generateSeating = async (req, res) => {
     // 7. Bulk Insert Allocations
     const inserted = await ExamSeatingAllocation.insertMany(allocationsToSave);
 
+    publishExamEvent(tenantId, 'exam.seating_ready', {
+      totalAllocated: inserted.length,
+      hallsUsed: halls.length,
+      shift,
+      date: examDate,
+    });
+
     res.status(201).json({
       success: true,
       message: `Successfully generated anti-cheating seating arrangement for ${inserted.length} candidates across ${halls.length} exam hall(s).`,
@@ -515,7 +652,7 @@ exports.getAllocations = async (req, res) => {
     if (attendanceStatus) filter.attendanceStatus = attendanceStatus;
 
     if (examDate) {
-      const dStr = typeof examDate === "string" ? examDate.split("T")[0] : new Date(examDate).toISOString().split("T")[0];
+      const dStr = toISODateString(examDate);
       const startUtc = new Date(`${dStr}T00:00:00.000Z`);
       const endUtc = new Date(`${dStr}T23:59:59.999Z`);
       filter.examDate = {
@@ -530,13 +667,21 @@ exports.getAllocations = async (req, res) => {
 
     const allocations = examDate
       ? rawAllocations.filter((a) => {
-          const aDateStr = new Date(a.examDate).toISOString().split("T")[0];
-          const targetStr = typeof examDate === "string" ? examDate.split("T")[0] : new Date(examDate).toISOString().split("T")[0];
+          const aDateStr = toISODateString(a.examDate);
+          const targetStr = toISODateString(examDate);
           return aDateStr === targetStr;
         })
       : rawAllocations;
 
-    res.json({ success: true, count: allocations.length, data: allocations });
+    const total = allocations.length;
+    const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+    if (isPaginated) {
+      const { page, limit, skip } = getPagination(req, 200, 500);
+      const paginatedDocs = allocations.slice(skip, skip + limit);
+      return res.json(paginatedResponse(paginatedDocs, total, page, limit));
+    }
+
+    res.json({ success: true, count: allocations.length, total: allocations.length, data: allocations });
   } catch (err) {
     logger.error("getAllocations error", { error: err.message });
     res.status(500).json({ success: false, message: "Failed to fetch seating allocations." });
@@ -559,7 +704,7 @@ exports.getHallChart = async (req, res) => {
       return res.status(404).json({ success: false, message: "Exam hall not found." });
     }
 
-    const dStr = typeof examDate === "string" ? examDate.split("T")[0] : new Date(examDate).toISOString().split("T")[0];
+    const dStr = toISODateString(examDate);
     const startUtc = new Date(`${dStr}T00:00:00.000Z`);
     const endUtc = new Date(`${dStr}T23:59:59.999Z`);
 
@@ -574,7 +719,7 @@ exports.getHallChart = async (req, res) => {
     }).lean();
 
     const allocations = rawAllocations.filter((a) => {
-      const aDateStr = new Date(a.examDate).toISOString().split("T")[0];
+      const aDateStr = toISODateString(a.examDate);
       return aDateStr === dStr;
     });
 
@@ -1078,18 +1223,30 @@ exports.importSeatingAllocations = async (req, res) => {
         continue;
       }
 
-      const dateStr = typeof rawDate === "string" ? rawDate.split("T")[0] : new Date(rawDate).toISOString().split("T")[0];
+      const dateStr = toISODateString(rawDate);
       const examDateObj = new Date(dateStr);
 
+      const periodRes = await resolveExamPeriodForDate(tenantId, dateStr, shift);
+      if (periodRes.matchedPeriod) {
+        if (!periodRes.isActive) {
+          errors.push(`Row ${i + 1}: Exam period "${periodRes.periodName}" is marked inactive. Import is disabled.`);
+          continue;
+        }
+        if (periodRes.isCompleted) {
+          errors.push(`Row ${i + 1}: Exam period "${periodRes.periodName}" ended on ${periodRes.periodEndDate}. Seating import is disabled for completed exam periods.`);
+          continue;
+        }
+      }
+
       const matchedExam = exams.find((e) => {
-        const eDateStr = new Date(e.date).toISOString().split("T")[0];
+        const eDateStr = toISODateString(e.date);
         const matchDate = eDateStr === dateStr;
         const matchShift = String(e.shift || "I") === shift;
         const matchSubject = !subjectCode || String(e.subjectCode || "").toUpperCase() === subjectCode;
         const matchSec = !e.section || !student.section || String(e.section).toUpperCase() === String(student.section).toUpperCase();
         return matchDate && matchShift && matchSubject && matchSec;
       }) || exams.find((e) => {
-        const eDateStr = new Date(e.date).toISOString().split("T")[0];
+        const eDateStr = toISODateString(e.date);
         return eDateStr === dateStr && String(e.shift || "I") === shift;
       });
 
