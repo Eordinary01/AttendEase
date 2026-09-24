@@ -2,6 +2,7 @@ node_modules/
 .env
 .env.*
 *.local
+AttendEase_AttendAI_Integration.postman_collection.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
