@@ -6,7 +6,11 @@ const cache = require("./cache");
 
 const displayNames = {
   attendance: "Attendance Management",
+  biometric_attendance: "AI Biometric Face Attendance",
+  face_attendance: "AI Biometric Face Attendance",
   exam_management: "Exam Management",
+  exam_structure: "Exam Structure Configuration",
+  exam_seating: "Exam Seating & Hall Tickets",
   finance_management: "Finance Management",
   library_management: "Library Management",
   hr_management: "HR Management",
@@ -42,14 +46,25 @@ const moduleEnabled = (plan, featureName) => {
   return effectiveModules[featureName] === true || effectiveModules[toModuleKey(featureName)] === true;
 };
 
+// C4 & C7: Extended cache TTL from 60s to 600s (10 minutes) as plan definitions change rarely
+const PLAN_CACHE_TTL = 600; // 10 minutes (was 60s)
+const REQUIRED_PLAN_CACHE_TTL = 600; // 10 minutes
+
 async function findRequiredPlan(featureName) {
+  const cacheKey = `upgrade-plan:${featureName}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return cached;
+
   const plans = await Plan.find({ isActive: true }).sort({ sortOrder: 1 }).lean();
+  let result = "enterprise";
   for (const plan of plans) {
     if (moduleEnabled(plan, featureName)) {
-      return plan.code;
+      result = plan.code;
+      break;
     }
   }
-  return "enterprise";
+  await cache.set(cacheKey, result, REQUIRED_PLAN_CACHE_TTL);
+  return result;
 }
 
 function getFeatureDisplayName(featureName) {
@@ -70,8 +85,7 @@ const featureGuard = (featureName, options = {}) => {
         });
       }
 
-      // authenticateToken flattens req.tenant (plan at top level), while the
-      // global tenantResolver leaves the full Tenant doc (subscription.plan).
+      // Supports both full Tenant document (subscription.plan) and flattened req.tenant (plan)
       const planCode = req.tenant.subscription?.plan || req.tenant.plan;
       const tenantId = req.tenant._id || req.tenant.id;
 
@@ -79,7 +93,7 @@ const featureGuard = (featureName, options = {}) => {
       let plan = await cache.get(planCacheKey);
       if (!plan) {
         plan = await Plan.findOne({ code: planCode }).lean();
-        if (plan) await cache.set(planCacheKey, plan, 60);
+        if (plan) await cache.set(planCacheKey, plan, PLAN_CACHE_TTL);
       }
 
       if (!plan) {
@@ -276,10 +290,13 @@ const usageGuard = (metricType) => {
       let limit = 0;
 
       switch (metricType) {
-        case "storage":
-          currentUsage = tenant.stats?.storageUsedMB || 0;
+        case "storage": {
+          const { getTenantLiveStats } = require("../controllers/tenantController");
+          const liveStats = await getTenantLiveStats(tenantId);
+          currentUsage = liveStats?.storageUsedMB || 0;
           limit = limits.maxStorageMB || 1024;
           break;
+        }
 
         case "api_calls":
           currentUsage = await getAPICallsCount(tenantId);

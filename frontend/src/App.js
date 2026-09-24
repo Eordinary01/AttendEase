@@ -13,6 +13,9 @@ import { onAuthError } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContexts";
 import { PermissionsProvider, usePermissions } from "./contexts/PermissionsContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import { DemoProvider } from "./contexts/DemoContext";
+import { isDemoActive, getDemoSession } from "./utils/demoSandbox";
 import ErrorBoundary from "./component/common/ErrorBoundary";
 import { getPostLogoutPath } from "./utils/loginPath";
 
@@ -35,6 +38,9 @@ const SubjectList = lazy(() => import("./component/Subjects/SubjectsList"));
 const StudentSubjects = lazy(() => import("./component/Subjects/StudentsSubjects"));
 const TeacherSubjects = lazy(() => import("./component/Subjects/TeachersSubjects"));
 const TeacherAlerts = lazy(() => import("./component/Teacher/TeacherAlerts"));
+const StudentAlerts = lazy(() => import("./component/Student/StudentAlerts"));
+const TeacherFaceSession = lazy(() => import("./component/FaceAttendance/TeacherFaceSession"));
+const FaceRegistration = lazy(() => import("./component/FaceAttendance/FaceRegistration"));
 const LandingPage = lazy(() => import("./component/Landing/LandingPage"));
 const TenantRegistration = lazy(() => import("./component/Landing/TenantRegistration"));
 const OnboardingWizard = lazy(() => import("./component/Admin/OnboardingWizard"));
@@ -57,12 +63,20 @@ const GradeManager = lazy(() => import("./component/GradeManager"));
 const ResultsView = lazy(() => import("./component/ResultsView"));
 const ExamManager = lazy(() => import("./component/Admin/ExamManager"));
 const ExamStructureConfig = lazy(() => import("./component/Admin/ExamStructureConfig"));
+const ExamHallManager = lazy(() => import("./component/Admin/ExamHallManager"));
+const ExamSeatingEngine = lazy(() => import("./component/Admin/ExamSeatingEngine"));
+const StudentHallTicket = lazy(() => import("./component/exam/StudentHallTicket"));
+const InvigilatorQRScanner = lazy(() => import("./component/exam/InvigilatorQRScanner"));
 const Announcements = lazy(() => import("./component/Admin/Announcements"));
 const StudentsManager = lazy(() => import("./component/Admin/StudentsManager"));
 const ReportsManager = lazy(() => import("./component/Admin/ReportsManager"));
 const AcademicStructure = lazy(() => import("./component/Admin/AcademicStructure"));
+const CalendarManager = lazy(() => import("./component/Admin/CalendarManager"));
 const ForgotPassword = lazy(() => import("./component/Auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("./component/Auth/ResetPassword"));
+const LeaveApplication = lazy(() => import("./component/Student/LeaveApplication"));
+const LeaveApprovalQueue = lazy(() => import("./component/Teacher/LeaveApprovalQueue"));
+const LeaveManagement = lazy(() => import("./component/Admin/LeaveManagement"));
 
 const PageLoader = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
@@ -83,9 +97,15 @@ const PrivateRoute = ({
     return <Navigate to={getPostLogoutPath(userRole)} replace />;
   }
 
-  // Check if user has required role (if specified)
-  if (requiredRole && userRole !== requiredRole && !(requiredRole === 'admin' && userRole === 'super_admin')) {
-    return <Navigate to="/dashboard" replace />;
+  // Check if user has required role (supports single string or array of strings)
+  if (requiredRole) {
+    const isAllowedRole = Array.isArray(requiredRole)
+      ? requiredRole.includes(userRole) || (requiredRole.includes("admin") && userRole === "super_admin")
+      : userRole === requiredRole || (requiredRole === "admin" && userRole === "super_admin");
+
+    if (!isAllowedRole) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;
@@ -157,22 +177,66 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user data from localStorage
-    const token = localStorage.getItem("token");
+    // Purge any legacy refreshToken from localStorage (refreshToken is strictly an httpOnly cookie)
+    localStorage.removeItem("refreshToken");
+
+    // Load user data from localStorage or active demo session
     const userRole = localStorage.getItem("role");
     const storedUserId = localStorage.getItem("userId");
     const storedUserName = localStorage.getItem("userName");
     const storedUserEmail = localStorage.getItem("userEmail");
 
-    if (token && userRole) {
+    if (storedUserId && userRole) {
       setIsAuthenticated(true);
       setRole(userRole);
       setUserId(storedUserId);
       setUserName(storedUserName || "");
       setUserEmail(storedUserEmail || "");
+    } else if (isDemoActive()) {
+      const demo = getDemoSession();
+      if (demo && demo.role) {
+        setIsAuthenticated(true);
+        setRole(demo.role);
+        setUserId(`demo-${demo.role}`);
+        setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
+        setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
+      }
     }
 
     setLoading(false);
+
+    const handleAuthSync = () => {
+      const userRole = localStorage.getItem("role");
+      const storedUserId = localStorage.getItem("userId");
+      const storedUserName = localStorage.getItem("userName");
+      const storedUserEmail = localStorage.getItem("userEmail");
+
+      if (storedUserId && userRole) {
+        setIsAuthenticated(true);
+        setRole(userRole);
+        setUserId(storedUserId);
+        setUserName(storedUserName || "");
+        setUserEmail(storedUserEmail || "");
+      } else if (isDemoActive()) {
+        const demo = getDemoSession();
+        if (demo && demo.role) {
+          setIsAuthenticated(true);
+          setRole(demo.role);
+          setUserId(`demo-${demo.role}`);
+          setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
+          setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
+        }
+      } else {
+        setIsAuthenticated(false);
+        setRole("");
+        setUserId(null);
+        setUserName("");
+        setUserEmail("");
+      }
+    };
+
+    window.addEventListener("attendease:auth-changed", handleAuthSync);
+    return () => window.removeEventListener("attendease:auth-changed", handleAuthSync);
   }, []);
 
   // Listen for 401 token expiry → auto-logout
@@ -188,8 +252,10 @@ const App = () => {
   }, []);
 
   const handleLogin = (token, role, userId, userName, userEmail) => {
-    // Store all user data
-    localStorage.setItem("token", token);
+    if (token) {
+      localStorage.setItem("token", token);
+    }
+    localStorage.removeItem("refreshToken");
     localStorage.setItem("role", role);
     localStorage.setItem("userId", userId);
     localStorage.setItem("userName", userName);
@@ -269,10 +335,14 @@ const App = () => {
       );
     }
 
+    const roleMatches = Array.isArray(requiredRole)
+      ? requiredRole.includes(role) || (requiredRole.includes("admin") && role === "super_admin")
+      : role === requiredRole || (requiredRole === "admin" && role === "super_admin");
+
     const allowed =
       (!requiredRole && !requiredPermission) ||
-      role === requiredRole ||
-      (role === 'super_admin' && (requiredRole === 'admin' || !requiredRole)) ||
+      roleMatches ||
+      (role === "super_admin") ||
       (requiredPermission && can(requiredPermission));
 
     if (!allowed) {
@@ -290,6 +360,8 @@ const App = () => {
     <ErrorBoundary>
     <ThemeProvider>
     <ToastProvider>
+    <DemoProvider>
+    <NotificationProvider isAuthenticated={isAuthenticated} role={role}>
     <PermissionsProvider role={role}>
     <Router>
       <PublicHeader
@@ -393,10 +465,38 @@ const App = () => {
           }
         />
         <Route
+          path="/leaves"
+          element={
+            <Protected requiredRole="student">
+              <LeaveApplication />
+            </Protected>
+          }
+        />
+        <Route
           path="/student/subjects"
           element={
             <Protected requiredRole="student">
               <StudentSubjects userId={userId} userName={userName} userEmail={userEmail} />
+            </Protected>
+          }
+        />
+        <Route
+          path="/student/alerts"
+          element={
+            <Protected requiredRole="student">
+              <PlanGate requiredModule="alerts">
+                <StudentAlerts />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/student/announcements"
+          element={
+            <Protected requiredRole="student">
+              <PlanGate requiredModule="alerts">
+                <StudentAlerts />
+              </PlanGate>
             </Protected>
           }
         />
@@ -427,11 +527,49 @@ const App = () => {
           }
         />
         <Route
-          path="/teacher/announcements"
+          path="/teacher/alerts"
           element={
-            <Protected requiredRole="teacher" requiredPermission="alerts:create">
+            <Protected requiredRole="teacher">
               <PlanGate requiredModule="alerts">
                 <TeacherAlerts />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/teacher/announcements"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="alerts">
+                <TeacherAlerts />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/teacher/leaves"
+          element={
+            <Protected requiredRole="teacher">
+              <LeaveApprovalQueue />
+            </Protected>
+          }
+        />
+        <Route
+          path="/face-attendance"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="biometricAttendance">
+                <TeacherFaceSession />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/face-registration"
+          element={
+            <Protected requiredRole="teacher">
+              <PlanGate requiredModule="biometricAttendance">
+                <FaceRegistration />
               </PlanGate>
             </Protected>
           }
@@ -492,6 +630,22 @@ const App = () => {
           element={
             <Protected requiredRole="admin">
               <TenantSettings />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/calendar"
+          element={
+            <Protected requiredRole="admin">
+              <CalendarManager role={role} />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/leaves"
+          element={
+            <Protected requiredRole={["admin", "super_admin"]}>
+              <LeaveManagement />
             </Protected>
           }
         />
@@ -578,6 +732,16 @@ const App = () => {
           }
         />
 
+        {/* Academic Calendar Route - Accessible to all authenticated users */}
+        <Route
+          path="/calendar"
+          element={
+            <Protected>
+              <CalendarManager role={role} />
+            </Protected>
+          }
+        />
+
         {/* Parent Portal Route */}
         <Route
           path="/parent/dashboard"
@@ -646,6 +810,46 @@ const App = () => {
           }
         />
         <Route
+          path="/admin/exams/halls"
+          element={
+            <Protected requiredPermission="exam:create">
+              <PlanGate requiredModule="examSeating">
+                <ExamHallManager />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/exams/seating"
+          element={
+            <Protected requiredPermission="exam:create">
+              <PlanGate requiredModule="examSeating">
+                <ExamSeatingEngine />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/exams/hall-ticket"
+          element={
+            <Protected>
+              <PlanGate requiredModule="examSeating">
+                <StudentHallTicket />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/exams/invigilator-scanner"
+          element={
+            <Protected requiredPermission="exam:grade">
+              <PlanGate requiredModule="examSeating">
+                <InvigilatorQRScanner />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
           path="/admin/exam-structure"
           element={
             <Protected requiredPermission="exam:update">
@@ -700,7 +904,7 @@ const App = () => {
         <Route
           path="/fees"
           element={
-            <Protected>
+            <Protected requiredRole="student">
               <PlanGate requiredModule="financeManagement">
                 <FeePortal role={role} userId={userId} />
               </PlanGate>
@@ -791,6 +995,8 @@ const App = () => {
       </Suspense>
     </Router>
     </PermissionsProvider>
+    </NotificationProvider>
+    </DemoProvider>
     </ToastProvider>
     </ThemeProvider>
     </ErrorBoundary>

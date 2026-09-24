@@ -185,44 +185,4 @@ router.post('/contact', async (req, res) => {
   }
 });
 
-/**
- * POST /api/landing/demo-request
- * Request a demo
- */
-router.post('/demo-request', async (req, res) => {
-  const { name, email, phone, institutionName, studentCount } = req.body;
-  
-  if (!name || !email || !institutionName) {
-    return res.status(400).json({
-      success: false,
-      message: 'Name, email, and institution name are required'
-    });
-  }
-  
-  try {
-    const lead = await Lead.create({
-      type: 'demo',
-      name,
-      email,
-      phone,
-      institutionName,
-      studentCount,
-      status: 'new',
-    });
-    
-    console.log('Demo lead created:', lead._id);
-    
-    res.json({
-      success: true,
-      message: 'Demo request received! We will contact you within 24 hours.',
-    });
-  } catch (error) {
-    logger.error('Error creating demo lead', { error: error.message });
-    res.status(500).json({
-      success: false,
-      message: 'Failed to submit demo request',
-    });
-  }
-});
-
 module.exports = router;

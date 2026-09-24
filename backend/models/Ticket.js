@@ -7,7 +7,7 @@ const proofDocumentSchema = new mongoose.Schema({
   },
   filename: {
     type: String,
-    required: true
+    default: ""
   },
   originalName: {
     type: String,
@@ -19,7 +19,16 @@ const proofDocumentSchema = new mongoose.Schema({
     default: 'other'
   },
   fileSize: Number,
+  bytes: Number,
   mimeType: String,
+  url: {
+    type: String,
+    default: ""
+  },
+  publicId: {
+    type: String,
+    default: ""
+  },
   uploadedAt: {
     type: Date,
     default: Date.now
@@ -74,6 +83,15 @@ const ticketSchema = new mongoose.Schema({
     default: 'pending'
   },
   verificationRemarks: String,
+  assignedTeacherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true
+  },
+  assignedTeacher: {
+    name: String,
+    email: String
+  },
   verifiedByTeacherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -117,9 +135,11 @@ const ticketSchema = new mongoose.Schema({
 // Indexes for better performance
 ticketSchema.index({ studentId: 1, createdAt: -1 });
 ticketSchema.index({ subjectId: 1, verificationStatus: 1 });
+ticketSchema.index({ assignedTeacherId: 1, verificationStatus: 1 });
 ticketSchema.index({ verifiedByTeacherId: 1 });
 ticketSchema.index({ status: 1 });
 ticketSchema.index({ tenantId: 1, studentId: 1, createdAt: -1 });
+ticketSchema.index({ tenantId: 1, assignedTeacherId: 1, verificationStatus: 1 });
 ticketSchema.index({ tenantId: 1, verifiedByTeacherId: 1, status: 1 });
 ticketSchema.index({ tenantId: 1, status: 1 });
 

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const logger = require("../utils/logger");
+const { getTodayISODateString } = require("../utils/dateFormatter");
 
 const getTeacherSectionFilter = (user) => {
   if (user.role !== "teacher") return null;
@@ -73,6 +74,52 @@ const buildReport = async (req) => {
   const rows = students.map(s => {
     const r = recordMap.get(String(s._id)) || { totalClasses: 0, presentCount: 0, absentCount: 0, leaveCount: 0 };
     const percentage = r.totalClasses > 0 ? Number(((r.presentCount / r.totalClasses) * 100).toFixed(2)) : 0;
+    
+    // Phase 9 Deficit Trajectory Math
+    const projectedClasses = Math.max(r.totalClasses, 60);
+    const remainingClasses = Math.max(0, projectedClasses - r.totalClasses);
+    let classesRequired = 0;
+    let isMathematicallyImpossible = false;
+
+    if (r.totalClasses > 0 && percentage < 75) {
+      // Consecutive classes needed to reach >= 75% attendance:
+      const rawRequired = Math.ceil((0.75 * r.totalClasses - r.presentCount) / 0.25);
+      classesRequired = Math.max(0, rawRequired);
+
+      // Minimum classes to achieve 75% by semester end:
+      const minClassesToPassSemester = Math.ceil(0.75 * projectedClasses - r.presentCount);
+
+      if (minClassesToPassSemester > remainingClasses || (r.presentCount + remainingClasses) < (0.75 * projectedClasses)) {
+        isMathematicallyImpossible = true;
+      }
+    }
+
+    let riskLevel = "good";
+    if (r.totalClasses === 0) {
+      riskLevel = "no-data";
+    } else if (isMathematicallyImpossible) {
+      riskLevel = "critical";
+    } else if (percentage >= 75) {
+      riskLevel = "good";
+    } else if (percentage >= 65) {
+      riskLevel = "warning";
+    } else {
+      riskLevel = "critical";
+    }
+
+    let alertMessage = "";
+    if (riskLevel === "good") {
+      alertMessage = "✅ GOOD: Attendance is excellent. Keep it up!";
+    } else if (riskLevel === "warning") {
+      alertMessage = `⚠️ WARNING: Needs ${classesRequired} consecutive classes to reach 75%`;
+    } else if (isMathematicallyImpossible) {
+      alertMessage = "🔴 CRITICAL: Mathematically impossible to reach 75% before semester end without medical condonation waiver";
+    } else if (riskLevel === "critical") {
+      alertMessage = "🔴 CRITICAL: Attendance is severely low. Immediate intervention required.";
+    } else {
+      alertMessage = "No attendance data recorded yet.";
+    }
+
     return {
       id: s._id,
       name: s.name,
@@ -84,7 +131,13 @@ const buildReport = async (req) => {
       absentCount: r.absentCount,
       leaveCount: r.leaveCount,
       percentage,
-      status: percentage >= 75 ? "good" : percentage >= 60 ? "warning" : percentage > 0 ? "critical" : "no-data",
+      status: riskLevel,
+      riskLevel,
+      projectedClasses,
+      remainingClasses,
+      classesRequired,
+      isMathematicallyImpossible,
+      alertMessage,
     };
   });
 
@@ -92,12 +145,13 @@ const buildReport = async (req) => {
     acc.totalStudents++;
     acc.totalClasses += r.totalClasses;
     acc.totalPresent += r.presentCount;
-    if (r.status === "good") acc.goodCount++;
-    else if (r.status === "warning") acc.warningCount++;
-    else if (r.status === "critical") acc.criticalCount++;
+    if (r.riskLevel === "good") acc.goodCount++;
+    else if (r.riskLevel === "warning") acc.warningCount++;
+    else if (r.riskLevel === "critical") acc.criticalCount++;
     else acc.noDataCount++;
+    if (r.isMathematicallyImpossible) acc.impossibleCount++;
     return acc;
-  }, { totalStudents: 0, totalClasses: 0, totalPresent: 0, goodCount: 0, warningCount: 0, criticalCount: 0, noDataCount: 0 });
+  }, { totalStudents: 0, totalClasses: 0, totalPresent: 0, goodCount: 0, warningCount: 0, criticalCount: 0, impossibleCount: 0, noDataCount: 0 });
   summary.averageAttendance = summary.totalClasses > 0 ? Number(((summary.totalPresent / summary.totalClasses) * 100).toFixed(2)) : 0;
 
   return { rows, summary, subjects, filters: { section: section || null, fromDate: fromDate || null, toDate: toDate || null, subjectId: subjectId || null } };
@@ -131,7 +185,7 @@ const exportAttendanceReport = async (req, res) => {
     ].join(","));
     const csv = [header, ...lines].join("\n");
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="attendance-report-${new Date().toISOString().split("T")[0]}.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="attendance-report-${getTodayISODateString()}.csv"`);
     return res.status(200).send(csv);
   } catch (error) {
     logger.error("Error exporting attendance report", { error: error.message });

@@ -2,27 +2,263 @@ const Ticket = require("../models/Ticket");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Subject = require("../models/Subject");
+const Timetable = require("../models/Timetable");
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const logger = require("../utils/logger");
+const { uploadToCloudinary, getTicketFolder } = require("../utils/cloudinary");
+const { toISODateString } = require("../utils/dateFormatter");
+const {
+  publishTicketEvent,
+  publishAttendanceCorrected,
+} = require("../events/publishers");
 require('dotenv').config();
 
 /**
+ * Helper to get normalized branch variants for academic matching
+ */
+const getBranchVariants = (branch) => {
+  if (!branch) return [];
+  const b = branch.trim().toLowerCase();
+  const variants = new Set([branch.trim(), branch.trim().toUpperCase(), branch.trim().toLowerCase()]);
+  
+  if (b.includes('computer') || b === 'cse' || b === 'cs') {
+    ['CSE', 'CS', 'Computer Science', 'Computer Science & Engineering', 'Computer Science and Engineering'].forEach(v => variants.add(v));
+  } else if (b.includes('information') || b === 'it') {
+    ['IT', 'Information Technology'].forEach(v => variants.add(v));
+  } else if (b.includes('electronic') || b === 'ece') {
+    ['ECE', 'Electronics & Communication', 'Electronics and Communication'].forEach(v => variants.add(v));
+  } else if (b.includes('mechanical') || b === 'me') {
+    ['ME', 'Mechanical', 'Mechanical Engineering'].forEach(v => variants.add(v));
+  } else if (b.includes('civil') || b === 'ce') {
+    ['CE', 'Civil', 'Civil Engineering'].forEach(v => variants.add(v));
+  } else if (b.includes('electrical') || b === 'ee') {
+    ['EE', 'Electrical', 'Electrical Engineering'].forEach(v => variants.add(v));
+  } else if (b.includes('ai') || b.includes('artificial') || b === 'aiml') {
+    ['AIML', 'AI', 'Artificial Intelligence & Machine Learning'].forEach(v => variants.add(v));
+  } else if (b.includes('data') || b === 'ds') {
+    ['DS', 'Data Science'].forEach(v => variants.add(v));
+  } else if (b.includes('cyber') || b === 'cy') {
+    ['CY', 'Cybersecurity', 'Cyber Security'].forEach(v => variants.add(v));
+  } else if (b.includes('robot') || b === 'ra') {
+    ['RA', 'Robotics & Automation', 'Robotics'].forEach(v => variants.add(v));
+  } else if (b.includes('chem')) {
+    ['CHEM', 'Chemistry', 'Chemical'].forEach(v => variants.add(v));
+  } else if (b.includes('arch')) {
+    ['ARCH', 'Architecture'].forEach(v => variants.add(v));
+  } else if (b.includes('market') || b === 'mkt') {
+    ['MKT', 'Marketing'].forEach(v => variants.add(v));
+  } else if (b.includes('fin')) {
+    ['FIN', 'Finance'].forEach(v => variants.add(v));
+  } else if (b.includes('hr') || b.includes('human')) {
+    ['HR', 'Human Resources'].forEach(v => variants.add(v));
+  } else if (b.includes('gm') || b.includes('general')) {
+    ['GM', 'General Management'].forEach(v => variants.add(v));
+  }
+  return Array.from(variants);
+};
+
+/**
+ * GET STUDENT SUBJECTS AND ASSIGNED TEACHERS
+ * Scopes subjects strictly to the student's Course, Branch, and Semester.
+ * Automatically resolves the teacher assigned with that subject for the student's section.
+ */
+const getStudentSubjectsAndTeachers = async (req, res) => {
+  const studentId = req.user._id;
+  const tenantId = req.user.tenantId;
+
+  try {
+    const student = await User.findOne({
+      _id: studentId,
+      tenantId: tenantId,
+      role: 'student',
+      isActive: true,
+    })
+      .select('_id name email rollNo section tenantId courseId courseName branch semester assignedSubjects subjectAttendance')
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student account not found',
+      });
+    }
+
+    const studentSection = (student.section || '').trim().toUpperCase();
+    const branchVariants = getBranchVariants(student.branch);
+    const semValues = student.semester
+      ? [student.semester.toString(), Number(student.semester), `Semester ${student.semester}`, `Sem ${student.semester}`]
+      : [];
+
+    // 1. Build Academic Query: Filter by Course, Branch, Semester within Tenant
+    const subjectQuery = {
+      tenantId: tenantId,
+      isActive: true,
+      isDeleted: { $ne: true },
+    };
+
+    if (semValues.length > 0) {
+      subjectQuery.semester = { $in: semValues };
+    }
+
+    if (student.courseId) {
+      subjectQuery.courseId = student.courseId;
+    }
+
+    if (branchVariants.length > 0) {
+      subjectQuery.$or = [
+        { branch: { $in: branchVariants } },
+        { branch: '' },
+        { branch: null },
+        { branch: { $exists: false } },
+      ];
+    }
+
+    // Fetch matching academic subjects
+    let subjects = await Subject.find(subjectQuery)
+      .select('_id subjectCode subjectName semester branch courseId credits')
+      .lean();
+
+    // Fallback: If no subjects found via academic filter, fallback to timetable or assigned subjects
+    if (subjects.length === 0) {
+      const timetableSubjectIds = await Timetable.find({
+        tenantId: tenantId,
+        section: studentSection,
+        isActive: true,
+        isDeleted: { $ne: true },
+        subjectId: { $ne: null },
+      }).distinct('subjectId');
+
+      if (timetableSubjectIds.length > 0) {
+        subjects = await Subject.find({
+          _id: { $in: timetableSubjectIds },
+          tenantId: tenantId,
+          isActive: true,
+          isDeleted: { $ne: true },
+        })
+          .select('_id subjectCode subjectName semester branch courseId credits')
+          .lean();
+      }
+    }
+
+    // 2. Fetch section timetable slots to map teachers
+    const timetableSlots = await Timetable.find({
+      tenantId: tenantId,
+      section: studentSection,
+      isActive: true,
+      isDeleted: { $ne: true },
+      subjectId: { $ne: null },
+      teacherId: { $ne: null },
+    })
+      .populate('teacherId', 'name email avatar')
+      .lean();
+
+    const timetableTeacherMap = new Map();
+    for (const slot of timetableSlots) {
+      if (slot.subjectId && slot.teacherId) {
+        const sId = slot.subjectId.toString();
+        timetableTeacherMap.set(sId, {
+          id: slot.teacherId._id?.toString() || slot.teacherId.toString(),
+          _id: slot.teacherId._id?.toString() || slot.teacherId.toString(),
+          name: slot.teacherId.name || slot.teacherName,
+          email: slot.teacherId.email || '',
+        });
+      }
+    }
+
+    // 3. Fetch teachers assigned via User.assignedSubjects
+    const teachersAssigned = await User.find({
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true,
+      $or: [
+        { 'assignedSubjects.section': studentSection },
+        { 'assignedSubjects.section': 'all' },
+        { 'assignedSubjects.section': '' },
+        { 'assignedSubjects.section': { $exists: false } },
+      ],
+    })
+      .select('_id name email assignedSubjects')
+      .lean();
+
+    const userTeacherMap = new Map();
+    for (const t of teachersAssigned) {
+      for (const as of t.assignedSubjects || []) {
+        if (as.subjectId) {
+          const asSec = (as.section || '').trim().toUpperCase();
+          if (!asSec || asSec === 'ALL' || asSec === studentSection) {
+            userTeacherMap.set(as.subjectId.toString(), {
+              id: t._id.toString(),
+              _id: t._id.toString(),
+              name: t.name,
+              email: t.email,
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Map each subject with its designated assigned teacher (User assignments take primary priority)
+    const mappedSubjects = subjects.map((sub) => {
+      const sId = sub._id.toString();
+      const assignedTeacher = userTeacherMap.get(sId) || timetableTeacherMap.get(sId) || null;
+
+      return {
+        id: sId,
+        _id: sId,
+        subjectCode: sub.subjectCode || '',
+        subjectName: sub.subjectName || '',
+        semester: sub.semester || '',
+        branch: sub.branch || '',
+        assignedTeacher: assignedTeacher,
+        teachers: assignedTeacher ? [assignedTeacher] : [],
+      };
+    });
+
+    // Sort alphabetically by subject code / name
+    mappedSubjects.sort((a, b) =>
+      (a.subjectCode || a.subjectName).localeCompare(b.subjectCode || b.subjectName)
+    );
+
+    return res.status(200).json({
+      success: true,
+      studentInfo: {
+        name: student.name,
+        rollNo: student.rollNo,
+        section: studentSection,
+        branch: student.branch,
+        semester: student.semester,
+        courseName: student.courseName,
+      },
+      count: mappedSubjects.length,
+      subjects: mappedSubjects,
+    });
+  } catch (error) {
+    logger.error('Error fetching student subjects and teachers', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching subjects and teachers',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * STUDENT CREATES ABSENCE PROOF TICKET
- * Student submits proof of absence (medical cert, permission letter, etc.)
+ * Student submits proof of absence routed to the specific teacher who teaches that subject
  */
 const createAbsenceProofTicket = async (req, res) => {
   const studentId = req.user._id;
-  const { subjectId, absentDate, reason, reasonDescription } = req.body;
+  const { subjectId, teacherId, absentDate, reason, reasonDescription } = req.body;
   const tenantId = req.user.tenantId;
 
   // Validation
-  if (!subjectId || !absentDate || !reason || !reasonDescription) {
+  if (!subjectId || !teacherId || !absentDate || !reason || !reasonDescription) {
     return res.status(400).json({
       success: false,
-      message: 'subjectId, absentDate, reason, and reasonDescription are required'
+      message: 'subjectId, teacherId, absentDate, reason, and reasonDescription are required'
     });
   }
 
@@ -33,7 +269,7 @@ const createAbsenceProofTicket = async (req, res) => {
     });
   }
 
-  const validReasons = ['medical', 'family-emergency', 'institutional-work', 'other'];
+  const validReasons = ['medical', 'family-emergency', 'family', 'institutional-work', 'academic', 'personal', 'other'];
   if (!validReasons.includes(reason)) {
     return res.status(400).json({
       success: false,
@@ -42,13 +278,13 @@ const createAbsenceProofTicket = async (req, res) => {
   }
 
   try {
-    // Verify student with tenant
+    // 1. Verify student with tenant
     const student = await User.findOne({ 
       _id: studentId, 
       tenantId: tenantId,
       role: 'student',
       isActive: true 
-    });
+    }).lean();
     
     if (!student) {
       return res.status(403).json({
@@ -57,12 +293,12 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     }
 
-    // Verify subject exists within tenant
+    // 2. Verify subject exists within tenant
     const subject = await Subject.findOne({ 
       _id: subjectId, 
       tenantId: tenantId,
       isActive: true 
-    });
+    }).lean();
     
     if (!subject) {
       return res.status(404).json({
@@ -71,7 +307,48 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     }
 
-    // Verify date is not in future
+    // 3. Verify teacher exists and is active within tenant
+    const teacher = await User.findOne({
+      _id: teacherId,
+      tenantId: tenantId,
+      role: 'teacher',
+      isActive: true,
+    }).lean();
+
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Selected teacher not found or inactive'
+      });
+    }
+
+    // 4. Verify teacher teaches this subject to the student's section
+    const studentSection = (student.section || '').trim().toUpperCase();
+    const isAssignedViaUser = teacher.assignedSubjects?.some(as => {
+      const sec = (as.section || '').trim().toUpperCase();
+      return as.subjectId?.toString() === subjectId.toString() && (!sec || sec === 'ALL' || sec === studentSection);
+    });
+
+    let isAssignedViaTimetable = false;
+    if (!isAssignedViaUser) {
+      isAssignedViaTimetable = await Timetable.exists({
+        tenantId: tenantId,
+        section: studentSection,
+        subjectId: subjectId,
+        teacherId: teacherId,
+        isActive: true,
+        isDeleted: { $ne: true }
+      });
+    }
+
+    if (!isAssignedViaUser && !isAssignedViaTimetable) {
+      return res.status(400).json({
+        success: false,
+        message: `Selected teacher (${teacher.name}) is not assigned to teach ${subject.subjectName} to Section ${studentSection}.`
+      });
+    }
+
+    // 5. Verify date is not in future
     const dateObj = new Date(absentDate);
     if (dateObj > new Date()) {
       return res.status(400).json({
@@ -80,7 +357,7 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     }
 
-    // Handle uploaded proof documents
+    // 6. Handle uploaded proof documents (Cloudinary with local fallback)
     const proofDocuments = [];
     if (req.files && req.files.length > 0) {
       if (req.files.length > 5) {
@@ -90,18 +367,29 @@ const createAbsenceProofTicket = async (req, res) => {
         });
       }
 
-      req.files.forEach(file => {
+      for (const file of req.files) {
         const fileId = new mongoose.Types.ObjectId();
+        let uploadRes = null;
+        if (file.buffer) {
+          uploadRes = await uploadToCloudinary(file.buffer, {
+            folder: getTicketFolder(tenantId),
+            originalName: file.originalname,
+            resourceType: 'auto',
+          });
+        }
         proofDocuments.push({
           _id: fileId,
-          filename: file.filename,
+          filename: file.filename || (uploadRes ? uploadRes.publicId : file.originalname),
           originalName: file.originalname,
+          url: uploadRes ? uploadRes.url : '',
+          publicId: uploadRes ? uploadRes.publicId : '',
           fileType: req.body.fileType || 'other',
           fileSize: file.size,
+          bytes: uploadRes?.bytes || file.size,
           mimeType: file.mimetype,
           uploadedAt: Date.now()
         });
-      });
+      }
     } else {
       return res.status(400).json({
         success: false,
@@ -109,7 +397,7 @@ const createAbsenceProofTicket = async (req, res) => {
       });
     }
 
-    // Create ticket with tenantId
+    // 7. Create ticket with tenantId, subjectId, and assignedTeacherId
     const newTicket = new Ticket({
       tenantId: tenantId,
       studentId: studentId,
@@ -124,6 +412,11 @@ const createAbsenceProofTicket = async (req, res) => {
         subjectCode: subject.subjectCode,
         subjectName: subject.subjectName
       },
+      assignedTeacherId: teacherId,
+      assignedTeacher: {
+        name: teacher.name,
+        email: teacher.email
+      },
       absentDate: dateObj,
       reason: reason,
       reasonDescription: reasonDescription.trim(),
@@ -134,13 +427,16 @@ const createAbsenceProofTicket = async (req, res) => {
 
     await newTicket.save();
 
+    publishTicketEvent(tenantId, 'ticket.created', newTicket);
+
     return res.status(201).json({
       success: true,
-      message: 'Absence proof ticket created successfully',
+      message: `Absence proof ticket created successfully and assigned to ${teacher.name}`,
       ticket: {
         id: newTicket._id,
         student: newTicket.student,
         subject: newTicket.subjectInfo,
+        assignedTeacher: newTicket.assignedTeacher,
         absentDate: newTicket.absentDate,
         reason: newTicket.reason,
         status: newTicket.status,
@@ -162,7 +458,7 @@ const createAbsenceProofTicket = async (req, res) => {
 
 /**
  * TEACHER VIEWS PENDING ABSENCE PROOF TICKETS
- * Teacher sees tickets for their subject that need verification
+ * Teacher sees tickets assigned directly to them (or for their subject) that need verification
  */
 const getPendingAbsenceTickets = async (req, res) => {
   const teacherId = req.user._id;
@@ -176,7 +472,7 @@ const getPendingAbsenceTickets = async (req, res) => {
       tenantId: tenantId,
       role: 'teacher',
       isActive: true 
-    });
+    }).lean();
     
     if (!teacher) {
       return res.status(403).json({
@@ -185,23 +481,21 @@ const getPendingAbsenceTickets = async (req, res) => {
       });
     }
 
-    // Get subjects taught by this teacher
+    // Get subjects taught by this teacher for fallback
     const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
 
     let query = {
       tenantId: tenantId,
-      subjectId: { $in: teacherSubjects },
-      verificationStatus: { $in: ['pending', 'needs-more-info'] }
+      verificationStatus: { $in: ['pending', 'needs-more-info'] },
+      $or: [
+        { assignedTeacherId: teacherId },
+        { assignedTeacherId: { $exists: false }, subjectId: { $in: teacherSubjects } },
+        { assignedTeacherId: null, subjectId: { $in: teacherSubjects } }
+      ]
     };
 
     // Filter by specific subject if provided
     if (subjectId) {
-      if (!teacherSubjects.includes(subjectId)) {
-        return res.status(403).json({
-          success: false,
-          message: 'You are not assigned to teach this subject'
-        });
-      }
       query.subjectId = subjectId;
     }
 
@@ -210,11 +504,11 @@ const getPendingAbsenceTickets = async (req, res) => {
       query.verificationStatus = status;
     }
 
-    // Fetch tickets
+    // Fetch tickets with optimized lean projection
     const tickets = await Ticket.find(query)
-      .populate('studentId', 'name rollNo section email')
-      .populate('subjectId', 'subjectCode subjectName')
-      .sort({ createdAt: -1 });
+      .select('student subjectInfo assignedTeacher absentDate reason reasonDescription proofDocuments status verificationStatus createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -222,12 +516,26 @@ const getPendingAbsenceTickets = async (req, res) => {
       count: tickets.length,
       tickets: tickets.map(ticket => ({
         id: ticket._id,
+        _id: ticket._id,
         student: ticket.student,
         subject: ticket.subjectInfo,
+        assignedTeacher: ticket.assignedTeacher,
         absentDate: ticket.absentDate,
         reason: ticket.reason,
         reasonDescription: ticket.reasonDescription,
-        documentsCount: ticket.proofDocuments.length,
+        documentsCount: ticket.proofDocuments?.length || 0,
+        documents: (ticket.proofDocuments || []).map(doc => ({
+          id: doc._id,
+          _id: doc._id,
+          filename: doc.filename,
+          originalName: doc.originalName,
+          url: doc.url || '',
+          fileType: doc.fileType,
+          fileSize: doc.fileSize,
+          mimeType: doc.mimeType,
+          uploadedAt: doc.uploadedAt
+        })),
+        proofDocuments: ticket.proofDocuments,
         status: ticket.status,
         verificationStatus: ticket.verificationStatus,
         createdAt: ticket.createdAt
@@ -292,15 +600,16 @@ const verifyAbsenceProof = async (req, res) => {
       });
     }
 
-    // Check if teacher is assigned to this subject
-    const isAssigned = teacher.assignedSubjects?.some(
+    // Check if teacher is assigned to this ticket directly or via subject
+    const isDirectlyAssigned = ticket.assignedTeacherId && ticket.assignedTeacherId.toString() === teacherId.toString();
+    const isSubjectAssigned = teacher.assignedSubjects?.some(
       assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
     );
 
-    if (!isAssigned) {
+    if (!isDirectlyAssigned && !isSubjectAssigned) {
       return res.status(403).json({
         success: false,
-        message: 'You are not assigned to teach this subject'
+        message: 'You are not assigned to this ticket or subject'
       });
     }
 
@@ -324,6 +633,8 @@ const verifyAbsenceProof = async (req, res) => {
     }
 
     await ticket.save();
+
+    publishTicketEvent(tenantId, 'ticket.status_changed', ticket);
 
     return res.status(200).json({
       success: true,
@@ -393,15 +704,16 @@ const markAttendanceAfterVerification = async (req, res) => {
       });
     }
 
-    // Check if teacher is assigned to this subject
-    const isAssigned = teacher.assignedSubjects?.some(
+    // Check if teacher is assigned directly or to subject
+    const isDirectlyAssigned = ticket.assignedTeacherId && ticket.assignedTeacherId.toString() === teacherId.toString();
+    const isSubjectAssigned = teacher.assignedSubjects?.some(
       assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
     );
 
-    if (!isAssigned) {
+    if (!isDirectlyAssigned && !isSubjectAssigned) {
       return res.status(403).json({
         success: false,
-        message: 'You are not assigned to teach this subject'
+        message: 'You are not assigned to this ticket or subject'
       });
     }
 
@@ -440,7 +752,7 @@ const markAttendanceAfterVerification = async (req, res) => {
         remarks: `Marked present based on absence proof verification (Ticket: ${ticket._id})`,
         semester: subject.semester,
         createdBy: teacherId,
-        classSessionId: `${ticket.subjectId}_${ticket.student.section}_${ticket.absentDate.toISOString().split('T')[0]}`
+        classSessionId: `${ticket.subjectId}_${ticket.student.section}_${toISODateString(ticket.absentDate)}`
       });
     }
 
@@ -452,6 +764,15 @@ const markAttendanceAfterVerification = async (req, res) => {
     ticket.attendanceMarkedAt = Date.now();
     ticket.status = 'attendance-updated';
     await ticket.save();
+
+    publishAttendanceCorrected(tenantId, {
+      attendanceId: attendance._id,
+      studentId: ticket.studentId,
+      subjectId: ticket.subjectId,
+      status: 'present',
+      date: ticket.absentDate,
+    });
+    publishTicketEvent(tenantId, 'ticket.status_changed', ticket);
 
     return res.status(200).json({
       success: true,
@@ -492,7 +813,7 @@ const getStudentAbsenceTickets = async (req, res) => {
       tenantId: tenantId,
       role: 'student',
       isActive: true 
-    });
+    }).lean();
     
     if (!student) {
       return res.status(403).json({
@@ -506,9 +827,9 @@ const getStudentAbsenceTickets = async (req, res) => {
       studentId: studentId, 
       tenantId: tenantId 
     })
-      .populate('subjectId', 'subjectCode subjectName')
-      .populate('verifiedByTeacherId', 'name email')
-      .sort({ createdAt: -1 });
+      .select('subjectInfo assignedTeacher verifiedTeacher absentDate reason reasonDescription status verificationStatus verificationRemarks attendanceMarked proofDocuments createdAt verifiedAt attendanceMarkedAt')
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -516,16 +837,22 @@ const getStudentAbsenceTickets = async (req, res) => {
       count: tickets.length,
       tickets: tickets.map(ticket => ({
         id: ticket._id,
+        _id: ticket._id,
         subject: ticket.subjectInfo,
+        assignedTeacher: ticket.assignedTeacher,
+        verifiedTeacher: ticket.verifiedTeacher,
         absentDate: ticket.absentDate,
         reason: ticket.reason,
+        reasonDescription: ticket.reasonDescription,
         status: ticket.status,
         verificationStatus: ticket.verificationStatus,
         verificationRemarks: ticket.verificationRemarks,
         attendanceMarked: ticket.attendanceMarked,
-        documents: ticket.proofDocuments.map(doc => ({
+        documents: (ticket.proofDocuments || []).map(doc => ({
           id: doc._id,
+          _id: doc._id,
           originalName: doc.originalName,
+          url: doc.url || '',
           fileType: doc.fileType,
           fileSize: doc.fileSize
         })),
@@ -633,7 +960,7 @@ const getVerificationStats = async (req, res) => {
       tenantId: tenantId,
       role: 'teacher',
       isActive: true 
-    });
+    }).lean();
     
     if (!teacher) {
       return res.status(403).json({
@@ -642,16 +969,20 @@ const getVerificationStats = async (req, res) => {
       });
     }
 
-    // Get teacher's assigned subjects
+    // Get teacher's assigned subjects for fallback
     const teacherSubjects = teacher.assignedSubjects?.map(s => s.subjectId) || [];
 
-    // Get statistics for teacher's subjects within tenant
+    // Get statistics for teacher's assigned tickets within tenant
     const stats = await Ticket.aggregate([
       { 
         $match: { 
           tenantId: new mongoose.Types.ObjectId(tenantId),
-          subjectId: { $in: teacherSubjects },
-          verifiedByTeacherId: new mongoose.Types.ObjectId(teacherId)
+          $or: [
+            { assignedTeacherId: new mongoose.Types.ObjectId(teacherId) },
+            { verifiedByTeacherId: new mongoose.Types.ObjectId(teacherId) },
+            { assignedTeacherId: { $exists: false }, subjectId: { $in: teacherSubjects } },
+            { assignedTeacherId: null, subjectId: { $in: teacherSubjects } }
+          ]
         } 
       },
       {
@@ -748,16 +1079,18 @@ const getUploadedFile = async (req, res) => {
     let hasPermission = false;
 
     // Student can access their own files
-    if (user.role === 'student' && ticket.studentId.toString() === userId) {
+    if (user.role === 'student' && ticket.studentId.toString() === userId.toString()) {
       hasPermission = true;
     }
     
-    // Teacher can access if assigned to subject
+    // Teacher can access if assigned directly or to subject
     if (user.role === 'teacher') {
-      const isAssigned = user.assignedSubjects?.some(
-        assigned => assigned.subjectId.toString() === ticket.subjectId.toString()
+      const isDirectlyAssigned = (ticket.assignedTeacherId && ticket.assignedTeacherId.toString() === userId.toString()) ||
+                                 (ticket.verifiedByTeacherId && ticket.verifiedByTeacherId.toString() === userId.toString());
+      const isSubjectAssigned = user.assignedSubjects?.some(
+        assigned => assigned.subjectId?.toString() === ticket.subjectId?.toString()
       );
-      if (isAssigned) {
+      if (isDirectlyAssigned || isSubjectAssigned) {
         hasPermission = true;
       }
     }
@@ -774,8 +1107,19 @@ const getUploadedFile = async (req, res) => {
       });
     }
 
-    // Check if file exists
-    const filePath = path.join(__dirname, '../uploads/', file.filename);
+    // 1. If stored in Cloudinary, redirect to secure URL
+    if (file.url && (file.url.startsWith('http://') || file.url.startsWith('https://'))) {
+      return res.redirect(file.url);
+    }
+
+    // 2. Resolve local file path (handles legacy '../uploads/filename' or new '/uploads/tickets/filename')
+    let filePath = '';
+    if (file.url && file.url.startsWith('/uploads/')) {
+      filePath = path.join(__dirname, '..', file.url);
+    } else if (file.filename) {
+      filePath = path.join(__dirname, '../uploads/', file.filename);
+    }
+
     try {
       await fs.access(filePath);
     } catch (err) {
@@ -826,6 +1170,13 @@ const getTicketDetails = async (req, res) => {
   const userId = req.user._id;
   const tenantId = req.user.tenantId;
 
+  if (!mongoose.Types.ObjectId.isValid(ticketId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid ticket ID format'
+    });
+  }
+
   try {
     // Find ticket within tenant
     const ticket = await Ticket.findOne({ 
@@ -833,6 +1184,7 @@ const getTicketDetails = async (req, res) => {
       tenantId: tenantId 
     })
       .populate('subjectId', 'subjectCode subjectName')
+      .populate('assignedTeacherId', 'name email')
       .populate('verifiedByTeacherId', 'name email')
       .populate('studentId', 'name rollNo section email');
 
@@ -859,16 +1211,17 @@ const getTicketDetails = async (req, res) => {
     let hasPermission = false;
 
     // Student can view their own tickets
-    if (user.role === 'student' && ticket.studentId._id.toString() === userId) {
+    if (user.role === 'student' && ticket.studentId?._id?.toString() === userId.toString()) {
       hasPermission = true;
     }
     
-    // Teacher can view tickets for subjects they teach
+    // Teacher can view tickets assigned to them or for subjects they teach
     if (user.role === 'teacher') {
-      const isAssigned = user.assignedSubjects?.some(
-        assigned => assigned.subjectId.toString() === ticket.subjectId._id.toString()
+      const isDirectlyAssigned = ticket.assignedTeacherId && ticket.assignedTeacherId._id?.toString() === userId.toString();
+      const isSubjectAssigned = ticket.subjectId && user.assignedSubjects?.some(
+        assigned => assigned.subjectId?.toString() === ticket.subjectId._id?.toString()
       );
-      if (isAssigned) {
+      if (isDirectlyAssigned || isSubjectAssigned) {
         hasPermission = true;
       }
     }
@@ -890,16 +1243,20 @@ const getTicketDetails = async (req, res) => {
       message: 'Ticket details retrieved',
       ticket: {
         id: ticket._id,
-        student: {
+        student: ticket.studentId ? {
           name: ticket.studentId.name,
           rollNo: ticket.studentId.rollNo,
           section: ticket.studentId.section,
           email: ticket.studentId.email
-        },
-        subject: {
+        } : (ticket.student || null),
+        subject: ticket.subjectId ? {
           subjectCode: ticket.subjectId.subjectCode,
           subjectName: ticket.subjectId.subjectName
-        },
+        } : (ticket.subjectInfo || null),
+        assignedTeacher: ticket.assignedTeacher || (ticket.assignedTeacherId ? {
+          name: ticket.assignedTeacherId.name,
+          email: ticket.assignedTeacherId.email
+        } : null),
         absentDate: ticket.absentDate,
         reason: ticket.reason,
         reasonDescription: ticket.reasonDescription,
@@ -932,6 +1289,7 @@ const getTicketDetails = async (req, res) => {
 };
 
 module.exports = {
+  getStudentSubjectsAndTeachers,
   createAbsenceProofTicket,
   getPendingAbsenceTickets,
   verifyAbsenceProof,

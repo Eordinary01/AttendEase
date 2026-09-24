@@ -4,10 +4,13 @@ const ExamResult = require("../models/ExamResult");
 const User = require("../models/User");
 const Subject = require("../models/Subject");
 const Tenant = require("../models/Tenant");
+const ExamHall = require("../models/ExamHall");
 const { requirePermission } = require("../middleware/permission");
+const { getPagination, paginatedResponse } = require("../middleware/paginate");
 const logger = require("../utils/logger");
 const { toObjectId } = require("../utils/sanitize");
 const { computeStudentGrades, computeSectionBacklogs, calculateGrade } = require("../utils/gradeCalculator");
+const { publishExamEvent } = require("../events/publishers");
 
 // ─── Default exam structure (fallback when tenant has none configured) ───
 const DEFAULT_EXAM_TYPES = [
@@ -325,7 +328,19 @@ const resolveAndValidateExamConfig = (tenantStructure, payload) => {
 
   resolvedExamPeriodId = matchedPeriod._id || matchedPeriod.id || matchedPeriod.name;
 
-  // 3. Validate exam date against matched exam period's start and end date timeline
+  // 3. Expiration Check: An exam period whose end date is in the past cannot be used for new exams
+  const todayKey = formatDateKey(new Date());
+  if (matchedPeriod.endDate) {
+    const endKey = formatDateKey(matchedPeriod.endDate);
+    if (endKey && endKey < todayKey) {
+      errors.push(
+        `Exam period "${matchedPeriod.name}" ended on ${endKey} and is no longer valid for scheduling new exams. Please select an active or upcoming exam period.`
+      );
+      return { errors };
+    }
+  }
+
+  // 4. Validate exam date against matched exam period's start and end date timeline
   if (payload.date && matchedPeriod.startDate && matchedPeriod.endDate) {
     const examDateKey = formatDateKey(payload.date);
     const startKey = formatDateKey(matchedPeriod.startDate);
@@ -340,7 +355,7 @@ const resolveAndValidateExamConfig = (tenantStructure, payload) => {
     }
   }
 
-  // 4. Resolve Shift & Duration
+  // 5. Resolve Shift & Duration
   const resolvedShift = payload.shift || "I";
   const shiftDef = shifts.find((s) => s.name === resolvedShift);
   if (!shiftDef && shifts.length > 0) {
@@ -374,7 +389,50 @@ const createExam = async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    const structure = await getTenantExamStructure(req.user.tenantId);
+    const tenantId = req.user.tenantId;
+    const structure = await getTenantExamStructure(tenantId);
+    const todayKey = formatDateKey(new Date());
+
+    // 1. Pre-requisite validation: Active and unexpired Exam Periods must exist (unless backlog)
+    const activePeriods = (structure.periods || []).filter(
+      (p) => p.isActive !== false && (!p.endDate || formatDateKey(p.endDate) >= todayKey)
+    );
+    if (!isBacklog && activePeriods.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot create exam: No active or upcoming Exam Periods found (all configured periods have already ended). Please configure an active Exam Period in Exam Config first.",
+      });
+    }
+
+    // 2. Pre-requisite validation: Active Examination Halls must exist
+    const activeHalls = await ExamHall.find({ tenantId, isActive: true }).lean();
+    if (activeHalls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot create exam: No active Examination Halls found. Please register at least one Examination Hall in Exam Halls first.",
+      });
+    }
+
+    // 3. Resolve and validate Room against active exam halls
+    if (!room || String(room).trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: `Examination Hall is required. Available active halls: ${activeHalls.map((h) => h.hallCode).join(", ")}`,
+      });
+    }
+
+    const cleanRoomInput = String(room).trim().toUpperCase();
+    const matchedHall = activeHalls.find(
+      (h) => h.hallCode.toUpperCase() === cleanRoomInput || String(h._id) === String(room) || h.name.toUpperCase() === cleanRoomInput
+    );
+
+    if (!matchedHall) {
+      return res.status(400).json({
+        success: false,
+        message: `Examination Hall "${room}" does not exist in your institution. Available active halls: ${activeHalls.map((h) => h.hallCode).join(", ")}`,
+      });
+    }
+    const finalRoom = matchedHall.hallCode;
 
     // Enforce Exam Type validation and compulsory Exam Period resolution
     const configResult = resolveAndValidateExamConfig(structure, req.body);
@@ -387,7 +445,7 @@ const createExam = async (req, res) => {
     // Validate and auto-fill from subject
     const subject = await Subject.findOne({
       _id: toObjectId(subjectId),
-      tenantId: req.user.tenantId,
+      tenantId,
       isActive: true,
     }).lean();
 
@@ -409,6 +467,28 @@ const createExam = async (req, res) => {
     if (finalSemester === undefined && subject.semester) {
       const parsedSubSem = parseInt(String(subject.semester).replace(/\D/g, ""), 10);
       if (!isNaN(parsedSubSem)) finalSemester = parsedSubSem;
+    }
+
+    // 4. Edge Case Check: Enrolled Class Strength vs Hall Capacity
+    const studentQuery = {
+      tenantId,
+      role: "student",
+      isActive: { $ne: false },
+      section: new RegExp(`^${String(section).trim()}$`, "i"),
+    };
+    if (finalCourseId) studentQuery.courseId = finalCourseId;
+    if (finalBranch) studentQuery.branch = new RegExp(`^${String(finalBranch).trim()}$`, "i");
+    if (finalSemester !== undefined) studentQuery.semester = finalSemester;
+
+    const classStrength = await User.countDocuments(studentQuery);
+    if (classStrength > matchedHall.capacity) {
+      return res.status(400).json({
+        success: false,
+        message: `Capacity Deficit: Section "${section}" has ${classStrength} enrolled students, which exceeds the seating capacity of ${matchedHall.hallCode} (${matchedHall.capacity} seats). Please select a larger examination hall.`,
+        classStrength,
+        hallCapacity: matchedHall.capacity,
+        hallCode: matchedHall.hallCode,
+      });
     }
 
     let finalDuration = duration && !Number.isNaN(parseInt(duration)) ? parseInt(duration) : undefined;
@@ -445,7 +525,7 @@ const createExam = async (req, res) => {
     if (finalMaxMarks == null) finalMaxMarks = 100;
 
     // Conflict check
-    const conflicts = await findExamConflicts(req.user.tenantId, {
+    const conflicts = await findExamConflicts(tenantId, {
       section,
       semester: finalSemester,
       courseId: finalCourseId,
@@ -453,7 +533,7 @@ const createExam = async (req, res) => {
       date,
       startTime: finalStartTime,
       endTime: finalEndTime,
-      room,
+      room: finalRoom,
     });
     if (conflicts.length > 0) {
       return res.status(409).json({ success: false, message: "Schedule conflict", conflicts });
@@ -465,14 +545,14 @@ const createExam = async (req, res) => {
       return res.status(400).json({ success: false, message: "Maximum 2 invigilators allowed" });
     }
     if (invigilatorIds.length > 0) {
-      const invigConflicts = await findInvigilatorConflicts(req.user.tenantId, invigilatorIds, date, finalStartTime, finalEndTime);
+      const invigConflicts = await findInvigilatorConflicts(tenantId, invigilatorIds, date, finalStartTime, finalEndTime);
       if (invigConflicts.length > 0) {
         return res.status(409).json({ success: false, message: "Invigilator conflict", conflicts: invigConflicts });
       }
     }
 
     const exam = await Exam.create({
-      tenantId: req.user.tenantId,
+      tenantId,
       subjectId,
       subjectName: finalSubjectName,
       subjectCode: finalSubjectCode,
@@ -491,12 +571,14 @@ const createExam = async (req, res) => {
       endTime: finalEndTime,
       maxMarks: finalMaxMarks,
       passingMarks: passingMarks !== undefined ? parseInt(passingMarks) : Math.round(finalMaxMarks * 0.4),
-      room: room || undefined,
+      room: finalRoom,
       description: description || undefined,
       invigilators: invigilatorIds,
       isBacklog: isBacklog === true || isBacklog === "true",
       createdBy: req.user._id,
     });
+
+    publishExamEvent(tenantId, 'exam.created', exam);
 
     return res.status(201).json({ success: true, data: exam });
   } catch (error) {
@@ -598,13 +680,41 @@ const getExams = async (req, res) => {
       if (endDate) filter.date.$lte = new Date(endDate);
     }
 
-    const exams = await Exam.find(filter)
+    const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const { page, limit, skip } = getPagination(req, 100, 200);
+
+    let queryExec = Exam.find(filter)
       .sort({ date: 1, startTime: 1 })
       .populate("createdBy", "name")
       .populate("invigilators", "name")
       .lean();
 
-    return res.status(200).json({ success: true, data: exams });
+    if (isPaginated) {
+      queryExec = queryExec.skip(skip).limit(limit);
+    }
+
+    const [exams, total] = await Promise.all([
+      queryExec,
+      Exam.countDocuments(filter),
+    ]);
+
+    const now = new Date();
+    const enriched = exams.map((ex) => {
+      let status = ex.status;
+      if (ex.status === "scheduled" && ex.date && new Date(ex.date) < now) {
+        status = "completed";
+      }
+      return {
+        ...ex,
+        status,
+      };
+    });
+
+    if (isPaginated) {
+      return res.status(200).json(paginatedResponse(enriched, total, page, limit));
+    }
+
+    return res.status(200).json({ success: true, data: enriched, total });
   } catch (error) {
     logger.error("Error fetching exams", { error: error.message });
     return res.status(500).json({ success: false, message: "Failed to fetch exams" });
@@ -659,9 +769,43 @@ const updateExam = async (req, res) => {
     if (date !== undefined) exam.date = date;
     if (startTime !== undefined) exam.startTime = startTime;
     if (endTime !== undefined) exam.endTime = endTime;
-    if (maxMarks !== undefined) exam.maxMarks = maxMarks;
-    if (passingMarks !== undefined) exam.passingMarks = passingMarks;
-    if (room !== undefined) exam.room = room;
+    if (room !== undefined) {
+      if (room && String(room).trim() !== "") {
+        const activeHalls = await ExamHall.find({ tenantId: req.user.tenantId, isActive: true }).lean();
+        const cleanRoom = String(room).trim().toUpperCase();
+        const matchedHall = activeHalls.find(
+          (h) => h.hallCode.toUpperCase() === cleanRoom || String(h._id) === String(room) || h.name.toUpperCase() === cleanRoom
+        );
+        if (!matchedHall) {
+          return res.status(400).json({
+            success: false,
+            message: `Examination Hall "${room}" does not exist. Available active halls: ${activeHalls.map((h) => h.hallCode).join(", ")}`,
+          });
+        }
+        exam.room = matchedHall.hallCode;
+
+        // Check class strength vs hall capacity
+        const studentQuery = {
+          tenantId: req.user.tenantId,
+          role: "student",
+          isActive: { $ne: false },
+          section: new RegExp(`^${String(exam.section).trim()}$`, "i"),
+        };
+        if (exam.courseId) studentQuery.courseId = exam.courseId;
+        if (exam.branch) studentQuery.branch = new RegExp(`^${String(exam.branch).trim()}$`, "i");
+        if (exam.semester !== undefined) studentQuery.semester = exam.semester;
+
+        const classStrength = await User.countDocuments(studentQuery);
+        if (classStrength > matchedHall.capacity) {
+          return res.status(400).json({
+            success: false,
+            message: `Capacity Deficit: Section "${exam.section}" has ${classStrength} students, exceeding ${matchedHall.hallCode} capacity (${matchedHall.capacity} seats)`,
+          });
+        }
+      } else {
+        exam.room = "";
+      }
+    }
     if (description !== undefined) exam.description = description;
     if (status !== undefined) exam.status = status;
     if (invigilators !== undefined) {
@@ -703,6 +847,9 @@ const updateExam = async (req, res) => {
     }
 
     await exam.save();
+
+    publishExamEvent(req.user.tenantId, 'exam.updated', exam);
+
     return res.status(200).json({ success: true, data: exam });
   } catch (error) {
     logger.error("Error updating exam", { error: error.message });
@@ -918,6 +1065,8 @@ const publishExamResults = async (req, res) => {
     exam.publishedBy = req.user._id;
     await exam.save();
 
+    publishExamEvent(req.user.tenantId, 'exam.results_published', exam);
+
     return res.status(200).json({ success: true, message: "Results published", data: exam });
   } catch (error) {
     logger.error("Error publishing exam results", { error: error.message });
@@ -1011,7 +1160,18 @@ const updateResult = async (req, res) => {
 
 const getMyResults = async (req, res) => {
   try {
-    const results = await ExamResult.find({ studentId: req.user._id, tenantId: req.user.tenantId })
+    const isStaff = req.user.role === "admin" || req.user.role === "teacher" || req.user.role === "super_admin";
+    const studentId = req.query.studentId && isStaff ? req.query.studentId : req.user._id;
+
+    const filter = { tenantId: req.user.tenantId };
+    if (!isStaff || req.query.studentId) {
+      filter.studentId = studentId;
+    } else if (req.query.examId) {
+      filter.examId = req.query.examId;
+    }
+
+    const results = await ExamResult.find(filter)
+      .populate("studentId", "name email rollNo section")
       .populate({
         path: "examId",
         select: "title type examTypeCode subjectId subjectName subjectCode semester date maxMarks section shift duration resultStatus isBacklog",
@@ -1019,10 +1179,12 @@ const getMyResults = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Students/parents only see published results.
-    const published = results.filter(r => r.examId?.resultStatus === "published");
+    // Students/parents only see published results. Staff see all.
+    const filtered = (req.user.role === "student" || req.user.role === "parent")
+      ? results.filter(r => r.examId?.resultStatus === "published")
+      : results;
 
-    return res.status(200).json({ success: true, data: published });
+    return res.status(200).json({ success: true, data: filtered });
   } catch (error) {
     logger.error("Error fetching results", { error: error.message });
     return res.status(500).json({ success: false, message: "Failed to fetch results" });
@@ -1108,7 +1270,9 @@ const getUpcomingExams = async (req, res) => {
 
 const getGradeReport = async (req, res) => {
   try {
-    const data = await computeStudentGrades(req.user._id, req.user.tenantId);
+    const isStaff = req.user.role === "admin" || req.user.role === "teacher" || req.user.role === "super_admin";
+    const studentId = req.query.studentId && isStaff ? req.query.studentId : req.user._id;
+    const data = await computeStudentGrades(studentId, req.user.tenantId);
     return res.status(200).json({ success: true, data });
   } catch (error) {
     logger.error("Error fetching grade report", { error: error.message });
@@ -1140,11 +1304,31 @@ const bulkCreateExams = async (req, res) => {
     const tenantId = toObjectId(rawTenantId);
 
     // Pre-fetch tenant data for resolution
-    const [structure, tenant] = await Promise.all([
+    const [structure, tenant, activeHalls] = await Promise.all([
       getTenantExamStructure(tenantId),
       Tenant.findById(tenantId).select("settings.examPeriods").lean(),
+      ExamHall.find({ tenantId, isActive: true }).lean(),
     ]);
     const periodDefs = tenant?.settings?.examPeriods || [];
+
+    // Pre-requisite checks
+    const todayKey = formatDateKey(new Date());
+    const activePeriods = (periodDefs || []).filter(
+      (p) => p.isActive !== false && (!p.endDate || formatDateKey(p.endDate) >= todayKey)
+    );
+    if (activePeriods.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot bulk import exams: No active or upcoming Exam Periods configured (all configured periods have already ended). Please configure an active Exam Period in Exam Config first.",
+      });
+    }
+
+    if (activeHalls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot bulk import exams: No active Examination Halls found. Please register at least one Examination Hall in Exam Halls first.",
+      });
+    }
 
     const rowErrors = [];
     const valid = [];
@@ -1189,6 +1373,29 @@ const bulkCreateExams = async (req, res) => {
 
       const { validTypeDef, matchedPeriod, resolvedExamTypeCode, resolvedExamPeriodId, resolvedShift, shiftDef } = configResult;
 
+      // Validate Exam Hall (room)
+      if (!room || String(room).trim() === "") {
+        rowErrors.push({
+          index: i,
+          error: `Examination Hall (room) is required. Available active halls: ${activeHalls.map((h) => h.hallCode).join(", ")}`,
+        });
+        continue;
+      }
+
+      const cleanRoom = String(room).trim().toUpperCase();
+      const matchedHall = activeHalls.find(
+        (h) => h.hallCode.toUpperCase() === cleanRoom || String(h._id) === String(room) || h.name.toUpperCase() === cleanRoom
+      );
+
+      if (!matchedHall) {
+        rowErrors.push({
+          index: i,
+          error: `Examination Hall "${room}" does not exist in your institution. Available active halls: ${activeHalls.map((h) => h.hallCode).join(", ")}`,
+        });
+        continue;
+      }
+      const resolvedRoom = matchedHall.hallCode;
+
       // Look up subject in tenant — accept by valid ObjectId OR fallback by subjectCode in this tenant
       let sub = null;
       if (mongoose.Types.ObjectId.isValid(subjectId)) {
@@ -1224,6 +1431,26 @@ const bulkCreateExams = async (req, res) => {
         const Course = require("../models/Course");
         const course = await Course.findOne({ tenantId, code: String(courseCode).toUpperCase() }).lean();
         if (course) resolvedCourseId = course._id;
+      }
+
+      // Class strength vs hall capacity check
+      const studentQuery = {
+        tenantId,
+        role: "student",
+        isActive: { $ne: false },
+        section: new RegExp(`^${String(section).trim()}$`, "i"),
+      };
+      if (resolvedCourseId) studentQuery.courseId = resolvedCourseId;
+      if (resolvedBranch) studentQuery.branch = new RegExp(`^${String(resolvedBranch).trim()}$`, "i");
+      if (resolvedSemester !== undefined) studentQuery.semester = resolvedSemester;
+
+      const classStrength = await User.countDocuments(studentQuery);
+      if (classStrength > matchedHall.capacity) {
+        rowErrors.push({
+          index: i,
+          error: `Capacity Deficit: Section "${section}" has ${classStrength} students, exceeding ${matchedHall.hallCode} capacity (${matchedHall.capacity} seats)`,
+        });
+        continue;
       }
 
       let resolvedStartTime = startTime;
@@ -1265,7 +1492,7 @@ const bulkCreateExams = async (req, res) => {
         date,
         startTime: resolvedStartTime,
         endTime: resolvedEndTime,
-        room,
+        room: resolvedRoom,
       }, null, valid);
       if (conflicts.length > 0) {
         rowErrors.push({ index: i, error: conflicts.join("; ") });
@@ -1308,7 +1535,7 @@ const bulkCreateExams = async (req, res) => {
         endTime: resolvedEndTime || "",
         maxMarks: Number(resolvedMaxMarks),
         passingMarks: passingMarks != null ? Number(passingMarks) : Math.round(Number(resolvedMaxMarks) * 0.4),
-        room: room || "",
+        room: resolvedRoom,
         description: description || "",
         createdBy: toObjectId(req.user._id),
         invigilators: invigIds,
@@ -1376,7 +1603,27 @@ const getExamPeriods = async (req, res) => {
       .select("settings.examPeriods")
       .lean();
     const periods = tenant?.settings?.examPeriods || [];
-    return res.status(200).json({ success: true, data: periods });
+    const todayKey = formatDateKey(new Date());
+
+    const enriched = periods.map((p) => {
+      const startKey = formatDateKey(p.startDate);
+      const endKey = formatDateKey(p.endDate);
+      let status = "ongoing";
+      let isExpired = false;
+      if (endKey && endKey < todayKey) {
+        status = "expired";
+        isExpired = true;
+      } else if (startKey && startKey > todayKey) {
+        status = "upcoming";
+      }
+      return {
+        ...p,
+        status,
+        isExpired,
+      };
+    });
+
+    return res.status(200).json({ success: true, data: enriched });
   } catch (error) {
     logger.error("Error fetching exam periods", { error: error.message });
     return res.status(500).json({ success: false, message: "Failed to fetch exam periods" });

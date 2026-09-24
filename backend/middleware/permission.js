@@ -1,5 +1,30 @@
 const CustomRole = require("../models/CustomRole");
 const logger = require("../utils/logger");
+const cache = require("./cache");
+
+const getCachedRolePermissions = async (roleIds) => {
+  if (!roleIds || !roleIds.length) return new Set();
+
+  const sortedIds = roleIds
+    .map(id => (id && id._id ? id._id.toString() : id?.toString()))
+    .filter(Boolean)
+    .sort();
+
+  if (!sortedIds.length) return new Set();
+
+  const cacheKey = `roles:perms:${sortedIds.join(',')}`;
+  const cached = await cache.get(cacheKey);
+  if (cached && Array.isArray(cached)) {
+    return new Set(cached);
+  }
+
+  const roles = await CustomRole.find({ _id: { $in: sortedIds }, isActive: true }).lean();
+  const perms = new Set();
+  roles.forEach(role => (role.permissions || []).forEach(p => perms.add(p)));
+
+  await cache.set(cacheKey, Array.from(perms), 60);
+  return perms;
+};
 
 const requirePermission = (...requiredPermissions) => {
   return async (req, res, next) => {
@@ -13,12 +38,8 @@ const requirePermission = (...requiredPermissions) => {
       if (req.user.role === "admin") return next();
 
       if (req.user.role === "teacher" && req.user.customRoles?.length > 0) {
-        const roleIds = req.user.customRoles.map(cr => cr.roleId);
-        const roles = await CustomRole.find({ _id: { $in: roleIds }, isActive: true }).lean();
-        const userPermissions = new Set();
-        roles.forEach(role => {
-          (role.permissions || []).forEach(p => userPermissions.add(p));
-        });
+        const roleIds = req.user.customRoles.map(cr => cr.roleId || cr);
+        const userPermissions = await getCachedRolePermissions(roleIds);
 
         const hasAll = requiredPermissions.every(p => userPermissions.has(p));
         if (hasAll) return next();
@@ -42,12 +63,10 @@ const requirePermission = (...requiredPermissions) => {
 
 const getRolePermissions = async (user) => {
   if (!user.customRoles?.length) return new Set();
-  const roleIds = user.customRoles.map(cr => cr.roleId);
-  const roles = await CustomRole.find({ _id: { $in: roleIds }, isActive: true }).lean();
-  const perms = new Set();
-  roles.forEach(role => (role.permissions || []).forEach(p => perms.add(p)));
-  return perms;
+  const roleIds = user.customRoles.map(cr => cr.roleId || cr);
+  return getCachedRolePermissions(roleIds);
 };
+
 
 /**
  * Grants access if the user has ANY of the required permissions.

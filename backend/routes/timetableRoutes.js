@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticateToken, adminAuth, teacherAuth, authorizeRoles } = require("../middleware/auth");
 const { requirePermission } = require("../middleware/permission");
 const { featureGuard } = require("../middleware/featureGuard");
+const { cacheMiddleware } = require("../middleware/cache");
 const validate = require("../middleware/validate");
 const {
   createEntry,
@@ -24,9 +25,9 @@ const {
 router.use(authenticateToken);
 router.use(featureGuard("timetable"));
 
-router.get("/section/:section", getBySection, validate, getBySectionCtrl);
-router.get("/teacher/:teacherId", authorizeRoles(["admin", "teacher"]), getByTeacher);
-router.get("/teacher", teacherAuth, getByTeacher);
+router.get("/section/:section", getBySection, validate, cacheMiddleware('timetable', 60), getBySectionCtrl);
+router.get("/teacher/:teacherId", authorizeRoles(["admin", "teacher"]), cacheMiddleware('timetable', 60), getByTeacher);
+router.get("/teacher", teacherAuth, cacheMiddleware('timetable', 60), getByTeacher);
 
 router.get("/", adminAuth, getAll, validate, getAllCtrl);
 router.post("/", authorizeRoles(["admin", "teacher"]), requirePermission("timetable:write"), createEntry, validate, createEntryCtrl);

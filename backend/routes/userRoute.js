@@ -16,6 +16,7 @@ const {
 const {
   // Student management
   getAllStudents,
+  searchStudents,
   getStudentById,
   updateStudent: updateStudentCtrl,
   deleteStudent,
@@ -33,6 +34,9 @@ const {
   // Profile management
   getProfile,
   updateProfile: updateProfileCtrl,
+  uploadProfilePhoto,
+  deleteProfilePhoto,
+  getUserById,
   
   // Bulk operations
   bulkUploadUsers: bulkUploadUsersCtrl,
@@ -45,6 +49,19 @@ const {
   // User search
   searchUsers: searchUsersCtrl,
 } = require("../controllers/userController");
+
+const multer = require('multer');
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files (jpeg, png, webp) are allowed'));
+    }
+  }
+});
 
 const { featureGuard, limitGuard } = require('../middleware/featureGuard');
 const { bulkCreateTeachers } = require('../controllers/adminController');
@@ -63,6 +80,18 @@ userRoute.get('/profile', authenticateToken, getProfile);
  */
 userRoute.put('/profile', authenticateToken, updateProfile, updateProfileCtrl);
 
+/**
+ * POST /api/users/profile/photo
+ * Upload current user's profile photo
+ */
+userRoute.post('/profile/photo', authenticateToken, photoUpload.single('photo'), uploadProfilePhoto);
+
+/**
+ * DELETE /api/users/profile/photo
+ * Remove current user's profile photo
+ */
+userRoute.delete('/profile/photo', authenticateToken, deleteProfilePhoto);
+
 // ==================== STUDENT MANAGEMENT (Admin only) ====================
 
 /**
@@ -72,10 +101,16 @@ userRoute.put('/profile', authenticateToken, updateProfile, updateProfileCtrl);
 userRoute.get('/students', authenticateToken, authorizeRoles(["admin", "teacher"]), getAllStudents);
 
 /**
+ * GET /api/users/students/search
+ * Lightweight search for students (autocomplete/pickers)
+ */
+userRoute.get('/students/search', authenticateToken, authorizeRoles(["admin", "teacher"]), searchStudents);
+
+/**
  * GET /api/users/students/:id
  * Get student by ID
  */
-userRoute.get('/students/:id', authenticateToken, adminAuth, getStudentById);
+userRoute.get('/students/:id', authenticateToken, authorizeRoles(["admin", "teacher"]), getStudentById);
 
 /**
  * PUT /api/users/students/:id
@@ -171,5 +206,11 @@ userRoute.delete('/bulk-delete', authenticateToken, adminAuth, bulkDeleteUsers);
  * Query: ?q=searchTerm&role=student
  */
 userRoute.get('/search', authenticateToken, adminAuth, searchUsers, searchUsersCtrl);
+
+/**
+ * GET /api/users/:id
+ * Get single user by ID
+ */
+userRoute.get('/:id', authenticateToken, getUserById);
 
 module.exports = userRoute;

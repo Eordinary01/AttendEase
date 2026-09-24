@@ -37,7 +37,11 @@ const planSchema = new mongoose.Schema(
 
     modules: {
       attendance: { type: Boolean, default: true },
+      biometricAttendance: { type: Boolean, default: false },
+      faceAttendance: { type: Boolean, default: false },
       examManagement: { type: Boolean, default: false },
+      examStructure: { type: Boolean, default: false },
+      examSeating: { type: Boolean, default: false },
       financeManagement: { type: Boolean, default: false },
       libraryManagement: { type: Boolean, default: false },
       hrManagement: { type: Boolean, default: false },

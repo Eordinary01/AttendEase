@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, Loader2, AlertCircle } from 'lucide-react';
 import api from '../../utils/api';
+import { formatDateReadable } from '../../utils/dateUtils';
 import { logError } from '../../utils/logger';
 import Modal from '../common/ui/Modal';
 import Table from '../common/ui/Table';
 import Badge from '../common/ui/Badge';
+import UniversalSpinner from '../common/ui/UniversalSpinner';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -47,21 +49,12 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token }) => {
   const columns = [
     {
       header: 'Session Date',
-      cell: (row) => {
-        let formattedDate = 'N/A';
-        try {
-          const dateObj = new Date(row.date);
-          if (!isNaN(dateObj.getTime())) {
-            formattedDate = dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-          }
-        } catch (e) {}
-        return (
-          <span className="inline-flex items-center gap-2">
-            <Calendar className="w-3.5 h-3.5 text-ink-faint" />
-            {formattedDate}
-          </span>
-        );
-      },
+      cell: (row) => (
+        <span className="inline-flex items-center gap-2">
+          <Calendar className="w-3.5 h-3.5 text-ink-faint" />
+          {formatDateReadable(row.date, false, 'N/A')}
+        </span>
+      ),
     },
     {
       header: 'Status state',
@@ -87,10 +80,7 @@ const AttendanceDetailModal = ({ isOpen, onClose, subject, token }) => {
       )}
 
       {loading ? (
-        <div className="flex flex-col justify-center items-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-ink-faint mb-2" />
-          <p className="text-ink-faint text-xs font-semibold">Retrieving session records...</p>
-        </div>
+        <UniversalSpinner label="Retrieving session records..." />
       ) : error ? (
         <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center text-xs text-red-600 flex flex-col items-center justify-center gap-2 py-8">
           <AlertCircle className="w-6 h-6 text-red-500" />

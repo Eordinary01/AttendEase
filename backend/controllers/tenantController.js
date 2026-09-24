@@ -255,6 +255,35 @@ const registerTenant = async (req, res) => {
 
 // ==================== PROTECTED FUNCTIONS (Require Authentication) ====================
 
+const getTenantLiveStats = async (tenantId) => {
+  const cacheKey = `stats:${tenantId}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return cached;
+
+  const [studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB] = await Promise.all([
+    User.countDocuments({ tenantId, role: 'student', isActive: { $ne: false } }),
+    User.countDocuments({ tenantId, role: 'teacher', isActive: { $ne: false } }),
+    User.countDocuments({ tenantId, role: 'admin', isActive: { $ne: false } }),
+    Subject.countDocuments({ tenantId, isActive: { $ne: false } }),
+    computeStorageUsedMB(tenantId),
+  ]);
+
+  const stats = { studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB };
+  await cache.set(cacheKey, stats, 60);
+  return stats;
+};
+
+const invalidateTenantStats = async (tenantId) => {
+  if (!tenantId) return;
+  try {
+    await cache.del(`stats:${tenantId}`);
+    await cache.delPattern(`tenant:${tenantId}:*`);
+    await cache.delPattern(`tenant_usage:${tenantId}:*`);
+  } catch (err) {
+    logger.warn('Error invalidating tenant stats cache', { error: err.message });
+  }
+};
+
 /**
  * GET TENANT INFO
  * Get detailed information about the tenant
@@ -262,9 +291,8 @@ const registerTenant = async (req, res) => {
  */
 const getTenantInfo = async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-
-    // Super admins / platform users have no tenant
+    const tenantId = req.tenant?._id || req.tenant?.id || req.user?.tenantId;
+    
     if (!tenantId) {
       return res.status(200).json({
         success: true,
@@ -285,14 +313,8 @@ const getTenantInfo = async (req, res) => {
       });
     }
 
-    // ✅ Get up-to-date stats
-    const [studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB] = await Promise.all([
-      User.countDocuments({ tenantId, role: 'student', isActive: { $ne: false } }),
-      User.countDocuments({ tenantId, role: 'teacher', isActive: { $ne: false } }),
-      User.countDocuments({ tenantId, role: 'admin', isActive: { $ne: false } }),
-      Subject.countDocuments({ tenantId, isActive: { $ne: false } }),
-      computeStorageUsedMB(tenantId),
-    ]);
+    // Cached live stats (60s TTL) to prevent hammering MongoDB count queries
+    const { studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB } = await getTenantLiveStats(tenantId);
 
     const plan = await Plan.findOne({ code: tenant.subscription.plan })
       .select('name code description features modules pricing');
@@ -407,11 +429,13 @@ const updateTenantSettings = async (req, res) => {
 
     await tenant.save();
 
-    // Invalidate tenant cache
+    // Invalidate tenant cache (old + new cacheMiddleware keys)
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
     }
+    await cache.delPattern(`tenant:${tenantId}:*`).catch(() => {});
+    await cache.delPattern(`tenant_usage:${tenantId}:*`).catch(() => {});
 
     const { logAudit } = require('../middleware/auditLogger');
     await logAudit(req, {
@@ -483,31 +507,19 @@ const getTenantUsage = async (req, res) => {
 
     const plan = await Plan.findOne({ code: tenant.subscription.plan });
 
-    // ✅ FIX: Get current counts correctly
-    const [studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB] =
-      await Promise.all([
-        User.countDocuments({ tenantId, role: "student", isActive: { $ne: false } }),
-        User.countDocuments({ tenantId, role: "teacher", isActive: { $ne: false } }),
-        User.countDocuments({ tenantId, role: "admin", isActive: { $ne: false } }),
-        Subject.countDocuments({ tenantId, isActive: { $ne: false } }),
-        computeStorageUsedMB(tenantId),
-      ]);
+    // Get live stats from 60s cache
+    const { studentsCount, teachersCount, adminsCount, subjectsCount, storageUsedMB } =
+      await getTenantLiveStats(tenantId);
 
-    console.log("📊 Usage counts:", {
-      students: studentsCount,
-      teachers: teachersCount,
-      admins: adminsCount,
-      subjects: subjectsCount,
-      storage: storageUsedMB,
-    });
-
-    // ✅ Update tenant stats
+    // Intentional In-Memory Enrichment:
+    // Update in-memory tenant.stats with fresh live stats for response calculation without
+    // issuing a database write on read (GET) requests. This document is not persisted here.
+    tenant.stats = tenant.stats || {};
     tenant.stats.totalStudents = studentsCount;
     tenant.stats.totalTeachers = teachersCount;
     tenant.stats.totalAdmins = adminsCount;
     tenant.stats.totalSubjects = subjectsCount;
     tenant.stats.storageUsedMB = storageUsedMB;
-    await tenant.save();
 
     // ✅ Get effective plan limits
     const effectiveLimits = getEffectiveLimits(tenant.subscription?.plan, tenant.limits);
@@ -903,6 +915,8 @@ const getDashboardStats = async (req, res) => {
 const path = require('path');
 const fs = require('fs');
 
+const { uploadToCloudinary } = require('../utils/cloudinary');
+
 const uploadBrandingImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -911,24 +925,35 @@ const uploadBrandingImage = async (req, res) => {
 
     const tenantId = req.tenantId;
     const imageType = req.body.type === "favicon" ? "favicon" : "logo";
-    const relativePath = `uploads/${req.file.filename}`;
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/${relativePath}`;
 
     const tenant = await Tenant.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({ success: false, message: "Tenant not found" });
     }
 
+    const uploadResult = await uploadToCloudinary(
+      req.file.buffer || req.file.path,
+      {
+        folder: `attendease/branding/${tenantId}`,
+        publicId: `${imageType}_${Date.now()}`,
+        resourceType: 'image',
+        originalName: req.file.originalname,
+      }
+    );
+
+    const imageUrl = uploadResult.url;
+
     if (!tenant.branding) tenant.branding = {};
     tenant.branding[imageType] = imageUrl;
     await tenant.save();
 
-    // Invalidate tenant cache
+    // Invalidate tenant cache (old + new cacheMiddleware keys)
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
     }
+    await cache.delPattern(`tenant:${tenantId}:*`).catch(() => {});
+    await cache.delPattern(`tenant_usage:${tenantId}:*`).catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -953,4 +978,6 @@ module.exports = {
   getSetupStatus,
   completeSetupStep,
   getDashboardStats,
+  invalidateTenantStats,
+  getTenantLiveStats,
 };

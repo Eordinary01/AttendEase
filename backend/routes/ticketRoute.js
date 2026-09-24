@@ -1,11 +1,11 @@
-// routes/ticketRoute.js
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, teacherAuth, studentAuth, adminAuth } = require('../middleware/auth');
-const upload = require('../middleware/multer');
+const upload = require('../middleware/leaveMulter');
 const validate = require("../middleware/validate");
 const { body, param } = require("express-validator");
 const {
+  getStudentSubjectsAndTeachers,
   createAbsenceProofTicket,
   getPendingAbsenceTickets,
   verifyAbsenceProof,
@@ -23,6 +23,11 @@ const createTicketValidator = [
     .withMessage('Subject ID is required')
     .isMongoId()
     .withMessage('Invalid subject ID format'),
+  body('teacherId')
+    .notEmpty()
+    .withMessage('Teacher ID is required')
+    .isMongoId()
+    .withMessage('Invalid teacher ID format'),
   body('absentDate')
     .notEmpty()
     .withMessage('Absent date is required')
@@ -32,8 +37,8 @@ const createTicketValidator = [
   body('reason')
     .notEmpty()
     .withMessage('Reason is required')
-    .isIn(['medical', 'family', 'personal', 'academic', 'other'])
-    .withMessage('Reason must be one of: medical, family, personal, academic, other'),
+    .isIn(['medical', 'family', 'family-emergency', 'personal', 'academic', 'institutional-work', 'other'])
+    .withMessage('Reason must be one of: medical, family, family-emergency, personal, academic, institutional-work, other'),
   body('reasonDescription')
     .optional()
     .isString()
@@ -50,8 +55,8 @@ const verifyTicketValidator = [
   body('verificationStatus')
     .notEmpty()
     .withMessage('Verification status is required')
-    .isIn(['approved', 'rejected'])
-    .withMessage('Verification status must be approved or rejected'),
+    .isIn(['verified', 'rejected', 'needs-more-info', 'approved'])
+    .withMessage('Verification status must be verified, rejected, or needs-more-info'),
   body('verificationRemarks')
     .optional()
     .isString()
@@ -97,9 +102,19 @@ const getFileValidator = [
 // ==================== STUDENT ROUTES ====================
 
 /**
+ * GET /api/tickets/student/subjects-teachers
+ * Get subjects and corresponding assigned teachers for the student
+ */
+router.get('/student/subjects-teachers',
+  authenticateToken,
+  studentAuth,
+  getStudentSubjectsAndTeachers
+);
+
+/**
  * POST /api/tickets/
  * Create a new absence proof ticket
- * Body: { subjectId, absentDate, reason, reasonDescription } + files
+ * Body: { subjectId, teacherId, absentDate, reason, reasonDescription } + files
  */
 router.post('/',
   authenticateToken,
@@ -111,9 +126,16 @@ router.post('/',
 
 /**
  * GET /api/tickets/student
+ * GET /api/tickets/my-tickets
  * Get student's own tickets
  */
 router.get('/student',
+  authenticateToken,
+  studentAuth,
+  getStudentAbsenceTickets
+);
+
+router.get('/my-tickets',
   authenticateToken,
   studentAuth,
   getStudentAbsenceTickets

@@ -66,6 +66,7 @@ const userSchema = mongoose.Schema(
     },
     createdByAdmin: { type: Boolean, default: false },
     isFirstLogin: { type: Boolean, default: true },
+    forcePasswordChange: { type: Boolean, default: false },
     tempPasswordSent: { type: Boolean, default: false },
     tempPasswordSentAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
@@ -99,10 +100,16 @@ const userSchema = mongoose.Schema(
     emailVerificationExpires: Date,
     tokenVersion: { type: Number, default: 0 },
     profileComplete: { type: Boolean, default: false },
+    avatar: { type: String, trim: true, default: null },
 
-    // Custom roles assigned to teachers
+    // Custom roles assigned to teachers with optional academic cohort scoping (Option B)
     customRoles: [{
-      roleId: { type: mongoose.Schema.Types.ObjectId, ref: "CustomRole" },
+      roleId: { type: mongoose.Schema.Types.ObjectId, ref: "CustomRole", required: true },
+      courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },
+      branch: { type: String, trim: true, default: "" },
+      semester: { type: Number, default: null },
+      section: { type: String, uppercase: true, trim: true, default: "" },
+      isPrimary: { type: Boolean, default: false },
       assignedAt: { type: Date, default: Date.now },
       assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     }],
@@ -111,6 +118,35 @@ const userSchema = mongoose.Schema(
     parentName: { type: String, trim: true },
     parentPhone: { type: String, trim: true },
     parentEmail: { type: String, lowercase: true, trim: true },
+
+    // Face recognition (ATTEND-AI integration — Phase 1)
+    // Stored descriptor from face-api.js (128-dim or 512-dim FloatArray,
+    // serialized as a plain number array). Null until a face is registered.
+    faceDescriptor: {
+      type: [Number],
+      default: null,
+    },
+    faceRegistered: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isFaceRegistered: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    // URL to the registered face image (stored in backend/uploads/face-attendance/).
+    // Optional — kept for audit/debugging, not used for recognition at runtime.
+    faceImageUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    faceUpdatedAt: {
+      type: Date,
+      default: null,
+    },
 
     // Academic structure (students)
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },

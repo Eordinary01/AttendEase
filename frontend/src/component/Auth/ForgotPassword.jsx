@@ -57,7 +57,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-purple-50 to-purple-100 text-gray-800 flex flex-col justify-center items-center p-6">
+    <div className="min-h-screen bg-background text-ink flex flex-col justify-center items-center p-6">
       <motion.div
         initial="hidden"
         animate="visible"
@@ -66,109 +66,109 @@ export default function ForgotPassword() {
         className="w-full max-w-md"
       >
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-line/50 p-8 shadow-sm overflow-hidden space-y-6">
           {/* Header */}
-          <div className="p-8 pb-4 text-center">
-            <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg text-white bg-gradient-to-br from-purple-600 to-indigo-600">
-              <KeyRound className="w-7 h-7" />
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center text-primary bg-primary/10 border border-primary/20">
+              <KeyRound className="w-6 h-6" />
             </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Forgot Password</h1>
-            <p className="text-sm text-gray-500 mt-1.5">
+            <h1 className="text-xl font-bold text-ink tracking-tight">Forgot Password</h1>
+            <p className="text-xs text-ink-soft">
               Enter your registered email to receive reset instructions
             </p>
           </div>
 
           {/* Form / Content */}
-          <div className="p-8 pt-4">
+          <div className="space-y-4">
             {message && (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-4 rounded-xl mb-5 flex items-start gap-3 text-sm ${
+                className={`p-3.5 rounded-xl flex items-start gap-2.5 text-xs ${
                   message.type === "success"
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                    : "bg-red-50 border border-red-200 text-red-700"
+                    ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-medium"
+                    : "bg-rose-500/10 border border-rose-500/20 text-rose-600 font-medium"
                 }`}
               >
                 {message.type === "success" ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <p className="font-medium">{message.text}</p>
+                  <p>{message.text}</p>
                 </div>
               </motion.div>
             )}
 
-            {/* Dev Mode Helper */}
+            {/* Dev Token Helper */}
             {devToken && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-4 mb-5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs space-y-2"
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 text-xs space-y-2"
               >
-                <div className="flex items-center gap-1.5 font-semibold text-purple-700">
+                <div className="flex items-center gap-1.5 font-bold text-amber-700">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Development Shortcut</span>
+                  <span>Development Mode — Reset Link</span>
                 </div>
-                <p className="text-purple-600">A reset token was generated. Click below to proceed to the reset form directly:</p>
+                <p className="text-[11px] text-amber-900/80">
+                  Click the button below to proceed directly to the reset password screen:
+                </p>
                 <button
-                  type="button"
                   onClick={() => navigate(`/reset-password?token=${devToken}`)}
-                  className="w-full py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors text-xs"
+                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                 >
-                  Proceed to Reset Password &rarr;
+                  <span>Go to Reset Password</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </motion.div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                  <Mail className="h-5 w-5 text-purple-500" />
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="student@university.edu"
+                    disabled={isLoading}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-line/50 bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition disabled:opacity-50"
+                  />
                 </div>
-                <input
-                  type="email"
-                  name="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your registered email"
-                  required
-                  autoFocus
-                  className="w-full pl-11 pr-4 py-3 border border-purple-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-sm"
-                />
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+              <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-6 rounded-xl text-white font-medium bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-sm"
+                className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Sending Instructions...
-                  </span>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
                     <span>Send Reset Instructions</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
-              </motion.button>
+              </button>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+            <div className="text-center pt-2">
               <Link
                 to={loginRoute}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline transition"
               >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Sign In</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Login</span>
               </Link>
             </div>
           </div>

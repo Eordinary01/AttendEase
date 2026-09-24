@@ -57,8 +57,12 @@ const tenantSchema = new mongoose.Schema({
     logo: String,
     primaryColor: { type: String, default: '#6366f1' },
     secondaryColor: { type: String, default: '#8b5cf6' },
+    accentColor: { type: String, default: '#6366f1' },
     institutionName: String,
     welcomeMessage: String,
+    customMessage: String,
+    bannerImage: String,
+    favicon: String,
   },
 
   // College Compliance & Accreditation (Item 12)
@@ -124,6 +128,8 @@ const tenantSchema = new mongoose.Schema({
   
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   isActive: { type: Boolean, default: true },
+  isDemo: { type: Boolean, default: false },
+  isSandbox: { type: Boolean, default: false },
   deletedAt: Date
   
 }, { timestamps: true });
@@ -131,6 +137,7 @@ const tenantSchema = new mongoose.Schema({
 // Indexes
 tenantSchema.index({ subdomain: 1 });
 tenantSchema.index({ domain: 1 });
+tenantSchema.index({ isDemo: 1 });
 tenantSchema.index({ 'subscription.status': 1 });
 tenantSchema.index({ 'subscription.endDate': 1 });
 

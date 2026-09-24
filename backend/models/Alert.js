@@ -16,7 +16,7 @@ const alertSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['short_term', 'announcement'],
+    enum: ['short_term', 'announcement', 'system', 'absence_escalation', 'attendance_warning'],
     default: 'announcement'
   },
   priority: {
@@ -41,12 +41,17 @@ const alertSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false,
+    default: null
   },
   targetRoles: [{
     type: String,
     enum: ['student', 'teacher', 'admin', 'super_admin'],
     default: ['student', 'teacher', 'admin']
+  }],
+  targetUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }],
   targetSections: [{
     type: String,
@@ -70,23 +75,27 @@ const alertSchema = new mongoose.Schema({
     default: null
   },
   metadata: {
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: Date,
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    createdByRole: String,
-    createdByName: String
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({ createdAt: new Date() })
   },
   deletedAt: Date,
-  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  readBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, { timestamps: true });
 
 // Indexes
 alertSchema.index({ tenantId: 1, createdAt: -1 });
 alertSchema.index({ tenantId: 1, targetRoles: 1, createdAt: -1 });
+alertSchema.index({ tenantId: 1, targetUsers: 1, createdAt: -1 });
+alertSchema.index({ tenantId: 1, type: 1, 'metadata.studentId': 1, 'metadata.lastAbsenceDate': 1 });
 alertSchema.index({ tenantId: 1, isActive: 1, expiryDate: 1 });
 alertSchema.index({ tenantId: 1, targetSections: 1 });
 alertSchema.index({ isPlatformAlert: 1, createdAt: -1 });
 alertSchema.index({ priority: 1 });
 alertSchema.index({ expiryDate: 1 });
+alertSchema.index({ readBy: 1 });
 
 module.exports = mongoose.model('Alert', alertSchema);

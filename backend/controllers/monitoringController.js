@@ -100,12 +100,13 @@ const getRecentActivity = async (req, res) => {
       .limit(limit)
       .lean();
 
+    const enriched = await enrichLogs(logs);
+
     return res.status(200).json({
       success: true,
-      data: {
-        logs: await enrichLogs(logs),
-        now: Date.now(),
-      },
+      data: enriched,
+      logs: enriched,
+      now: Date.now(),
     });
   } catch (error) {
     logger.error('Error fetching recent activity', { error: error.message });

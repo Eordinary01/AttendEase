@@ -6,6 +6,7 @@ const Tenant = require('../models/Tenant');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
+const { publishTicketEvent } = require('../events/publishers');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ const createSupportTicket = async (req, res) => {
         status: tenant.subscription?.status || 'unknown'
       }
     });
+
+    publishTicketEvent(tenantId, 'ticket.created', ticket);
 
     return res.status(201).json({
       success: true,
@@ -248,6 +251,8 @@ const updateTicketStatus = async (req, res) => {
     }
 
     await ticket.save();
+
+    publishTicketEvent(ticket.tenantId, 'ticket.status_changed', ticket);
 
     return res.json({ success: true, message: 'Ticket status updated.', data: { ticket } });
   } catch (err) {

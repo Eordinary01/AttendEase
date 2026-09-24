@@ -38,17 +38,24 @@ export const PermissionsProvider = ({ role, children }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchCustomPermissions = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    // Platform and tenant admins are implicitly allowed everything. Unauthenticated users skip API calls.
-    if (!token || !role || role === "super_admin" || role === "admin") {
+    const hasAuth = localStorage.getItem("token") || localStorage.getItem("userId");
+    // Unauthenticated users skip API calls.
+    if (!hasAuth || !role) {
       setCustomPermissions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Platform and tenant admins are implicitly granted full access sentinel
+    if (role === "super_admin" || role === "admin") {
+      setCustomPermissions("all");
       setLoading(false);
       return;
     }
     try {
       const res = await api.get("/roles/my-permissions");
       const perms = res.data?.data?.permissions;
-      setCustomPermissions(perms === "all" ? [] : Array.isArray(perms) ? perms : []);
+      setCustomPermissions(perms === "all" ? "all" : Array.isArray(perms) ? perms : []);
     } catch (err) {
       setCustomPermissions([]);
     } finally {
@@ -69,9 +76,9 @@ export const PermissionsProvider = ({ role, children }) => {
   }, [fetchCustomPermissions]);
 
   const effectivePermissions = useMemo(() => {
-    if (role === "super_admin" || role === "admin") return "all";
+    if (role === "super_admin" || role === "admin" || customPermissions === "all" || (Array.isArray(customPermissions) && customPermissions.includes("*"))) return "all";
     const base = BASELINE_PERMISSIONS[role] || [];
-    return [...new Set([...base, ...customPermissions])];
+    return [...new Set([...base, ...(Array.isArray(customPermissions) ? customPermissions : [])])];
   }, [role, customPermissions]);
 
   const can = useCallback(

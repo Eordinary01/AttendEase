@@ -8,6 +8,7 @@ const {
   login,
   superAdminLogin,
   parentLogin,
+  mobileLogin: mobileLoginValidator,
   registerStudent,
   registerTeacherFirstLogin,
   changePassword,
@@ -21,6 +22,7 @@ const {
   login: loginCtrl,
   superAdminLogin: superAdminLoginCtrl,
   parentLogin: parentLoginCtrl,
+  mobileLogin: mobileLoginCtrl,
   verifyToken,
   changePassword: changePasswordCtrl,
   logout,
@@ -45,6 +47,14 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const mobileLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Too many mobile login attempts. Try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -58,6 +68,8 @@ const authLimiter = rateLimit({
 authRoute.post('/login', loginLimiter, login, loginCtrl);
 authRoute.post('/parent-login', loginLimiter, parentLogin, parentLoginCtrl);
 authRoute.post('/super-admin/login', loginLimiter, superAdminLogin, superAdminLoginCtrl);
+authRoute.post('/mobile-login', mobileLoginLimiter, mobileLoginValidator, mobileLoginCtrl);
+
 authRoute.post('/register/student', authLimiter, registerStudent, registerStudentCtrl);
 authRoute.post('/register/teacher/first-login', authLimiter, registerTeacherFirstLogin, registerTeacherFirstLoginCtrl);
 authRoute.post('/refresh', authLimiter, refresh);
@@ -83,14 +95,14 @@ authRoute.get('/tenant-info', async (req, res) => {
           { domain: subdomain.toLowerCase() }
         ],
         isActive: true 
-      }).select('name subdomain branding subscription.plan');
+      }).select('name subdomain domain branding subscription.plan');
       
       if (tenant) {
         return res.json({
           success: true,
           tenant: {
             id: tenant._id,
-            name: tenant.name,
+            name: tenant.branding?.institutionName || tenant.name,
             subdomain: tenant.subdomain,
             branding: tenant.branding,
             plan: tenant.subscription?.plan
@@ -107,14 +119,14 @@ authRoute.get('/tenant-info', async (req, res) => {
       const tenant = await Tenant.findOne({ 
         subdomain: detectedSubdomain,
         isActive: true 
-      }).select('name subdomain branding subscription.plan');
+      }).select('name subdomain domain branding subscription.plan');
       
       if (tenant) {
         return res.json({
           success: true,
           tenant: {
             id: tenant._id,
-            name: tenant.name,
+            name: tenant.branding?.institutionName || tenant.name,
             subdomain: tenant.subdomain,
             branding: tenant.branding,
             plan: tenant.subscription?.plan

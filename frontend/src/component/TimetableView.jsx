@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { Calendar, Clock, Building2, User, BookOpen } from "lucide-react";
 import api from "../utils/api";
-import PageHeader from "./common/ui/PageHeader";
+import DashboardHeader from "./common/ui/DashboardHeader";
 import Card from "./common/ui/Card";
 import EmptyState from "./common/ui/EmptyState";
 
@@ -103,7 +102,6 @@ const TimetableView = ({ role: roleProp, userId }) => {
       setError(null);
       const res = await api.get('/timetable/teacher');
       setTimetable(parseGrouped(res.data));
-      console.log("timetable data", res.data)
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load timetable");
     } finally {
@@ -156,31 +154,30 @@ const TimetableView = ({ role: roleProp, userId }) => {
   if (loading && Object.keys(timetable).length === 0) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        icon={Calendar}
-        title="Weekly Timetable"
-        subtitle={
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Weekly Class Schedule"
+        meta={
           currentRole === "teacher"
-            ? "Your weekly class schedule and teaching assignments"
+            ? "Your weekly class routine, faculty schedule, and classroom venues"
             : currentRole === "parent"
-              ? "Your child's weekly class schedule"
-              : "Weekly scheduled classes and room assignments"
+              ? "Your child's active weekly class routine and subject lecture timings"
+              : "Institutional class schedule, assigned rooms, and subject faculty"
         }
         actions={
           (currentRole === "admin" || currentRole === "super_admin") && sections.length > 0 ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-ink-soft">Select Section:</span>
+              <label className="text-xs font-semibold text-ink-soft hidden sm:inline">Section:</label>
               <select
                 value={selectedSection}
                 onChange={(e) => setSelectedSection(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-line bg-surface text-ink rounded-lg font-bold focus:ring-2 focus:ring-primary/30"
+                className="text-xs px-3 py-1.5 border border-line/60 bg-surface text-ink rounded-xl font-bold outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
                 {sections.map((sec) => (
                   <option key={sec} value={sec}>Section {sec}</option>
@@ -192,13 +189,13 @@ const TimetableView = ({ role: roleProp, userId }) => {
       />
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-sm font-medium">
+        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-medium">
           {error}
         </div>
       )}
 
       {timeSlots.length === 0 ? (
-        <Card>
+        <Card padding="lg" bordered>
           <EmptyState
             icon={Calendar}
             title="No Timetable Entries Found"
@@ -210,56 +207,56 @@ const TimetableView = ({ role: roleProp, userId }) => {
           />
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <Card padding="none" bordered className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-background border-b border-line text-xs font-bold text-ink-soft uppercase">
-                  <th className="py-3 px-4 w-32 border-r border-line">Time Slot</th>
+                <tr className="bg-background/80 border-b border-line/60 text-[11px] font-bold text-ink uppercase tracking-wider">
+                  <th className="py-3 px-4 w-32 border-r border-line/60">Time Slot</th>
                   {DAYS.map((day) => (
-                    <th key={day} className="py-3 px-4 border-r border-line last:border-r-0">
+                    <th key={day} className="py-3 px-4 border-r border-line/60 last:border-r-0">
                       {day}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line text-sm">
+              <tbody className="divide-y divide-line/60 text-xs">
                 {timeSlots.map((time) => (
                   <tr key={time} className="hover:bg-background/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-primary text-xs bg-background/50 border-r border-line">
+                    <td className="py-3 px-4 font-mono font-bold text-primary text-xs bg-background/50 border-r border-line/60">
                       <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-ink-faint" />
+                        <Clock className="w-3.5 h-3.5 text-primary" />
                         {time}
                       </div>
                     </td>
                     {DAYS.map((day) => {
                       const entry = getEntry(day, time);
                       return (
-                        <td key={day} className="py-3 px-4 border-r border-line last:border-r-0 align-top">
+                        <td key={day} className="py-2.5 px-3 border-r border-line/60 last:border-r-0 align-top">
                           {entry ? (
                             entry.isNoClass ? (
-                              <div className="p-2.5 rounded-lg bg-surface-muted text-ink-faint text-xs font-semibold italic text-center">
-                                Free Period / No Class
+                              <div className="p-2 rounded-lg bg-surface text-ink-faint text-[11px] font-semibold italic text-center border border-line/40">
+                                Free Period / Recess
                               </div>
                             ) : (
-                              <div className="p-2.5 rounded-xl bg-primary-soft/50 border border-primary/20 space-y-1">
-                                <div className="font-semibold text-ink flex items-center gap-1.5 text-sm">
+                              <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1 hover:border-primary/40 transition">
+                                <div className="font-bold text-ink flex items-center gap-1.5 text-xs">
                                   <BookOpen className="w-3.5 h-3.5 text-primary shrink-0" />
-                                  {entry.subjectName || entry.subjectCode}
+                                  <span className="truncate">{entry.subjectName || entry.subjectCode}</span>
                                 </div>
-                                <div className="text-xs font-mono text-primary font-bold">
+                                <div className="text-[11px] font-mono text-primary font-bold">
                                   {entry.subjectCode} {entry.section ? `• Sec ${entry.section}` : ""}
                                 </div>
                                 {entry.teacherName && (
-                                  <div className="text-xs text-ink-soft flex items-center gap-1">
+                                  <div className="text-[11px] text-ink-soft flex items-center gap-1">
                                     <User className="w-3 h-3 text-ink-faint shrink-0" />
-                                    {entry.teacherName}
+                                    <span className="truncate">{entry.teacherName}</span>
                                   </div>
                                 )}
                                 {entry.room && (
-                                  <div className="text-xs text-ink-faint flex items-center gap-1 font-semibold">
+                                  <div className="text-[11px] text-ink-faint flex items-center gap-1 font-semibold">
                                     <Building2 className="w-3 h-3 text-ink-faint shrink-0" />
-                                    {entry.room}
+                                    <span>{entry.room}</span>
                                   </div>
                                 )}
                               </div>
@@ -277,7 +274,7 @@ const TimetableView = ({ role: roleProp, userId }) => {
           </div>
         </Card>
       )}
-    </motion.div>
+    </div>
   );
 };
 

@@ -1,5 +1,16 @@
 const Plan = require("../models/Plan");
 const logger = require("../utils/logger");
+const cache = require("../middleware/cache");
+
+const invalidatePlanCaches = async () => {
+  try {
+    await cache.delPattern('plan:*');
+    await cache.delPattern('upgrade-plan:*');
+    await cache.delPattern('billing:plans:*');
+  } catch (err) {
+    logger.warn('Failed to invalidate plan caches', { error: err.message });
+  }
+};
 
 const createPlan = async (req, res) => {
   try {
@@ -44,6 +55,8 @@ const createPlan = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
     });
 
+    await invalidatePlanCaches();
+
     return res.status(201).json({ success: true, data: plan });
   } catch (error) {
     logger.error("Error creating plan", { error: error.message });
@@ -85,6 +98,8 @@ const updatePlan = async (req, res) => {
     if (isActive !== undefined) plan.isActive = isActive;
 
     await plan.save();
+    await invalidatePlanCaches();
+
     return res.status(200).json({ success: true, data: plan });
   } catch (error) {
     logger.error("Error updating plan", { error: error.message });
@@ -99,6 +114,7 @@ const deletePlan = async (req, res) => {
 
     plan.isActive = false;
     await plan.save();
+    await invalidatePlanCaches();
 
     return res.status(200).json({ success: true, message: "Plan deactivated" });
   } catch (error) {

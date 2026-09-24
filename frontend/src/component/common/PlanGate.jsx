@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Crown, Lock, Loader2 } from "lucide-react";
 import api from "../../utils/api";
 import PricingModal from "./PricingModal";
+import UniversalSpinner from "./ui/UniversalSpinner";
 import { useUpgradeModal } from "../../utils/billing";
 
 let cachedPlanData = null;
@@ -10,7 +11,12 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const moduleLabels = {
+  attendance: "Attendance Management",
+  biometricAttendance: "AI Biometric Face Attendance",
+  faceAttendance: "AI Biometric Face Attendance",
   examManagement: "Exam Management",
+  examStructure: "Exam Structure Configuration",
+  examSeating: "Exam Seating & Hall Tickets",
   financeManagement: "Fee Management",
   libraryManagement: "Library Management",
   hrManagement: "HR Management",
@@ -69,7 +75,7 @@ const PlanGate = ({ requiredModule, children }) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <UniversalSpinner size="lg" label="Checking subscription access..." />
       </div>
     );
   }
@@ -78,7 +84,18 @@ const PlanGate = ({ requiredModule, children }) => {
     return children;
   }
 
-  if (planModules && !planModules[requiredModule]) {
+  const isModuleActive = (modules, mod) => {
+    if (!modules || !mod) return true;
+    if (modules[mod] === true) return true;
+    if ((mod === "biometricAttendance" || mod === "faceAttendance") && (modules.biometricAttendance || modules.biometric_attendance || modules.faceAttendance || modules.face_attendance)) return true;
+    if (mod === "examManagement" && modules.exam_management) return true;
+    if (mod === "financeManagement" && modules.finance_management) return true;
+    if (mod === "parentPortal" && modules.parent_portal) return true;
+    if (mod === "academicStructure" && modules.academic_structure) return true;
+    return Boolean(modules[mod]);
+  };
+
+  if (planModules && !isModuleActive(planModules, requiredModule)) {
     const label = moduleLabels[requiredModule] || requiredModule;
     return (
       <motion.div

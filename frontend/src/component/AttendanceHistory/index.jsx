@@ -19,14 +19,16 @@ import {
   Building2,
 } from "lucide-react";
 import api from "../../utils/api";
+import { formatDateDMY, formatDateReadable, toLocalDateStr, getLocalTodayStr } from "../../utils/dateUtils";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import Button from "../common/ui/Button";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import EmptyState from "../common/ui/EmptyState";
 import Table from "../common/ui/Table";
 import StatCard from "../common/ui/StatCard";
 import Modal from "../common/ui/Modal";
+import UniversalSpinner from "../common/ui/UniversalSpinner";
 
 const AttendanceHistory = ({
   role: roleProp = null,
@@ -89,7 +91,7 @@ const AttendanceHistory = ({
         setSubjects(normalizedSubList);
 
         if (showStudentSelector || isStaff) {
-          const stuRes = await api.get("/users/students");
+          const stuRes = await api.get("/users/students?limit=50");
           const stuData = stuRes.data;
           const stuList = Array.isArray(stuData)
             ? stuData
@@ -115,7 +117,7 @@ const AttendanceHistory = ({
       setLoading(true);
       const params = new URLSearchParams();
       params.set("page", page);
-      params.set("limit", isStaff && viewMode === "sessions" ? 100 : 20);
+      params.set("limit", isStaff && viewMode === "sessions" ? 100 : 50);
       if (selectedStudent) params.set("studentId", selectedStudent);
       if (selectedSubject) params.set("subjectId", selectedSubject);
       if (selectedStatus) params.set("status", selectedStatus);
@@ -146,7 +148,7 @@ const AttendanceHistory = ({
     const map = new Map();
     records.forEach((r) => {
       // Group by subject + section + date — this ensures all students in the same class are in one row
-      const dateKey = new Date(r.date).toISOString().slice(0, 10);
+      const dateKey = toLocalDateStr(new Date(r.date));
       const key = `${r.subject?.id || 'sub'}-${r.section || 'A'}-${dateKey}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -190,7 +192,7 @@ const AttendanceHistory = ({
     try {
       const headers = ["Date", "Day", "Time", "Room", "Student Name", "Roll No", "Subject Code", "Subject Name", "Teacher", "Status", "Remarks"];
       const rows = records.map((r) => [
-        new Date(r.date).toLocaleDateString(),
+        formatDateDMY(r.date),
         r.day || "",
         `${r.startTime || ""} - ${r.endTime || ""}`,
         r.room || "",
@@ -210,7 +212,7 @@ const AttendanceHistory = ({
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `attendance_history_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute("download", `attendance_history_${getLocalTodayStr()}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -238,11 +240,7 @@ const AttendanceHistory = ({
       cell: (r) => (
         <div>
           <div className="font-semibold text-ink">
-            {new Date(r.date).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            {formatDateReadable(r.date, false)}
           </div>
           <div className="text-xs text-ink-soft flex items-center gap-1 mt-0.5">
             <Clock className="w-3 h-3 text-ink-faint" />
@@ -321,7 +319,7 @@ const AttendanceHistory = ({
       cell: (s) => (
         <div>
           <div className="font-medium text-ink">
-            {new Date(s.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })} ({s.day})
+            {formatDateReadable(s.date, false)} ({s.day})
           </div>
           <div className="text-xs text-ink-soft flex items-center gap-1.5 mt-0.5">
             <Clock className="w-3 h-3 text-ink-faint" />
@@ -394,17 +392,16 @@ const AttendanceHistory = ({
   ];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <PageHeader
-        title="Attendance History"
-        subtitle="Complete log of class sessions, student attendance status, and performance statistics"
-        icon={ClipboardCheck}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Attendance History & Audit Registry"
+        meta="Comprehensive logs of classroom attendance sessions, roll records, and aggregate performance"
         actions={
           <div className="flex gap-2">
             <Button variant="subtle" size="sm" onClick={fetchHistory} leftIcon={RefreshCw} loading={loading}>
               Refresh
             </Button>
-            <Button size="sm" onClick={handleExportCSV} leftIcon={Download} disabled={records.length === 0 || exporting}>
+            <Button variant="primary" size="sm" onClick={handleExportCSV} leftIcon={Download} disabled={records.length === 0 || exporting}>
               Export CSV
             </Button>
           </div>
@@ -412,7 +409,7 @@ const AttendanceHistory = ({
       />
 
       {/* Summary Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
         <StatCard
           label="Total Classes"
           value={stats.totalClasses}
@@ -420,22 +417,39 @@ const AttendanceHistory = ({
           tone="primary"
         />
         <StatCard
-          label="Present"
-          value={`${stats.presentCount} (${stats.percentage || 0}%)`}
+          label="Present Recorded"
+          value={stats.presentCount}
           icon={CheckCircle2}
           tone="success"
         />
         <StatCard
-          label="Absent"
+          label="Absent Recorded"
           value={stats.absentCount}
           icon={XCircle}
           tone="danger"
         />
         <StatCard
-          label="On Leave"
+          label="Approved Leave"
           value={stats.leaveCount}
           icon={Clock}
           tone="warning"
+        />
+        <StatCard
+          label="Standing & Deficit"
+          value={
+            stats.totalClasses === 0
+              ? "No Data"
+              : stats.percentage >= 75
+              ? `${stats.percentage}% (Good)`
+              : `${stats.percentage}% (At Risk)`
+          }
+          subtext={
+            stats.totalClasses > 0 && stats.percentage < 75
+              ? `+${Math.max(0, Math.ceil((0.75 * stats.totalClasses - stats.presentCount) / 0.25))} needed for 75%`
+              : "Meets 75% criteria"
+          }
+          icon={CheckCircle2}
+          tone={stats.totalClasses === 0 ? "neutral" : stats.percentage >= 75 ? "success" : stats.percentage >= 65 ? "warning" : "danger"}
         />
       </div>
 
@@ -546,10 +560,7 @@ const AttendanceHistory = ({
       {/* Attendance History Table */}
       <Card>
         {loading ? (
-          <div className="py-16 text-center text-ink-soft">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
-            Loading attendance records...
-          </div>
+          <UniversalSpinner label="Loading attendance history..." />
         ) : !Array.isArray(records) || records.length === 0 ? (
           <EmptyState
             title="No Attendance Records Found"
@@ -602,7 +613,7 @@ const AttendanceHistory = ({
           setActiveSession(null);
         }}
         title={`Class Roster — ${activeSession?.subject?.name || "Session"}`}
-        subtitle={`${activeSession?.subject?.code} | Section ${activeSession?.section} | ${new Date(activeSession?.date || Date.now()).toLocaleDateString()} (${activeSession?.startTime} - ${activeSession?.endTime})`}
+        subtitle={`${activeSession?.subject?.code} | Section ${activeSession?.section} | ${formatDateDMY(activeSession?.date || Date.now())} (${activeSession?.startTime} - ${activeSession?.endTime})`}
         size="lg"
       >
         {activeSession && (
@@ -647,7 +658,7 @@ const AttendanceHistory = ({
           </div>
         )}
       </Modal>
-    </motion.div>
+    </div>
   );
 };
 

@@ -2,26 +2,41 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { logError } from '../utils/logger';
+import { fetchTenantInfo, getCachedTenantBranding, clearCachedTenantBranding } from '../utils/tenantService';
 
 const ThemeContext = createContext();
 
 export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
-  const [tenantColors, setTenantColors] = useState({
-    primary: '#6366f1',    // Default indigo
-    secondary: '#8b5cf6',  // Default purple
-    accent: '#4f46e5',     // Default dark indigo
-    background: '#f3f4f6', // Default gray
-    text: '#1f2937',       // Default dark
-  });
-  const [loading, setLoading] = useState(true);
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem('token'));
+  const getInitialColors = () => {
+    const cached = getCachedTenantBranding();
+    if (cached?.branding?.primaryColor) {
+      return {
+        primary: cached.branding.primaryColor || '#6366f1',
+        secondary: cached.branding.secondaryColor || '#8b5cf6',
+        accent: cached.branding.accentColor || '#4f46e5',
+        background: cached.branding.backgroundColor || '#f3f4f6',
+        text: cached.branding.textColor || '#1f2937',
+      };
+    }
+    return {
+      primary: '#6366f1',    // Default indigo
+      secondary: '#8b5cf6',  // Default purple
+      accent: '#4f46e5',     // Default dark indigo
+      background: '#f3f4f6', // Default gray
+      text: '#1f2937',       // Default dark
+    };
+  };
 
-  // Re-fetch branding whenever the auth token changes (login, logout,
+  const [tenantColors, setTenantColors] = useState(getInitialColors);
+  const [loading, setLoading] = useState(true);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('userId') || localStorage.getItem('token'));
+
+  // Re-fetch branding whenever auth state changes (login, logout,
   // tenant switch, token expiry) instead of only on first mount.
   useEffect(() => {
-    const syncToken = () => setAuthToken(localStorage.getItem('token'));
+    const syncToken = () => setAuthToken(localStorage.getItem('userId') || localStorage.getItem('token'));
     window.addEventListener('storage', syncToken);
     window.addEventListener('attendease:auth-changed', syncToken);
     return () => {
@@ -89,9 +104,9 @@ export const ThemeProvider = ({ children }) => {
 
   const fetchTenantBranding = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const hasAuth = localStorage.getItem('userId') || localStorage.getItem('token');
       // Unauthenticated users or users on login/public routes do not need protected tenant info
-      if (!token || window.location.pathname.startsWith('/login')) {
+      if (!hasAuth || window.location.pathname.startsWith('/login')) {
         applyThemeColors({ primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' });
         setLoading(false);
         return;
@@ -104,10 +119,24 @@ export const ThemeProvider = ({ children }) => {
         return;
       }
 
-      const response = await api.get('/tenant/info');
+      // Instant hydration from cache
+      const cached = getCachedTenantBranding();
+      if (cached?.branding) {
+        const colors = {
+          primary: cached.branding.primaryColor || '#6366f1',
+          secondary: cached.branding.secondaryColor || '#8b5cf6',
+          accent: cached.branding.accentColor || '#4f46e5',
+          background: cached.branding.backgroundColor || '#f3f4f6',
+          text: cached.branding.textColor || '#1f2937',
+        };
+        setTenantColors(colors);
+        applyThemeColors(colors);
+      }
 
-      if (response.data.success) {
-        const branding = response.data.data.tenant?.branding;
+      const response = await fetchTenantInfo();
+
+      if (response.data?.success) {
+        const branding = response.data.data?.tenant?.branding;
         if (branding) {
           const colors = {
             primary: branding.primaryColor || '#6366f1',
@@ -139,11 +168,13 @@ export const ThemeProvider = ({ children }) => {
       });
 
       if (response.data.success) {
-        setTenantColors({
+        clearCachedTenantBranding();
+        const mergedColors = {
           ...tenantColors,
           ...colors
-        });
-        applyThemeColors(colors);
+        };
+        setTenantColors(mergedColors);
+        applyThemeColors(mergedColors);
         return true;
       }
       return false;

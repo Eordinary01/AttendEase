@@ -21,7 +21,9 @@ import {
   Building2,
   GraduationCap,
   Loader2,
-  Shield
+  Shield,
+  Upload,
+  Plus,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Button from "../common/ui/Button";
@@ -29,15 +31,14 @@ import Modal from "../common/ui/Modal";
 import Table from "../common/ui/Table";
 import Badge from "../common/ui/Badge";
 import Input, { Select, Textarea } from "../common/ui/Input";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
+import Card from "../common/ui/Card";
+import BulkImportModal from "../common/ui/BulkImportModal";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import api from "../../utils/api";
 import { logError } from "../../utils/logger";
-import { useTheme } from '../../contexts/ThemeContexts';
-
-import BulkImportModal from "../common/ui/BulkImportModal";
-import { Upload } from "lucide-react";
+import { useTheme } from "../../contexts/ThemeContexts";
 import { useToast } from "../../contexts/ToastContext";
 
 const BULK_TEACHERS_EXAMPLE = `[
@@ -98,6 +99,19 @@ const ManageTeachers = () => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [teacherRoles, setTeacherRoles] = useState([]);
 
+  // Academic Structure & Scoping State for Custom Roles (Option B)
+  const [courses, setCourses] = useState([]);
+  const [activeSectionsList, setActiveSectionsList] = useState([]);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignRoleId, setAssignRoleId] = useState("");
+  const [isBeyondClass, setIsBeyondClass] = useState(false);
+  const [assignCourseId, setAssignCourseId] = useState("");
+  const [assignBranch, setAssignBranch] = useState("");
+  const [assignSemester, setAssignSemester] = useState("1");
+  const [assignSection, setAssignSection] = useState("A");
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignError, setAssignError] = useState("");
+
   const { modalProps, openUpgradeForError } = useUpgradeModal();
 
   const [formData, setFormData] = useState({
@@ -111,24 +125,18 @@ const ManageTeachers = () => {
     joiningDate: "",
   });
 
-
-
-  // Theme colors
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    light: colors?.primary ? `${colors.primary}20` : '#eef2ff',
-    lighter: colors?.primary ? `${colors.primary}10` : '#f5f3ff',
+    primary: colors?.primary || '#7c3aed',
+    secondary: colors?.secondary || '#06b6d4',
   };
 
   useEffect(() => {
     fetchTenantInfo();
     fetchTeachers();
     fetchRoles();
+    fetchAcademicData();
   }, []);
 
-
-  // Clear messages after 5 seconds
   useEffect(() => {
     if (error || successMessage) {
       const timer = setTimeout(() => {
@@ -150,6 +158,27 @@ const ManageTeachers = () => {
     }
   };
 
+  const fetchAcademicData = async () => {
+    try {
+      const [coursesRes, sectionsRes] = await Promise.all([
+        api.get("/academic/courses").catch(() => ({ data: { data: [] } })),
+        api.get("/admin/active-sections").catch(() => ({ data: { data: [] } })),
+      ]);
+
+      const courseList = coursesRes.data?.data || [];
+      setCourses(courseList);
+
+      const activeSecList = sectionsRes.data?.data || sectionsRes.data?.sections || [];
+      const combinedSections = [...new Set([...activeSecList, "A", "B", "C", "D", "E"])]
+        .filter(Boolean)
+        .map(s => String(s).toUpperCase())
+        .sort();
+      setActiveSectionsList(combinedSections);
+    } catch (err) {
+      logError("Fetch Academic Data", err);
+    }
+  };
+
   const fetchTeachers = async () => {
     try {
       setLoading(true);
@@ -158,7 +187,6 @@ const ManageTeachers = () => {
       const teachersList = response.data.data || [];
       setTeachers(teachersList);
       
-      // Extract unique sections from assigned subjects
       const uniqueSections = new Set();
       teachersList.forEach(teacher => {
         if (teacher.teachingSections) {
@@ -194,25 +222,101 @@ const ManageTeachers = () => {
     }
   };
 
-  const handleAssignRole = async (roleId) => {
-    if (!selectedTeacher) return;
-    try {
-      await api.post('/roles/assign', {
-        teacherId: selectedTeacher._id,
-        roleId,
-      });
-      fetchTeacherRoles(selectedTeacher._id);
-      setSuccessMessage("Role assigned successfully");
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to assign role");
+  const openAssignRoleModal = (roleId = "", teacher = null) => {
+    setAssignError("");
+    if (teacher) {
+      setSelectedTeacher(teacher);
+      fetchTeacherRoles(teacher._id);
+    } else if (!selectedTeacher && teachers.length > 0) {
+      setSelectedTeacher(teachers[0]);
+      fetchTeacherRoles(teachers[0]._id);
+    }
+    if (availableRoles.length === 0) {
+      fetchRoles();
+    }
+    const chosenRoleId = roleId || availableRoles[0]?._id || "";
+    setAssignRoleId(chosenRoleId);
+
+    const role = availableRoles.find(r => r._id === chosenRoleId);
+    const isBroadRole = role ? /hod|head|dean|director|coordinator|controller|proctor/i.test(role.name) : false;
+    setIsBeyondClass(isBroadRole);
+
+    const defaultCourse = courses[0];
+    setAssignCourseId(defaultCourse?._id || "");
+    setAssignBranch(defaultCourse?.branches?.[0]?.name || "");
+    setAssignSemester(isBroadRole ? "" : "1");
+    setAssignSection(isBroadRole ? "" : (activeSectionsList[0] || "A"));
+    setAssignModalOpen(true);
+  };
+
+  const handleRoleSelectionChange = (newRoleId) => {
+    setAssignRoleId(newRoleId);
+    const role = availableRoles.find(r => r._id === newRoleId);
+    if (role) {
+      const isBroadRole = /hod|head|dean|director|coordinator|controller|proctor/i.test(role.name);
+      setIsBeyondClass(isBroadRole);
+      if (isBroadRole) {
+        setAssignSection("");
+        setAssignSemester("");
+      } else {
+        if (!assignSemester) setAssignSemester("1");
+        if (!assignSection) setAssignSection(activeSectionsList[0] || "A");
+      }
     }
   };
 
-  const handleUnassignRole = async (roleId) => {
+  const handleCourseSelectionChange = (newCourseId) => {
+    setAssignCourseId(newCourseId);
+    const course = courses.find(c => c._id === newCourseId);
+    const firstBranch = course?.branches?.[0]?.name || "";
+    setAssignBranch(firstBranch);
+    if (!isBeyondClass) {
+      setAssignSemester("1");
+    }
+  };
+
+  const handleConfirmAssignRole = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedTeacher || !assignRoleId) return;
+    if (!isBeyondClass && !assignSection) {
+      setAssignError("Please select an academic section for this class role.");
+      return;
+    }
+
+    try {
+      setAssignLoading(true);
+      setAssignError("");
+      await api.post('/roles/assign', {
+        teacherId: selectedTeacher._id,
+        roleId: assignRoleId,
+        courseId: assignCourseId || null,
+        branch: assignBranch || "",
+        semester: assignSemester ? Number(assignSemester) : null,
+        section: isBeyondClass ? "" : assignSection.trim().toUpperCase(),
+        isPrimary: !isBeyondClass,
+      });
+
+      fetchTeacherRoles(selectedTeacher._id);
+      fetchTeachers();
+      setAssignModalOpen(false);
+      setSuccessMessage("Role and academic duties assigned successfully");
+    } catch (err) {
+      setAssignError(err.response?.data?.message || "Failed to assign role");
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const handleUnassignRole = async (roleId, assignmentId, section) => {
     if (!selectedTeacher) return;
     try {
-      await api.delete(`/roles/assign/${selectedTeacher._id}/${roleId}`);
+      const params = new URLSearchParams();
+      if (assignmentId) params.append("assignmentId", assignmentId);
+      if (section) params.append("section", section);
+      const queryStr = params.toString() ? `?${params.toString()}` : "";
+      await api.delete(`/roles/assign/${selectedTeacher._id}/${roleId || assignmentId}${queryStr}`);
       fetchTeacherRoles(selectedTeacher._id);
+      fetchTeachers();
       setSuccessMessage("Role unassigned successfully");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to unassign role");
@@ -304,7 +408,6 @@ const ManageTeachers = () => {
         setSuccessMessage(msg);
         toastSuccess(msg);
         
-        // Reset form
         setFormData({
           name: "",
           email: "",
@@ -357,23 +460,20 @@ const ManageTeachers = () => {
 
   const columns = [
     {
-      header: "Teacher",
+      header: "Faculty Member",
       cell: (row) => (
         <div className="flex items-center gap-3">
           <div 
-            className="w-10 h-10 rounded-full flex items-center justify-center"
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs text-white"
             style={{ 
-              backgroundColor: `${themeColors.primary}20`,
-              color: themeColors.primary
+              backgroundColor: themeColors.primary
             }}
           >
-            <span className="font-semibold">
-              {row.name?.charAt(0)?.toUpperCase()}
-            </span>
+            {row.name?.charAt(0)?.toUpperCase()}
           </div>
           <div>
-            <p className="font-medium text-ink">{row.name}</p>
-            <p className="text-sm text-ink-soft">{row.email}</p>
+            <p className="font-bold text-ink text-xs">{row.name}</p>
+            <p className="text-[11px] text-ink-soft">{row.email}</p>
           </div>
         </div>
       ),
@@ -386,29 +486,25 @@ const ManageTeachers = () => {
             row.teachingSections.map(section => (
               <span 
                 key={section} 
-                className="px-2 py-1 rounded text-xs"
-                style={{ 
-                  backgroundColor: `${themeColors.primary}20`,
-                  color: themeColors.primary
-                }}
+                className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20"
               >
                 {section}
               </span>
             ))
           ) : (
-            <span className="text-ink-faint text-sm">No sections assigned</span>
+            <span className="text-ink-faint text-xs">No sections</span>
           )}
         </div>
       ),
     },
     {
-      header: "Roll No",
+      header: "Teacher ID",
       accessor: "rollNo",
     },
     {
       header: "Assigned Subjects",
       cell: (row) => (
-        <span className="text-sm text-ink-soft">
+        <span className="text-xs text-ink-soft font-semibold">
           {row.assignedSubjects?.length || 0} subjects
         </span>
       ),
@@ -418,47 +514,85 @@ const ManageTeachers = () => {
       cell: (row) => (
         <span className="flex items-center gap-1">
           {row.optimistic ? (
-            <Badge tone="warning" dot>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+            <Badge tone="warning" size="sm" dot>
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
             </Badge>
           ) : (
-            <Badge tone="success" dot>
-              <Check className="w-3.5 h-3.5" /> Active
+            <Badge tone="success" size="sm" dot>
+              Active
             </Badge>
           )}
         </span>
       ),
     },
     {
-      header: "Roles",
+      header: "Roles & Duties",
       cell: (row) => {
-        const assignedCount = row.customRoles?.length || 0;
+        const assigned = row.customRoles || [];
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
-            style={{
-              backgroundColor: assignedCount > 0 ? `${themeColors.primary}15` : '#f3f4f6',
-              color: assignedCount > 0 ? themeColors.primary : '#9ca3af'
-            }}
-          >
-            <Shield className="w-3 h-3" />
-            {assignedCount > 0 ? `${assignedCount} role${assignedCount > 1 ? 's' : ''}` : 'No roles'}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+            {assigned.length > 0 ? (
+              assigned.map((cr, idx) => (
+                <span
+                  key={cr._id || idx}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20"
+                >
+                  <Shield className="w-2.5 h-2.5" />
+                  {cr.roleId?.name || "Role"}
+                  {cr.section ? (
+                    <span className="text-[10px] bg-primary/20 px-1 rounded">
+                      Sec {cr.section}
+                    </span>
+                  ) : cr.branch ? (
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-600 px-1 rounded">
+                      {cr.branch}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-surface-alt px-1 rounded text-ink-soft">
+                      Campus
+                    </span>
+                  )}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-ink-faint italic">No roles</span>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openAssignRoleModal("", row);
+              }}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-surface border border-line text-ink-soft hover:text-primary hover:border-primary/40 transition cursor-pointer"
+              title="Assign another role"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              Assign
+            </button>
+          </div>
         );
       },
     },
     {
       header: "Actions",
       cell: (row) => (
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5 justify-end">
+          <button
+            onClick={() => openAssignRoleModal("", row)}
+            className="p-1.5 hover:bg-primary/10 rounded-lg text-primary hover:text-primary-dark transition cursor-pointer"
+            title="Assign Role & Academic Duties (Mentor / Advisor)"
+          >
+            <Shield className="w-4 h-4 text-primary" />
+          </button>
           <button
             onClick={() => viewTeacherDetails(row)}
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
             title="View Details"
           >
-            <Eye className="w-4 h-4 text-ink-soft" />
+            <Eye className="w-4 h-4" />
           </button>
           <button 
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-background rounded-lg text-ink-soft hover:text-primary transition cursor-pointer"
             title="Edit"
             onClick={() => {
               setFormData({
@@ -477,11 +611,11 @@ const ManageTeachers = () => {
             <Edit className="w-4 h-4 text-primary" />
           </button>
           <button 
-            className="p-1 hover:bg-background rounded transition"
+            className="p-1.5 hover:bg-rose-500/10 rounded-lg text-ink-soft hover:text-rose-600 transition cursor-pointer"
             title="Delete"
             onClick={() => handleDelete(row._id)}
           >
-            <Trash2 className="w-4 h-4 text-red-600" />
+            <Trash2 className="w-4 h-4 text-rose-500" />
           </button>
         </div>
       ),
@@ -489,80 +623,89 @@ const ManageTeachers = () => {
   ];
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Manage Teachers"
-        subtitle={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your institution"}`}
-        icon={Users}
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Faculty Directory & Profiles"
+        meta={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your campus"}`}
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              size="sm"
+              leftIcon={Shield}
+              onClick={() => openAssignRoleModal()}
+            >
+              Assign Role / Duties
+            </Button>
+            <Button
+              variant="subtle"
+              size="sm"
               leftIcon={Upload}
               onClick={() => setShowBulkModal(true)}
             >
-              Bulk Operations
+              Bulk Import
             </Button>
             <Button
+              variant="primary"
+              size="sm"
               leftIcon={UserPlus}
               onClick={() => setShowForm(true)}
-              style={{
-                background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-              }}
             >
-              Add Teacher
+              Add Faculty
             </Button>
           </div>
         }
       />
 
-
-
-      {/* Filters */}
-      <div>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
+      {/* Filter Toolbar */}
+      <Card padding="md" bordered>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto flex-1">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <input
+                type="text"
+                placeholder="Search by faculty name, email, roll no..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <select
+                value={filterSection}
+                onChange={(e) => setFilterSection(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+              >
+                <option value="">All Sections</option>
+                {sections.map((s) => (
+                  <option key={s} value={s}>
+                    Section {s}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <select
-              value={filterSection}
-              onChange={(e) => setFilterSection(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none"
-            >
-              <option value="">All Sections</option>
-              {sections.map((s) => (
-                <option key={s} value={s}>
-                  Section {s}
-                </option>
-              ))}
-            </select>
+
+          <div className="text-xs text-ink-soft font-semibold self-end sm:self-center">
+            <span>{filteredTeachers.length} faculty registered</span>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Teachers Table */}
-      <Table
-        columns={columns}
-        data={paginatedTeachers}
-        loading={loading}
-        emptyMessage="No teachers found."
-        rowKey="_id"
-        pagination={paginationInfo}
-        onPageChange={setPage}
-      />
+      {/* Teachers Table Card */}
+      <Card padding="none" bordered className="overflow-hidden">
+        <Table
+          columns={columns}
+          data={paginatedTeachers}
+          loading={loading}
+          emptyMessage="No faculty records found matching criteria."
+          rowKey="_id"
+          pagination={paginationInfo}
+          onPageChange={setPage}
+        />
+      </Card>
 
       {/* Add Teacher Modal */}
       <Modal
@@ -571,95 +714,84 @@ const ManageTeachers = () => {
           setShowForm(false);
           setError(null);
         }}
-        title="Add New Teacher"
+        title="Add Faculty Member"
         size="lg"
         error={error}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} required />
-            <Input label="Email *" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
-            <Input label="Teacher Roll No / ID *" name="rollNo" value={formData.rollNo} onChange={handleInputChange} required placeholder="e.g. TCH001" />
+          <div className="grid md:grid-cols-2 gap-3.5">
+            <Input label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Dr. Sarah Jenkins" />
+            <Input label="Institutional Email *" name="email" type="email" value={formData.email} onChange={handleInputChange} required placeholder="sarah@institution.edu" />
+            <Input label="Faculty ID / Roll No *" name="rollNo" value={formData.rollNo} onChange={handleInputChange} required placeholder="e.g. TCH001" />
             <Input label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="e.g. +91 9876543210" />
-            <Input label="Qualification" name="qualification" value={formData.qualification} onChange={handleInputChange} placeholder="e.g. M.Tech, PhD" />
-            <Input label="Specialization" name="specialization" value={formData.specialization} onChange={handleInputChange} placeholder="e.g. Machine Learning, DBMS" />
+            <Input label="Qualification" name="qualification" value={formData.qualification} onChange={handleInputChange} placeholder="e.g. Ph.D, M.Tech" />
+            <Input label="Specialization" name="specialization" value={formData.specialization} onChange={handleInputChange} placeholder="e.g. Artificial Intelligence, Networks" />
             <Input label="Joining Date" name="joiningDate" type="date" value={formData.joiningDate} onChange={handleInputChange} />
           </div>
-          <Textarea label="Address" name="address" rows={2} value={formData.address} onChange={handleInputChange} placeholder="Enter teacher address..." />
-          <div className="flex justify-end pt-4 gap-3">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+          <Textarea label="Address" name="address" rows={2} value={formData.address} onChange={handleInputChange} placeholder="Office room / address..." className="resize-none" />
+          <div className="flex justify-end pt-3 gap-2.5 border-t border-line/50">
+            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={submitting}>
-              Create Teacher
+            <Button type="submit" variant="primary" size="sm" loading={submitting}>
+              Create Faculty Profile
             </Button>
           </div>
         </form>
       </Modal>
 
       {/* Details Modal */}
-      <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Teacher Details" size="lg">
+      <Modal isOpen={showDetails} onClose={() => setShowDetails(false)} title="Faculty Profile" size="lg">
         {selectedTeacher && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
+          <div className="space-y-5">
+            <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-background border border-line/50">
               <div 
-                className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner"
+                className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-xs"
                 style={{ 
-                  backgroundColor: `${themeColors.primary}15`,
-                  color: themeColors.primary
+                  backgroundColor: themeColors.primary,
                 }}
               >
-                <span className="text-3xl font-bold">
-                  {selectedTeacher.name?.charAt(0)?.toUpperCase()}
-                </span>
+                {selectedTeacher.name?.charAt(0)?.toUpperCase()}
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-ink tracking-tight">
+                <h2 className="text-base font-bold text-ink tracking-tight">
                   {selectedTeacher.name}
                 </h2>
-                <p className="text-ink-soft font-medium">{selectedTeacher.email}</p>
-                <p className="text-sm font-bold text-ink-faint mt-1 uppercase tracking-wider">Roll No: {selectedTeacher.rollNo}</p>
+                <p className="text-xs text-ink-soft">{selectedTeacher.email}</p>
+                <p className="text-[11px] font-bold text-primary font-mono mt-0.5">ID: {selectedTeacher.rollNo}</p>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="p-5 bg-background rounded-2xl border border-line">
-                <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3">Teaching Sections</p>
-                <div className="flex flex-wrap gap-2">
+              <div className="p-4 bg-background rounded-2xl border border-line/50">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5">Teaching Sections</p>
+                <div className="flex flex-wrap gap-1.5">
                   {selectedTeacher.teachingSections?.length > 0 ? (
                     selectedTeacher.teachingSections.map(section => (
                       <span 
                         key={section} 
-                        className="px-3 py-1 rounded-lg text-sm font-semibold"
-                        style={{ 
-                          backgroundColor: `${themeColors.primary}15`,
-                          color: themeColors.primary
-                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20"
                       >
                         Section {section}
                       </span>
                     ))
                   ) : (
-                    <p className="text-ink-soft text-sm font-medium">No sections assigned</p>
+                    <p className="text-ink-soft text-xs">No sections assigned</p>
                   )}
                 </div>
               </div>
-              <div className="p-5 bg-background rounded-2xl border border-line">
-                <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3">Assigned Subjects</p>
-                <div className="space-y-3">
+              <div className="p-4 bg-background rounded-2xl border border-line/50">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2.5">Assigned Subjects</p>
+                <div className="space-y-2">
                   {selectedTeacher.assignmentsBySection ? (
                     Object.entries(selectedTeacher.assignmentsBySection).map(([section, subjects]) => (
                       <div key={section}>
-                        <p className="text-sm font-bold text-ink-soft mb-1">Section {section}</p>
-                        <div className="flex flex-wrap gap-2">
+                        <p className="text-xs font-bold text-ink mb-1">Section {section}</p>
+                        <div className="flex flex-wrap gap-1.5">
                           {subjects.map(subject => (
                             <span 
                               key={subject.subjectId} 
-                              className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                              style={{ 
-                                backgroundColor: `${themeColors.primary}10`,
-                                color: themeColors.primary
-                              }}
+                              className="text-[11px] px-2 py-0.5 rounded-lg font-semibold bg-surface border border-line/50 text-ink"
                             >
                               {subject.subjectName}
                             </span>
@@ -668,77 +800,381 @@ const ManageTeachers = () => {
                       </div>
                     ))
                   ) : (
-                    <p className="text-ink-soft text-sm font-medium">No subjects assigned</p>
+                    <p className="text-ink-soft text-xs">No subjects assigned</p>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="p-5 bg-background rounded-2xl border border-line">
-              <p className="text-sm font-bold text-ink-faint uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                Assigned Roles
-              </p>
+            <div className="p-4 bg-background rounded-2xl border border-line/50">
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-xs font-bold text-ink-soft uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  Administrative Roles & Academic Duties
+                </p>
+                {availableRoles.length > 0 && (
+                  <button
+                    onClick={() => openAssignRoleModal()}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:text-primary/80 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Assign Role
+                  </button>
+                )}
+              </div>
+
               {teacherRoles.length > 0 ? (
                 <div className="space-y-2 mb-3">
                   {teacherRoles.map(tr => (
-                    <div key={tr._id} className="flex items-center justify-between p-2 bg-surface rounded-lg border border-line">
-                      <div>
-                        <p className="text-sm font-semibold text-ink">{tr.roleId?.name || "Unknown Role"}</p>
-                        {tr.roleId?.description && <p className="text-xs text-ink-soft">{tr.roleId.description}</p>}
+                    <div key={tr._id} className="p-3 bg-surface rounded-xl border border-line/50 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-xs font-bold text-ink">{tr.roleId?.name || "Role"}</p>
+                          {tr.isPrimary && (
+                            <Badge tone="purple" size="sm">Primary</Badge>
+                          )}
+                          {tr.section && (
+                            <Badge tone="primary" size="sm">Section {tr.section}</Badge>
+                          )}
+                          {tr.courseId && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              {tr.courseId?.code || tr.courseId?.name}
+                            </span>
+                          )}
+                          {tr.branch && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              {tr.branch}
+                            </span>
+                          )}
+                          {tr.semester && (
+                            <span className="text-[10px] font-medium text-ink-soft bg-background px-1.5 py-0.5 rounded border border-line/40">
+                              Sem {tr.semester}
+                            </span>
+                          )}
+                        </div>
+                        {tr.roleId?.description && (
+                          <p className="text-[11px] text-ink-soft mt-0.5 truncate">{tr.roleId.description}</p>
+                        )}
                       </div>
-                      <button onClick={() => handleUnassignRole(tr.roleId?._id)} className="p-1 hover:bg-red-50 rounded transition" title="Remove role">
-                        <X className="w-4 h-4 text-red-500" />
+                      <button
+                        onClick={() => handleUnassignRole(tr.roleId?._id, tr._id, tr.section)}
+                        className="p-1.5 hover:bg-rose-500/10 text-rose-500 rounded-lg transition cursor-pointer shrink-0"
+                        title="Remove role assignment"
+                      >
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-ink-soft mb-3">No roles assigned</p>
+                <p className="text-xs text-ink-soft mb-3">No administrative or cohort roles assigned yet.</p>
               )}
+
               {availableRoles.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-ink-faint mb-2">Assign a role:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {availableRoles.filter(r => !teacherRoles.some(tr => tr.roleId?._id === r._id)).map(role => (
-                      <button key={role._id} onClick={() => handleAssignRole(role._id)}
-                        className="px-3 py-1.5 bg-surface border border-primary/40 text-primary-dark rounded-lg text-xs font-medium hover:bg-primary-soft transition"
+                  <p className="text-[11px] font-bold text-ink-faint uppercase mb-1.5">Quick Assign:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableRoles.map(role => (
+                      <button
+                        key={role._id}
+                        onClick={() => openAssignRoleModal(role._id)}
+                        className="px-2.5 py-1 bg-surface border border-primary/30 text-primary hover:bg-primary/10 rounded-lg text-xs font-bold transition cursor-pointer"
                       >
                         + {role.name}
                       </button>
                     ))}
-                    {availableRoles.filter(r => !teacherRoles.some(tr => tr.roleId?._id === r._id)).length === 0 && (
-                      <span className="text-xs text-ink-faint">All roles assigned</span>
-                    )}
                   </div>
                 </div>
               )}
             </div>
 
             {(selectedTeacher.phone || selectedTeacher.qualification || selectedTeacher.specialization) && (
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-3 gap-3">
                 {selectedTeacher.phone && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Phone</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.phone}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Phone</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.phone}</p>
                   </div>
                 )}
                 {selectedTeacher.qualification && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Qualification</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.qualification}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Qualification</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.qualification}</p>
                   </div>
                 )}
                 {selectedTeacher.specialization && (
-                  <div className="p-4 bg-background rounded-xl border border-line">
-                    <p className="text-xs font-bold text-ink-faint uppercase tracking-wider mb-1">Specialization</p>
-                    <p className="font-semibold text-ink">{selectedTeacher.specialization}</p>
+                  <div className="p-3 bg-background rounded-xl border border-line/50">
+                    <p className="text-[10px] font-bold text-ink-faint uppercase tracking-wider mb-0.5">Specialization</p>
+                    <p className="text-xs font-bold text-ink">{selectedTeacher.specialization}</p>
                   </div>
                 )}
               </div>
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Role Assignment & Academic Scoping Modal (Option B) */}
+      <Modal
+        isOpen={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        title={selectedTeacher ? `Assign Role: ${selectedTeacher.name}` : "Assign Role"}
+        size="md"
+      >
+        <form onSubmit={handleConfirmAssignRole} className="space-y-4 pt-1">
+          {assignError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-semibold">
+              {assignError}
+            </div>
+          )}
+
+          {/* Faculty Member Selector */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-soft mb-1">
+              Faculty Member *
+            </label>
+            <Select
+              value={selectedTeacher?._id || ""}
+              onChange={(e) => {
+                const found = teachers.find(t => t._id === e.target.value);
+                setSelectedTeacher(found || null);
+                if (found) fetchTeacherRoles(found._id);
+              }}
+              className="text-xs"
+              required
+            >
+              <option value="">-- Choose Faculty Member --</option>
+              {teachers.map((t) => (
+                <option key={t._id} value={t._id}>
+                  {t.name} ({t.email})
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-soft mb-1">
+              Select Role *
+            </label>
+            <Select
+              value={assignRoleId}
+              onChange={(e) => handleRoleSelectionChange(e.target.value)}
+              className="text-xs"
+              required
+            >
+              <option value="">-- Choose Role --</option>
+              {availableRoles.map((r) => (
+                <option key={r._id} value={r._id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {teacherRoles.length > 0 && (
+            <div className="p-3 bg-surface-alt/40 rounded-xl border border-line/60 space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">
+                Currently Assigned Duties for this Faculty
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {teacherRoles.map((tr) => (
+                  <span
+                    key={tr._id}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs bg-surface border border-line text-ink"
+                  >
+                    <Shield className="w-3 h-3 text-primary" />
+                    <span className="font-semibold">{tr.roleId?.name || "Role"}</span>
+                    {tr.section ? (
+                      <span className="text-[10px] font-bold bg-primary/10 text-primary px-1 rounded">
+                        Sec {tr.section}
+                      </span>
+                    ) : tr.branch ? (
+                      <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 px-1 rounded">
+                        {tr.branch}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-ink-soft italic">Campus-wide</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleUnassignRole(tr.roleId?._id, tr._id, tr.section)}
+                      className="text-rose-500 hover:text-rose-700 ml-1 p-0.5 hover:bg-rose-500/10 rounded cursor-pointer"
+                      title="Unassign this duty"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3.5 bg-surface-alt/50 rounded-xl border border-line/60 space-y-3">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isBeyondClass}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsBeyondClass(checked);
+                  if (checked) {
+                    setAssignSection("");
+                    setAssignSemester("");
+                  } else {
+                    if (!assignSemester) setAssignSemester("1");
+                    if (!assignSection) setAssignSection(activeSectionsList[0] || "A");
+                  }
+                }}
+                className="mt-0.5 rounded border-line text-primary focus:ring-primary h-4 w-4"
+              />
+              <div>
+                <span className="text-xs font-bold text-ink">
+                  Role applies beyond a single class (Department / Institution-wide)
+                </span>
+                <p className="text-[11px] text-ink-soft mt-0.5">
+                  Enable this for broad leadership roles like HOD, Deputy HOD, Dean, or Coordinator.
+                  Leave unchecked for class-specific roles like Academic Mentor or Class Advisor.
+                </p>
+              </div>
+            </label>
+
+            <div className="space-y-3 pt-2.5 border-t border-line/50">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                  isBeyondClass
+                    ? "bg-indigo-500/10 text-indigo-600 border border-indigo-500/20"
+                    : "bg-primary/10 text-primary border border-primary/20"
+                }`}>
+                  {isBeyondClass ? "Department / Institution-wide Scope" : "Class / Section Scope"}
+                </span>
+              </div>
+
+              {/* Course Dropdown */}
+              <div>
+                <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                  Course / Program {!isBeyondClass && "*"}
+                </label>
+                <Select
+                  value={assignCourseId}
+                  onChange={(e) => handleCourseSelectionChange(e.target.value)}
+                  className="text-xs"
+                  required={!isBeyondClass}
+                >
+                  <option value="">{isBeyondClass ? "All Programs / Campus-wide" : "-- Choose Course --"}</option>
+                  {courses.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name} {c.code ? `(${c.code})` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Branch & Semester Dropdowns */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    {isBeyondClass ? "Department / Branch" : "Branch / Stream"}
+                  </label>
+                  <Select
+                    value={assignBranch}
+                    onChange={(e) => setAssignBranch(e.target.value)}
+                    className="text-xs"
+                  >
+                    <option value="">{isBeyondClass ? "All Departments / General" : "All Branches / General"}</option>
+                    {courses
+                      .find((c) => c._id === assignCourseId)
+                      ?.branches?.filter((b) => b.isActive !== false)
+                      .map((b) => (
+                        <option key={b._id || b.name} value={b.name}>
+                          {b.name} {b.code ? `(${b.code})` : ""}
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    Semester {isBeyondClass && "(Optional)"}
+                  </label>
+                  <Select
+                    value={assignSemester}
+                    onChange={(e) => setAssignSemester(e.target.value)}
+                    className="text-xs"
+                  >
+                    {isBeyondClass && (
+                      <option value="">All Semesters / Across Dept</option>
+                    )}
+                    {(() => {
+                      const curCourse = courses.find((c) => c._id === assignCourseId);
+                      const curBranch = curCourse?.branches?.find(
+                        (b) => b.name?.toLowerCase() === (assignBranch || "").toLowerCase()
+                      );
+                      const totalSems =
+                        curBranch?.totalSemesters ||
+                        (curCourse?.durationYears ? curCourse.durationYears * 2 : 8);
+                      return Array.from({ length: totalSems }, (_, idx) => idx + 1).map((s) => (
+                        <option key={s} value={String(s)}>
+                          Semester {s}
+                        </option>
+                      ));
+                    })()}
+                  </Select>
+                </div>
+              </div>
+
+              {/* Section Dropdown (HIDDEN when isBeyondClass is true) */}
+              {!isBeyondClass && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink-soft mb-1">
+                    Academic Section *
+                  </label>
+                  <Select
+                    value={assignSection}
+                    onChange={(e) => setAssignSection(e.target.value)}
+                    className="text-xs"
+                    required={!isBeyondClass}
+                  >
+                    <option value="">-- Choose Section --</option>
+                    {activeSectionsList.map((sec) => (
+                      <option key={sec} value={sec}>
+                        Section {sec}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-[10px] text-ink-faint mt-1">
+                    Specific class cohort this teacher will mentor or advise.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line/50">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAssignModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={assignLoading}
+            >
+              {assignLoading ? (
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Assigning...</span>
+                </div>
+              ) : (
+                "Confirm & Assign Role"
+              )}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       <BulkImportModal
@@ -760,7 +1196,7 @@ const ManageTeachers = () => {
         {...modalProps}
         currentPlanCode={tenantInfo?.subscription?.plan}
       />
-    </motion.div>
+    </div>
   );
 };
 

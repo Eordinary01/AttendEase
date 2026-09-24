@@ -5,7 +5,6 @@ import {
   Calendar,
   Book,
   Check,
-  X,
   ChevronDown,
   Users,
   AlertCircle,
@@ -20,18 +19,20 @@ import {
   XCircle,
   Wifi,
   WifiOff,
+  Lock,
 } from "lucide-react";
 import api from "../../utils/api";
-import { format } from "date-fns";
+import { formatDateReadable, getLocalTodayStr } from "../../utils/dateUtils";
 import { useTheme } from "../../contexts/ThemeContexts";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  getOfflineQueue,
+  initOfflineSync,
   saveToOfflineQueue,
   getPendingSyncCount,
-  syncOfflineAttendance,
+  triggerOfflineSync,
+  onSyncEvent,
 } from "../../utils/offlineSync";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import Card from "../common/ui/Card";
 import StatCard from "../common/ui/StatCard";
 import Button from "../common/ui/Button";
@@ -46,8 +47,16 @@ function hexToRgbStr(hex = "#6366f1") {
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-// Mirrors backend: new Date("yyyy-mm-dd") is parsed as UTC midnight, then getUTCDay().
-const getDayOfWeek = (dateStr) => WEEKDAYS[new Date(dateStr).getUTCDay()];
+// Parse calendar date parts directly so day-of-week is identical across all timezones without UTC offset shift
+const getDayOfWeek = (dateStr) => {
+  if (!dateStr) return "Monday";
+  const parts = String(dateStr).split("T")[0].split("-").map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return WEEKDAYS[new Date(parts[0], parts[1] - 1, parts[2]).getDay()];
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? "Monday" : WEEKDAYS[d.getDay()];
+};
 
 export default function MarkAttendance() {
   const { colors } = useTheme();
@@ -64,9 +73,7 @@ export default function MarkAttendance() {
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
-  const [selectedDate, setSelectedDate] = useState(
-    format(new Date(), "yyyy-MM-dd")
-  );
+  const [selectedDate, setSelectedDate] = useState(getLocalTodayStr());
   const [students, setStudents] = useState([]);
   const [attendanceData, setAttendanceData] = useState({});
   const [filterRollNo, setFilterRollNo] = useState("");
@@ -87,56 +94,78 @@ export default function MarkAttendance() {
   });
 
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingSyncCount());
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const hasFetchedSubjects = useRef(false);
   const abortControllerRef = useRef(null);
 
-  const token = localStorage.getItem("token");
   const teacherId = localStorage.getItem("userId");
+  const isAuthenticated = Boolean(teacherId || localStorage.getItem("role") || localStorage.getItem("token"));
+  const token = localStorage.getItem("token") || "";
 
-  const triggerOfflineSync = async () => {
-    if (getPendingSyncCount() === 0) return;
+  const triggerSync = async () => {
+    const currentPending = await getPendingSyncCount();
+    if (currentPending === 0) return;
     setIsSyncing(true);
     try {
-      const res = await syncOfflineAttendance(api);
-      setPendingSyncCount(res.remainingCount);
-      if (res.syncedCount > 0) {
-        showToast(`✅ Synced ${res.syncedCount} offline attendance payload(s) successfully!`, true);
-      }
+      await triggerOfflineSync(token, process.env.REACT_APP_API_URL);
     } catch (err) {
       showToast("⚠️ Offline sync encountered errors. Will retry when online.", false);
-    } finally {
       setIsSyncing(false);
     }
   };
 
   useEffect(() => {
+    // 1. Initialize IndexedDB, run migration, and spin up background sync worker
+    initOfflineSync().then(async () => {
+      const count = await getPendingSyncCount();
+      setPendingSyncCount(count);
+    });
+
+    // 2. Subscribe to background worker sync events
+    const unsubscribe = onSyncEvent(async (event) => {
+      const count = await getPendingSyncCount();
+      setPendingSyncCount(count);
+
+      if (event.type === 'SYNC_COMPLETE') {
+        setIsSyncing(false);
+        if (event.syncedCount > 0) {
+          showToast(`✅ Synced ${event.syncedCount} offline attendance payload(s) successfully!`, true);
+          checkExistingAttendance();
+        }
+        if (event.failedCount > 0) {
+          showToast(`⚠️ ${event.failedCount} payload(s) failed to sync. Will retry automatically with backoff.`, false);
+        }
+      } else if (event.type === 'SYNC_ERROR') {
+        setIsSyncing(false);
+        showToast("⚠️ Sync error: " + (event.error || 'Failed to sync'), false);
+      }
+    });
+
     const handleOnline = async () => {
       setIsOnline(true);
       showToast("🌐 Network connection restored. Auto-syncing pending attendance...", true);
-      await triggerOfflineSync();
+      await triggerSync();
     };
     const handleOffline = () => {
       setIsOnline(false);
-      showToast("📶 Offline mode active. Attendance will be saved locally.", false);
+      showToast("📶 Offline mode active. Attendance will be saved locally in IndexedDB.", false);
     };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    setPendingSyncCount(getPendingSyncCount());
-
     return () => {
+      unsubscribe();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetch teacher subjects - only once on mount
   useEffect(() => {
-    if (token && !hasFetchedSubjects.current) {
+    if (isAuthenticated && !hasFetchedSubjects.current) {
       hasFetchedSubjects.current = true;
       fetchTeacherSubjects();
     }
@@ -146,7 +175,7 @@ export default function MarkAttendance() {
         abortControllerRef.current.abort();
       }
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   // Update selected subject and section when assignment changes
   useEffect(() => {
@@ -280,12 +309,12 @@ export default function MarkAttendance() {
         params.branch = selectedAssignment.subject.branch;
       }
 
-      const response = await api.get('/users/public/users', {
+      const response = await api.get('/users/students', {
         params,
         signal,
       });
 
-      const studentsData = response.data || [];
+      const studentsData = response.data?.data?.students || response.data?.data || response.data || [];
       setStudents(studentsData);
 
       if (studentsData.length === 0) {
@@ -356,7 +385,7 @@ export default function MarkAttendance() {
             classSlots: response.data.classSlots || []
           });
 
-          showToast(`📋 Existing attendance loaded for ${format(new Date(selectedDate.replace(/-/g, '/')), "MMMM d, yyyy")}`);
+          showToast(`📋 Existing attendance loaded for ${formatDateReadable(selectedDate, false)}`);
         } else {
           resetAttendanceDefault();
         }
@@ -455,9 +484,14 @@ export default function MarkAttendance() {
     };
 
     if (!navigator.onLine) {
-      saveToOfflineQueue(payload);
-      setPendingSyncCount(getPendingSyncCount());
-      showToast("📶 Saved offline! Attendance queued for auto-sync when online.", true);
+      try {
+        await saveToOfflineQueue(payload);
+        const count = await getPendingSyncCount();
+        setPendingSyncCount(count);
+        showToast("📶 Saved offline in IndexedDB! Attendance queued for auto-sync when online.", true);
+      } catch (queueErr) {
+        showToast(queueErr.message || "Failed to save offline attendance", false);
+      }
       setIsLoading(false);
       return;
     }
@@ -473,9 +507,14 @@ export default function MarkAttendance() {
       }
     } catch (error) {
       if (!error.response || error.code === 'ERR_NETWORK') {
-        saveToOfflineQueue(payload);
-        setPendingSyncCount(getPendingSyncCount());
-        showToast("📶 Network error. Attendance saved offline and queued for auto-sync.", true);
+        try {
+          await saveToOfflineQueue(payload);
+          const count = await getPendingSyncCount();
+          setPendingSyncCount(count);
+          showToast("📶 Network error. Attendance saved offline in IndexedDB and queued for auto-sync.", true);
+        } catch (queueErr) {
+          showToast(queueErr.message || "Failed to save offline attendance", false);
+        }
       } else if (error.response?.data?.message?.includes("already exists")) {
         showToast("⚠️ Attendance for this class session already exists.", false);
         setExistingAttendance(true);
@@ -496,7 +535,7 @@ export default function MarkAttendance() {
     });
   }, [students, filterRollNo]);
 
-  if (!token) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center p-6">
         <Card padding="lg" className="max-w-md w-full text-center">
@@ -512,14 +551,13 @@ export default function MarkAttendance() {
 
   return (
     <div className="space-y-6" style={cssVars}>
-      <PageHeader
-        icon={BookOpen}
-        title="Mark Attendance"
-        subtitle="Select your subject assignment, adjust the date, and record roll list states."
+      <DashboardHeader
+        greeting="Classroom Attendance Register"
+        meta={`Record live roll states for scheduled timetable slots (${formatDateReadable(new Date(), true)})`}
         actions={
-          <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-xl border border-line shadow-sm text-sm font-semibold text-ink-soft">
-            <Calendar className="w-4 h-4 text-ink-faint" />
-            {format(new Date(), "EEEE, MMM d, yyyy")}
+          <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-line/60 shadow-sm text-xs font-semibold text-ink-soft">
+            <Calendar className="w-3.5 h-3.5 text-primary" />
+            {formatDateReadable(new Date(), false)}
           </div>
         }
       />
@@ -552,7 +590,7 @@ export default function MarkAttendance() {
             <Button
               size="sm"
               variant="outline"
-              onClick={triggerOfflineSync}
+              onClick={triggerSync}
               disabled={isSyncing}
               className="flex items-center gap-1.5"
             >
@@ -643,7 +681,7 @@ export default function MarkAttendance() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            max={format(new Date(), "yyyy-MM-dd")}
+            max={getLocalTodayStr()}
             className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition bg-surface text-ink"
             required
           />
@@ -734,6 +772,19 @@ export default function MarkAttendance() {
       {/* Roll List Container */}
       {selectedSection && (
         <Card padding="none" className="overflow-hidden">
+          {/* Attendance Already Marked & Locked Banner */}
+          {existingAttendance && (
+            <div className="p-4 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-amber-600 dark:text-amber-400 text-sm font-medium">
+              <Lock className="w-5 h-5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">Attendance Already Marked & Locked</p>
+                <p className="text-xs opacity-90 mt-0.5">
+                  Attendance for this class session has already been recorded via manual or face biometric scan. Modifying or re-submitting attendance for this session is locked.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Toolbar */}
           {students.length > 0 && (
             <div className="p-4 border-b border-line bg-background/50 flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -755,6 +806,7 @@ export default function MarkAttendance() {
                   onClick={markAllPresent}
                   variant="subtle"
                   size="sm"
+                  disabled={existingAttendance}
                   leftIcon={UserCheck}
                 >
                   Mark All Present
@@ -763,6 +815,7 @@ export default function MarkAttendance() {
                   onClick={markAllAbsent}
                   variant="dangerSubtle"
                   size="sm"
+                  disabled={existingAttendance}
                   leftIcon={UserX}
                 >
                   Mark All Absent
@@ -819,20 +872,22 @@ export default function MarkAttendance() {
                         <td className="py-3.5 pr-6 text-center">
                           <div className="inline-flex rounded-xl p-0.5 bg-background border border-line shadow-inner">
                             <button
-                              onClick={() => handleAttendanceChange(student._id, true)}
+                              onClick={() => !existingAttendance && handleAttendanceChange(student._id, true)}
+                              disabled={existingAttendance}
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${isChecked
                                   ? "bg-primary text-white shadow-sm"
                                   : "text-ink-soft hover:text-ink"
-                                }`}
+                                } ${existingAttendance ? "cursor-not-allowed opacity-80" : ""}`}
                             >
                               Present
                             </button>
                             <button
-                              onClick={() => handleAttendanceChange(student._id, false)}
+                              onClick={() => !existingAttendance && handleAttendanceChange(student._id, false)}
+                              disabled={existingAttendance}
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${!isChecked
                                   ? "bg-red-600 text-white shadow-sm"
                                   : "text-ink-soft hover:text-ink"
-                                }`}
+                                } ${existingAttendance ? "cursor-not-allowed opacity-80" : ""}`}
                             >
                               Absent
                             </button>
@@ -852,12 +907,13 @@ export default function MarkAttendance() {
               <Button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isLoading || !selectedSection || classSlots.length === 0}
+                disabled={isLoading || existingAttendance || !selectedSection || classSlots.length === 0}
                 loading={isLoading}
-                leftIcon={RefreshCw}
-                style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+                leftIcon={existingAttendance ? Lock : RefreshCw}
+                variant={existingAttendance ? "secondary" : "primary"}
+                style={existingAttendance ? undefined : { background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
               >
-                {isLoading ? "Submitting..." : existingAttendance ? "Update Attendance" : "Submit Attendance"}
+                {isLoading ? "Submitting..." : existingAttendance ? "Attendance Locked (Already Marked)" : "Submit Attendance"}
               </Button>
             </div>
           )}

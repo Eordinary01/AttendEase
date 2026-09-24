@@ -62,7 +62,10 @@ const getSubscriptionDetails = async (req, res) => {
           tenant.subscription.razorpaySubscriptionId
         );
       } catch (rpErr) {
-        logger.warn('Could not fetch Razorpay subscription', { error: String(rpErr) });
+        logger.warn('Could not fetch Razorpay subscription', {
+          subscriptionId: tenant.subscription.razorpaySubscriptionId,
+          error: rpErr?.error?.description || rpErr?.message || String(rpErr),
+        });
       }
     }
     

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
+import api from '../../utils/api';
+import { fetchTenantInfo as fetchTenantInfoService, fetchTenantUsage as fetchTenantUsageService, getCachedTenantBranding } from '../../utils/tenantService';
 import {
   User,
   LogOut,
@@ -34,12 +36,18 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
   const [planModules, setPlanModules] = useState(null);
-  const [themeColors, setThemeColors] = useState({
-    primary: '#7c3aed',    // Default purple-600
-    secondary: '#6d28d9',  // Default purple-700
-    light: '#ede9fe',      // Default purple-100
-    lighter: '#f5f3ff',    // Default purple-50
-  });
+  const getInitialColors = () => {
+    const cached = getCachedTenantBranding();
+    const primary = cached?.branding?.primaryColor || '#7c3aed';
+    const secondary = cached?.branding?.secondaryColor || '#6d28d9';
+    return {
+      primary,
+      secondary,
+      light: '#ede9fe',
+      lighter: '#f5f3ff',
+    };
+  };
+  const [themeColors, setThemeColors] = useState(getInitialColors);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -71,30 +79,18 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
   const fetchPlanModules = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.REACT_APP_API_URL;
-      const res = await fetch(`${API_URL}/tenant/usage`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPlanModules(data.data?.plan?.modules || {});
+      const res = await fetchTenantUsageService();
+      if (res.data?.success) {
+        setPlanModules(res.data.data?.plan?.modules || {});
       }
     } catch (err) { /* ignore */ }
   };
 
   const fetchTenantColors = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.REACT_APP_API_URL;
-      
-      const response = await fetch(`${API_URL}/tenant/info`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        const branding = data.data?.tenant?.branding;
+      const response = await fetchTenantInfoService();
+      if (response.data?.success) {
+        const branding = response.data.data?.tenant?.branding;
         
         if (branding) {
           const colors = {
@@ -351,16 +347,6 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               >
                 <FileText className="h-5 w-5" />
                 <span>Exams</span>
-              </Link>
-              )}
-
-              {(planModules === null || planModules.financeManagement) && (
-              <Link
-                to="/fees"
-                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
-              >
-                <DollarSign className="h-5 w-5" />
-                <span>Fees</span>
               </Link>
               )}
             </>
@@ -751,17 +737,6 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               >
                 <FileText className="h-5 w-5" />
                 <span>Exams</span>
-              </Link>
-              )}
-
-              {(planModules === null || planModules.financeManagement) && (
-              <Link
-                to="/fees"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                <DollarSign className="h-5 w-5" />
-                <span>Fees</span>
               </Link>
               )}
             </>

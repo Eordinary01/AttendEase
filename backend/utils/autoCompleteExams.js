@@ -1,8 +1,13 @@
+const mongoose = require('mongoose');
 const Exam = require('../models/Exam');
 const Tenant = require('../models/Tenant');
 const logger = require('./logger');
 
 async function autoCompleteExams() {
+  if (mongoose.connection.readyState !== 1) {
+    logger.debug('[autoCompleteExams] Skipping auto-completion: MongoDB is not connected.');
+    return;
+  }
   try {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);

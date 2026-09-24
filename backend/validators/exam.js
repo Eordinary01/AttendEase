@@ -93,7 +93,8 @@ const createExam = [
     .isInt({ min: 1, max: 1000 })
     .withMessage('Maximum marks must be a positive integer'),
   body('room')
-    .optional()
+    .notEmpty()
+    .withMessage('Examination Hall / Room is required')
     .isString()
     .trim()
     .withMessage('Room must be a string'),
@@ -243,6 +244,16 @@ const bulkCreateExams = [
     .isString()
     .trim()
     .withMessage('Exam type must be a string'),
+  body('exams.*.courseId')
+    .optional()
+    .isString()
+    .trim()
+    .withMessage('Course ID must be a string'),
+  body('exams.*.branch')
+    .optional()
+    .isString()
+    .trim()
+    .withMessage('Branch must be a string'),
   body('exams.*.shift')
     .optional({ checkFalsy: true })
     .isIn(['I', 'II', 'III', 'IV'])
@@ -284,7 +295,8 @@ const bulkCreateExams = [
     .isInt({ min: 1, max: 1000 })
     .withMessage('Maximum marks must be a positive integer'),
   body('exams.*.room')
-    .optional()
+    .notEmpty()
+    .withMessage('Examination Hall (room) is required for each exam')
     .isString()
     .trim()
     .withMessage('Room must be a string'),
@@ -418,8 +430,17 @@ const getExams = [
     .withMessage('Shift must be one of: I, II, III, IV'),
   query('courseId')
     .optional()
-    .isMongoId()
-    .withMessage('Invalid course ID format'),
+    .isString()
+    .trim()
+    .withMessage('Course ID must be a string'),
+  query('branch')
+    .optional()
+    .isString()
+    .trim()
+    .withMessage('Branch must be a string'),
+  query('semester')
+    .optional()
+    .trim(),
   query('startDate')
     .optional()
     .isISO8601()

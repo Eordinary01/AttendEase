@@ -20,11 +20,12 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import api from "../../utils/api";
+import { formatDateReadable } from "../../utils/dateUtils";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import Input, { Select, Textarea } from "../common/ui/Input";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -57,13 +58,13 @@ const PRIORITY_TONES = { low: 'neutral', medium: 'warning', high: 'danger', urge
 
 const StatusBadge = ({ status }) => {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open;
-  return <Badge tone={cfg.tone} dot>{cfg.label}</Badge>;
+  return <Badge tone={cfg.tone} size="sm" dot>{cfg.label}</Badge>;
 };
 
 const PriorityBadge = ({ priority }) => {
   const cfg = PRIORITIES.find(p => p.value === priority) || PRIORITIES[1];
   return (
-    <Badge tone={PRIORITY_TONES[cfg.value] || 'neutral'}>
+    <Badge tone={PRIORITY_TONES[cfg.value] || 'neutral'} size="sm">
       <AlertTriangle className="w-3 h-3" />
       {cfg.label}
     </Badge>
@@ -100,14 +101,13 @@ const SupportPanel = () => {
       const res = await api.get('/support/my-tickets');
       if (res.data.success) setTickets(res.data.data.tickets || []);
     } catch (err) {
-      // If 403 with subscriptionStatus it just means we can still show form
       if (err.response?.status !== 403) {
         setError(err.response?.data?.message || 'Failed to load tickets.');
       }
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
 
@@ -146,29 +146,25 @@ const SupportPanel = () => {
   const openCount = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <PageHeader
-        icon={LifeBuoy}
-        title="Support"
-        subtitle="Raise a ticket and our team will get back to you."
+    <div className="space-y-6">
+      <DashboardHeader
+        greeting="Institutional Helpdesk & Support"
+        meta={`Direct assistance, trial reactivations, billing inquiries, and issue resolution (${openCount} active tickets)`}
         actions={
-          <>
-            <Button variant="outline" leftIcon={RefreshCw} onClick={fetchTickets}>
+          <div className="flex items-center gap-2">
+            <Button variant="subtle" size="sm" leftIcon={RefreshCw} onClick={fetchTickets}>
               Refresh
             </Button>
             <Button
               variant="primary"
+              size="sm"
               leftIcon={Plus}
               onClick={() => setShowForm(true)}
               disabled={showForm || openCount >= 5}
             >
               New Ticket
             </Button>
-          </>
+          </div>
         }
       />
 
@@ -352,7 +348,7 @@ const SupportPanel = () => {
                       </span>
                       <span className="text-xs text-ink-faint flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(ticket.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {formatDateReadable(ticket.createdAt, false)}
                       </span>
                     </div>
                   </div>
@@ -396,7 +392,7 @@ const SupportPanel = () => {
           </div>
         )}
       </Card>
-    </motion.div>
+    </div>
   );
 };
 

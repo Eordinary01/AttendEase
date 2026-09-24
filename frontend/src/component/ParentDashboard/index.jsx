@@ -4,11 +4,12 @@ import { GraduationCap, TrendingUp, BookOpen, Award, AlertCircle, CheckCircle, X
 import { Link } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import api from "../../utils/api";
+import { formatDateDMY } from "../../utils/dateUtils";
 import StatCard from "../common/ui/StatCard";
 import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
-import PageHeader from "../common/ui/PageHeader";
+import DashboardHeader from "../common/ui/DashboardHeader";
 import AttendanceHistory from "../AttendanceHistory";
 
 const COLORS = { present: "#22c55e", absent: "#ef4444", leave: "#f59e0b" };
@@ -22,7 +23,7 @@ const gradeTone = (percentage) => {
 const gradeColor = (percentage) => {
   if (percentage >= 75) return "text-emerald-600";
   if (percentage >= 40) return "text-amber-600";
-  return "text-red-600";
+  return "text-rose-600";
 };
 
 export default function ParentDashboard() {
@@ -60,8 +61,8 @@ export default function ParentDashboard() {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center">
-          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
-          <p className="text-primary font-semibold">Loading parent dashboard...</p>
+          <div className="w-12 h-12 border-3 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
+          <p className="text-primary font-semibold text-xs">Loading parent dashboard...</p>
         </div>
       </div>
     );
@@ -90,25 +91,16 @@ export default function ParentDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        icon={GraduationCap}
-        title={`${studentName}'s Progress`}
-        subtitle="Parent portal — read-only view of academic progress"
+      <DashboardHeader
+        greeting={`${studentName}'s Academic Portal`}
+        meta="Parent monitoring overview — verified attendance, examination progress, subject roster, and faculty directory"
       />
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <StatCard label="Overall Attendance" value={`${att.percentage || 0}%`} icon={TrendingUp} tone="success" />
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <StatCard label="Total Classes" value={att.totalClasses || 0} icon={BookOpen} tone="primary" />
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <StatCard label="Present" value={att.presentCount || 0} icon={CheckCircle} tone="success" />
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <StatCard label="Absent" value={att.absentCount || 0} icon={XCircle} tone="danger" />
-        </motion.div>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <StatCard label="Overall Attendance" value={`${att.percentage || 0}%`} icon={TrendingUp} tone="success" />
+        <StatCard label="Total Classes" value={att.totalClasses || 0} icon={BookOpen} tone="primary" />
+        <StatCard label="Present Logged" value={att.presentCount || 0} icon={CheckCircle} tone="success" />
+        <StatCard label="Absent Logged" value={att.absentCount || 0} icon={XCircle} tone="danger" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -195,7 +187,7 @@ export default function ParentDashboard() {
                     </p>
                     <p className="text-xs text-ink-soft mt-0.5">
                       {r.examId?.title} | {r.examId?.type}
-                      {r.examId?.semester ? ` | Sem ${r.examId.semester}` : ""} | {r.examId?.date ? new Date(r.examId.date).toLocaleDateString() : ""}
+                      {r.examId?.semester ? ` | Sem ${r.examId.semester}` : ""}{r.examId?.date ? ` | ${formatDateDMY(r.examId.date)}` : ""}
                     </p>
                   </div>
                   <div className="text-right">

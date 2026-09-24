@@ -3,6 +3,11 @@ const Alert = require('../models/Alert');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
+const {
+  publishAlertCreated,
+  publishAlertUpdated,
+  publishAlertExpired,
+} = require('../events/publishers');
 
 /**
  * CREATE ANNOUNCEMENT/ALERT
@@ -101,6 +106,9 @@ const createAlert = async (req, res) => {
     });
 
     await newAlert.save();
+
+    // Emit real-time event (excluding sender from live push)
+    publishAlertCreated(targetTenantId, newAlert, userId);
 
     return res.status(201).json({
       success: true,
@@ -248,6 +256,10 @@ const getAlerts = async (req, res) => {
         targetCourseIds: alert.targetCourseIds,
         targetBranches: alert.targetBranches,
         isPlatformAlert: alert.isPlatformAlert,
+        isRead: Boolean(
+          alert.readBy &&
+          alert.readBy.some(uid => uid.toString() === req.user._id.toString())
+        ),
         createdAt: alert.createdAt,
         expiryDate: alert.expiryDate,
         createdBy: alert.createdBy ? {
@@ -299,6 +311,9 @@ const updateAlert = async (req, res) => {
 
     await alert.save();
 
+    // Emit real-time event (excluding sender from live push)
+    publishAlertUpdated(alert.tenantId, alert, userId);
+
     return res.status(200).json({
       success: true,
       message: 'Alert updated successfully',
@@ -340,6 +355,9 @@ const deleteAlert = async (req, res) => {
     alert.deletedAt = new Date();
     alert.deletedBy = req.user._id;
     await alert.save();
+
+    // Emit real-time event (excluding sender from live push)
+    publishAlertExpired(alert.tenantId, alert._id, req.user._id);
 
     return res.status(200).json({
       success: true,
@@ -466,20 +484,15 @@ const getAlertStats = async (req, res) => {
 
 /**
  * MARK ALERT AS READ (for user-specific read tracking)
- * This requires a UserAlertRead model to track which users have read which alerts
  */
 const markAlertAsRead = async (req, res) => {
   try {
     const { alertId } = req.params;
     const userId = req.user._id;
 
-    // You would need a UserAlertRead model for this
-    // For now, just return success
-    // await UserAlertRead.findOneAndUpdate(
-    //   { alertId, userId },
-    //   { readAt: new Date() },
-    //   { upsert: true }
-    // );
+    await Alert.findByIdAndUpdate(alertId, {
+      $addToSet: { readBy: userId }
+    });
 
     return res.status(200).json({
       success: true,
@@ -496,11 +509,44 @@ const markAlertAsRead = async (req, res) => {
   }
 };
 
+/**
+ * MARK ALL ALERTS AS READ (for current user)
+ */
+const markAllAlertsAsRead = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const tenantId = req.user.tenantId;
+
+    await Alert.updateMany(
+      {
+        isActive: true,
+        $or: [{ tenantId }, { isPlatformAlert: true }],
+        readBy: { $ne: userId }
+      },
+      { $addToSet: { readBy: userId } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'All alerts marked as read'
+    });
+
+  } catch (error) {
+    logger.error('Error marking all alerts as read', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark all alerts as read',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createAlert,
   getAlerts,
   updateAlert,
   deleteAlert,
   getAlertStats,
-  markAlertAsRead
+  markAlertAsRead,
+  markAllAlertsAsRead
 };
