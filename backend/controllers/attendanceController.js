@@ -11,6 +11,7 @@ const {
   publishAttendanceMarked,
   publishAttendanceCorrected,
   publishAtRiskAlert,
+  publishAlertCreated,
 } = require("../events/publishers");
 require("dotenv").config();
 
@@ -423,21 +424,43 @@ const markAttendance = async (req, res) => {
     if (req.ip && processedStudentIds.length > 0) {
       try {
         const Alert = require("../models/Alert");
-        const sameIpCount = await Attendance.countDocuments({
-          tenantId,
-          classSessionId,
-          ipAddress: req.ip,
-        });
+        const Tenant = require("../models/Tenant");
+        const tenantDoc = await Tenant.findById(tenantId).select("settings.automatedNotifications").lean();
+        const autoConfig = tenantDoc?.settings?.automatedNotifications || {};
 
-        if (sameIpCount > 40) {
-          await Alert.create({
+        if (autoConfig.enableProxyAlerts !== false) {
+          const proxyLimit = autoConfig.proxyThresholdCount || 40;
+          const sameIpCount = await Attendance.countDocuments({
             tenantId,
-            title: "Proxy Attendance Alert",
-            message: `Unusual concentration of attendance marks (${sameIpCount}) from IP ${req.ip} for ${subject.subjectName} Section ${section}.`,
-            type: "system",
-            severity: "warning",
-            status: "unread",
+            classSessionId,
+            ipAddress: req.ip,
           });
+
+          if (sameIpCount > proxyLimit) {
+            const proxyAlert = await Alert.create({
+              tenantId,
+              title: "Proxy Attendance Alert",
+              message: `Unusual concentration of attendance marks (${sameIpCount}) from IP ${req.ip} for ${subject.subjectName} Section ${section}. Exceeds threshold of ${proxyLimit}.`,
+              type: "system",
+              priority: "high",
+              isActive: true,
+              targetRoles: ["admin"],
+              targetSections: section ? [section.toUpperCase()] : [],
+              metadata: {
+                category: "proxy",
+                sameIpCount,
+                threshold: proxyLimit,
+                ipAddress: req.ip,
+                subjectId: subject._id,
+                subjectName: subject.subjectName,
+                section,
+                classSessionId,
+                resolved: false,
+                detectedAt: new Date(),
+              },
+            });
+            publishAlertCreated(tenantId, proxyAlert);
+          }
         }
       } catch (alertErr) {
         logger.debug("Proxy alert evaluation skipped", { error: alertErr.message });
@@ -1740,7 +1763,23 @@ async function detectConsecutiveAbsence(studentId, tenantId, options = {}) {
     }
   }
 
-  if (streakLength >= 3) {
+  const Tenant = require("../models/Tenant");
+  const tenantDoc = await Tenant.findById(tenantId).select("settings.automatedNotifications").lean();
+  const autoConfig = tenantDoc?.settings?.automatedNotifications || {};
+
+  if (autoConfig.enableAbsenceEscalations === false) {
+    return {
+      triggered: false,
+      disabledByTenant: true,
+      streakLength,
+      lastAbsenceDate,
+      studentId,
+    };
+  }
+
+  const streakThreshold = autoConfig.consecutiveAbsenceStreak || 3;
+
+  if (streakLength >= streakThreshold) {
     const Alert = require("../models/Alert");
     // Check if already triggered for this exact lastAbsenceDate
     const existing = await Alert.findOne({

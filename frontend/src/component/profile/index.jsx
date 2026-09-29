@@ -36,6 +36,7 @@ import Button from '../common/ui/Button';
 import DashboardHeader from '../common/ui/DashboardHeader';
 import UniversalSpinner from '../common/ui/UniversalSpinner';
 import { formatDateDMY } from '../../utils/dateUtils';
+import { useTheme } from '../../contexts/ThemeContexts';
 
 const Profile = ({ userId }) => {
   const [user, setUser] = useState(null);
@@ -61,7 +62,9 @@ const Profile = ({ userId }) => {
   const [verifyError, setVerifyError] = useState(null);
 
   const currentUserId = userId || localStorage.getItem('userId');
-  const DEFAULT_IMAGE = 'https://ui-avatars.com/api/?background=6366f1&color=fff&bold=true';
+  const { colors } = useTheme();
+  const primaryHex = (colors?.primary || '#6366f1').replace('#', '');
+  const DEFAULT_IMAGE = `https://ui-avatars.com/api/?background=${primaryHex}&color=fff&bold=true`;
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -340,13 +343,13 @@ const Profile = ({ userId }) => {
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="p-5 bg-indigo-50/90 border border-indigo-200 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm"
+          className="p-5 bg-primary-soft border border-primary-surface rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm"
         >
           <div className="flex items-start gap-3.5">
-            <Shield className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+            <Shield className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-indigo-900 text-sm">Verify your institutional email address</h4>
-              <p className="text-xs text-indigo-700 mt-0.5">
+              <h4 className="font-bold text-primary-dark text-sm">Verify your institutional email address</h4>
+              <p className="text-xs text-primary-dark/80 mt-0.5">
                 Verify <strong>{user.email}</strong> to receive critical attendance alerts and automated notifications.
               </p>
             </div>

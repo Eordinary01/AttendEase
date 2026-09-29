@@ -635,7 +635,7 @@ const SubjectsList = ({ role, userId, userName, userEmail }) => {
         <p className="text-sm flex flex-wrap items-center gap-2" style={{ color: colors.secondary }}>
           <span className="font-semibold">Section {studentInfo.section || 'A'}</span>
           {studentInfo.branch && (
-            <span className="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 font-medium">
+            <span className="px-2 py-0.5 rounded text-xs bg-primary-soft text-primary-dark font-medium border border-primary-surface">
               {studentInfo.branch}
             </span>
           )}

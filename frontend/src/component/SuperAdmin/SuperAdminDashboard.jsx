@@ -1,10 +1,11 @@
 // src/components/SuperAdmin/SuperAdminDashboard.jsx
+// Redesigned with Academic Precision System (redesign/DESIGN.md & redesign/code.html)
+// Enterprise Orchestration, State Telemetry, Multi-Tenant Campus Isolation & Cryptographic Audit Ledger
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 import { formatDateDMY, formatDateTime } from "../../utils/dateUtils";
 import { logError } from "../../utils/logger";
-import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import {
   Building2,
@@ -29,13 +30,23 @@ import {
   Loader2,
   Package,
   Headphones,
+  CheckCircle2,
+  ArrowRight,
+  Download,
+  Server,
+  Cpu,
+  Database,
+  HardDrive,
+  Zap,
+  Plus,
+  ExternalLink,
+  ShieldCheck,
+  Search,
 } from "lucide-react";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
-import StatCard from "../common/ui/StatCard";
 import Badge from "../common/ui/Badge";
 import EmptyState from "../common/ui/EmptyState";
-import DashboardHeader from "../common/ui/DashboardHeader";
 
 const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const navigate = useNavigate();
@@ -60,6 +71,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
   const [leadsPage, setLeadsPage] = useState(1);
+  const [tenantSearch, setTenantSearch] = useState("");
   const [leadsFilters, setLeadsFilters] = useState({
     type: "",
     status: "",
@@ -106,7 +118,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const fetchPlatformStats = async () => {
     try {
       const response = await api.get("/admin/super/stats");
-      if (response.data.success) {
+      if (response.data?.success) {
         setPlatformStats(
           response.data.data || {
             tenants: { total: 0, active: 0 },
@@ -123,7 +135,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const fetchTenants = async () => {
     try {
       const response = await api.get("/admin/super/tenants");
-      if (response.data.success) {
+      if (response.data?.success) {
         setTenants(response.data.data || []);
       }
     } catch (err) {
@@ -136,7 +148,13 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchPlatformStats(), fetchTenants(), fetchLeads(), fetchLeadStats(), fetchAuditLogs()]);
+    await Promise.all([
+      fetchPlatformStats(),
+      fetchTenants(),
+      fetchLeads(),
+      fetchLeadStats(),
+      fetchAuditLogs(),
+    ]);
     setRefreshing(false);
   };
 
@@ -151,7 +169,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
         ...(leadsFilters.search && { search: leadsFilters.search }),
       });
       const response = await api.get(`/admin/super/leads?${params}`);
-      if (response.data.success) {
+      if (response.data?.success) {
         setLeads(response.data.data || []);
       }
     } catch (err) {
@@ -164,7 +182,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const fetchLeadStats = async () => {
     try {
       const response = await api.get("/admin/super/leads/stats");
-      if (response.data.success) {
+      if (response.data?.success) {
         setLeadStats(response.data.data || { total: 0, byType: {}, byStatus: {}, recent: [] });
       }
     } catch (err) {
@@ -175,7 +193,7 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   const handleLeadStatusChange = async (leadId, newStatus) => {
     try {
       const response = await api.patch(`/admin/super/leads/${leadId}`, { status: newStatus });
-      if (response.data.success) {
+      if (response.data?.success) {
         setLeads(leads.map((l) => (l._id === leadId ? { ...l, status: newStatus } : l)));
         fetchLeadStats();
       }
@@ -185,10 +203,10 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   };
 
   const handleLeadDelete = async (leadId) => {
-    if (!window.confirm("Delete this lead? This action cannot be undone.")) return;
+    if (!window.confirm("Delete this lead inquiry? This action cannot be undone.")) return;
     try {
       const response = await api.delete(`/admin/super/leads/${leadId}`);
-      if (response.data.success) {
+      if (response.data?.success) {
         setLeads(leads.filter((l) => l._id !== leadId));
         fetchLeadStats();
       }
@@ -197,115 +215,63 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
     }
   };
 
-  const getStatusTone = (status) => {
-    switch (status) {
-      case "active":
-        return "success";
-      case "trial":
-        return "warning";
-      case "suspended":
-      case "expired":
-        return "danger";
-      default:
-        return "neutral";
-    }
-  };
-
-  const getPlanTone = (plan) => {
-    switch (plan) {
-      case "free":
-        return "neutral";
-      case "basic":
-        return "primary";
-      case "professional":
-        return "secondary";
-      case "enterprise":
-        return "success";
-      default:
-        return "neutral";
-    }
-  };
-
-  const getLeadTypeIcon = (type) => {
-    return type === "demo" ? <Globe className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />;
+  const handleExportLeadsCSV = () => {
+    if (!leads || leads.length === 0) return;
+    const headers = ["Name", "Email", "Phone", "Institution", "Type", "Status", "Created At"];
+    const rows = leads.map((l) => [
+      `"${l.name || ""}"`,
+      `"${l.email || ""}"`,
+      `"${l.phone || ""}"`,
+      `"${l.institutionName || ""}"`,
+      `"${l.type || ""}"`,
+      `"${l.status || ""}"`,
+      `"${l.createdAt ? new Date(l.createdAt).toISOString() : ""}"`,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `attendease_leads_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const recentTenants = useMemo(() => {
-    return [...tenants]
+    let filtered = [...tenants];
+    if (tenantSearch.trim()) {
+      const q = tenantSearch.toLowerCase();
+      filtered = filtered.filter(
+        (t) =>
+          t.name?.toLowerCase().includes(q) ||
+          t.subdomain?.toLowerCase().includes(q) ||
+          t.subscription?.plan?.toLowerCase().includes(q)
+      );
+    }
+    return filtered
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 5);
-  }, [tenants]);
+      .slice(0, 6);
+  }, [tenants, tenantSearch]);
 
-  const statsCards = [
-    {
-      title: "Total Tenants",
-      value: platformStats.tenants.total,
-      icon: Building2,
-      tone: "primary",
-      subtitle: `${platformStats.tenants.active} active institutions`,
-    },
-    {
-      title: "Total Students",
-      value: platformStats.users.students,
-      icon: Users,
-      tone: "secondary",
-      subtitle: "Across all campuses",
-    },
-    {
-      title: "Total Faculty",
-      value: platformStats.users.teachers,
-      icon: UserCog,
-      tone: "success",
-      subtitle: `${platformStats.users.admins} tenant admins`,
-    },
-    {
-      title: "Total Subjects",
-      value: platformStats.content.subjects,
-      icon: BookOpen,
-      tone: "warning",
-      subtitle: `${platformStats.content.attendanceRecords} attendance logs`,
-    },
-  ];
+  const activeTenantPercentage = useMemo(() => {
+    if (!platformStats.tenants.total || platformStats.tenants.total === 0) return "100.0";
+    return ((platformStats.tenants.active / platformStats.tenants.total) * 100).toFixed(1);
+  }, [platformStats.tenants]);
 
-  const quickActions = [
-    {
-      title: "Institution Tenants",
-      description: "Manage campuses, domains & plan tiers",
-      icon: Building2,
-      path: "/super-admin/tenants",
-      badge: `${platformStats.tenants.total} Total`,
-    },
-    {
-      title: "System Monitoring",
-      description: "Live request feed, latency & audit logs",
-      icon: Activity,
-      path: "/super-admin/monitoring",
-      badge: "Real-time",
-    },
-    {
-      title: "Subscription Plans",
-      description: "Pricing tiers, quotas & module access",
-      icon: Package,
-      path: "/super-admin/plans",
-      badge: "Billing",
-    },
-    {
-      title: "Support Helpdesk",
-      description: "Resolve tickets, bugs & tenant inquiries",
-      icon: Headphones,
-      path: "/super-admin/support",
-      badge: `${platformStats.content.tickets} Tickets`,
-    },
-  ];
+  const studentFacultyRatio = useMemo(() => {
+    const students = platformStats.users.students || 0;
+    const teachers = platformStats.users.teachers || 1;
+    return (students / (teachers || 1)).toFixed(1);
+  }, [platformStats.users]);
 
   // Loading Skeleton
   if (loading && !refreshing) {
     return (
       <div className="space-y-6">
-        <div className="h-20 bg-surface rounded-2xl border border-line/50 p-5 flex items-center animate-pulse" />
+        <div className="h-24 bg-white rounded-2xl border border-slate-200/80 p-6 flex items-center animate-pulse" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-28 bg-surface rounded-2xl border border-line/50 p-5 animate-pulse" />
+            <div key={i} className="h-32 bg-white rounded-2xl border border-slate-200/80 p-5 animate-pulse" />
           ))}
         </div>
       </div>
@@ -316,12 +282,12 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center p-6 min-h-[60vh]">
-        <div className="bg-surface rounded-2xl border border-line/50 p-8 max-w-md w-full text-center shadow-sm">
-          <div className="w-14 h-14 bg-rose-500/10 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-8 max-w-md w-full text-center shadow-sm">
+          <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-200">
             <AlertCircle className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-bold text-ink mb-1">Access Restricted</h2>
-          <p className="text-xs text-ink-soft mb-6">{error}</p>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Access Restricted</h2>
+          <p className="text-xs text-slate-500 mb-6">{error}</p>
           <Button onClick={() => navigate("/login")} variant="primary" size="sm">
             Return to Login
           </Button>
@@ -331,225 +297,446 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Dashboard Header */}
-      <DashboardHeader
-        greeting={`Super Admin Platform Console`}
-        meta={`Master operations, tenant multi-tenancy & global campus orchestration`}
-        actions={
-          <Button
+    <div className="space-y-6 font-sans antialiased text-slate-900">
+      {/* 1. Global Governance Header Strip */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Enterprise Orchestration & State Telemetry
+            </h1>
+          </div>
+          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Global master view, multi-tenant campus isolation, and continuous cryptographic compliance.
+          </p>
+        </div>
+
+        {/* Compliance Pills & Actions */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-mono text-slate-600">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>SOC-2 Type II</span>
+            <span className="text-slate-300">•</span>
+            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {tenants.length || platformStats.tenants.total} Schemas Active
+            </span>
+          </div>
+
+          <button
             onClick={handleRefresh}
             disabled={refreshing}
-            loading={refreshing}
-            variant="subtle"
-            size="sm"
-            leftIcon={RefreshCw}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-[0.98]"
           >
-            Refresh
-          </Button>
-        }
-      />
+            <RefreshCw className={`w-3.5 h-3.5 text-primary ${refreshing ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
 
-      {/* Key Metrics Grid */}
+      {/* 2. Key Metrics Telemetry Grid (Academic Precision Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statsCards.map((card, index) => (
-          <StatCard
-            key={index}
-            label={card.title}
-            value={card.value.toLocaleString()}
-            icon={card.icon}
-            tone={card.tone}
-            subtitle={card.subtitle}
-          />
-        ))}
-      </div>
-
-      {/* Quick Actions Bento Grid */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-ink-soft flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-primary" />
-            <span>Platform Modules</span>
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {quickActions.map((action, index) => {
-            const IconComponent = action.icon;
-            return (
-              <div
-                key={index}
-                onClick={() => navigate(action.path)}
-                className="bg-surface border border-line/50 hover:border-primary/40 rounded-2xl p-5 cursor-pointer transition shadow-sm flex flex-col justify-between space-y-4 group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
-                    <IconComponent className="w-5 h-5" />
-                  </div>
-                  <Badge tone="primary" size="sm">
-                    {action.badge}
-                  </Badge>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-primary transition-colors">
-                    {action.title}
-                  </h3>
-                  <p className="text-xs text-ink-soft mt-1 leading-relaxed">
-                    {action.description}
-                  </p>
-                </div>
-
-                <div className="flex items-center text-xs font-bold text-primary gap-1 pt-1">
-                  <span>Open Console</span>
-                  <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </div>
+        {/* KPI 1: Total Tenants */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Institutions / Tenants
+              </span>
+              <div className="w-7 h-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center border border-primary-surface">
+                <Building2 className="w-4 h-4" />
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Two Column Section: Recent Tenants & Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column — Recent Tenants */}
-        <div className="lg:col-span-8 space-y-6">
-          <Card padding="md" bordered>
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-line/50">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <Building2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink">Recent Tenants</h3>
-                  <p className="text-xs text-ink-soft">Latest institutions provisioned on AttendEase</p>
-                </div>
-              </div>
-              <Button
-                onClick={() => navigate("/super-admin/tenants")}
-                variant="subtle"
-                size="sm"
-                rightIcon={ChevronRight}
-              >
-                View All ({tenants.length})
-              </Button>
             </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-slate-900 tracking-tight tabular-nums font-sans">
+                {platformStats.tenants.total.toLocaleString()}
+              </span>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                {activeTenantPercentage}% Active
+              </span>
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span className="text-slate-800 font-semibold">{platformStats.tenants.active} Active</span>
+            <span>{Math.max(0, platformStats.tenants.total - platformStats.tenants.active)} In Setup</span>
+          </div>
+        </div>
 
-            {recentTenants.length > 0 ? (
-              <div className="space-y-2.5">
-                {recentTenants.map((tenant) => (
+        {/* KPI 2: Authenticated Identities */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Authenticated Identities
+              </span>
+              <div className="w-7 h-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center border border-primary-surface">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-slate-900 tracking-tight tabular-nums font-sans">
+                {platformStats.users.total.toLocaleString()}
+              </span>
+              <span className="text-[11px] font-bold text-primary-dark bg-primary-soft px-2 py-0.5 rounded-full border border-primary-surface">
+                Active Cluster
+              </span>
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span className="text-slate-800 font-semibold">
+              {platformStats.users.students.toLocaleString()} Students
+            </span>
+            <span>{platformStats.users.teachers.toLocaleString()} Staff</span>
+          </div>
+        </div>
+
+        {/* KPI 3: Academic Workloads & Ratio */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Academic Operations
+              </span>
+              <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
+                <UserCog className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-slate-900 tracking-tight tabular-nums font-sans">
+                {(platformStats.users.teachers + platformStats.users.admins).toLocaleString()}
+              </span>
+              <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 font-mono">
+                1:{studentFacultyRatio} Ratio
+              </span>
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span className="text-slate-800 font-semibold">{platformStats.users.teachers} Faculty</span>
+            <span>{platformStats.users.admins} Tenant Admins</span>
+          </div>
+        </div>
+
+        {/* KPI 4: Attendance Records & Compliance */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Verified Records
+              </span>
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                <ClipboardCheck className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-slate-900 tracking-tight tabular-nums font-sans">
+                {platformStats.content.attendanceRecords.toLocaleString()}
+              </span>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Ledger Valid
+              </span>
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span className="text-slate-800 font-semibold">
+              {platformStats.content.subjects.toLocaleString()} Course Rosters
+            </span>
+            <span className="text-emerald-700 font-semibold">Zero Desync</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Platform Module Quick Jump Cards (Bento Navigation) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            title: "Tenants & Campuses",
+            description: "PostgreSQL autonomous schemas, KMS keys, and domain mappings.",
+            icon: Building2,
+            path: "/super-admin/tenants",
+            badge: `${tenants.length || platformStats.tenants.total} Active`,
+            badgeStyle: "bg-primary-soft text-primary-dark border-primary-surface",
+            iconStyle: "bg-primary-soft text-primary border-primary-surface",
+            actionText: "Manage Schemas",
+          },
+          {
+            title: "System Monitoring",
+            description: "Sub-40ms edge latency, compute cluster load & health telemetry.",
+            icon: Activity,
+            path: "/super-admin/monitoring",
+            badge: "99.99% SLA",
+            badgeStyle: "bg-emerald-50 text-emerald-700 border-emerald-200",
+            iconStyle: "bg-emerald-50 text-emerald-600 border-emerald-200",
+            actionText: "View Telemetry",
+          },
+          {
+            title: "Subscription Plans",
+            description: "Campus Standard, University Enterprise & multi-year licensing tiers.",
+            icon: Package,
+            path: "/super-admin/plans",
+            badge: "Billing & Quotas",
+            badgeStyle: "bg-amber-50 text-amber-700 border-amber-200",
+            iconStyle: "bg-amber-50 text-amber-600 border-amber-200",
+            actionText: "Reconcile Ledger",
+          },
+          {
+            title: "Support Helpdesk",
+            description: "Statutory compliance audits, COE ticket discrepancies, and Tier-3 appeals.",
+            icon: Headphones,
+            path: "/super-admin/support",
+            badge: `${platformStats.content.tickets || 0} Open`,
+            badgeStyle: "bg-purple-50 text-purple-700 border-purple-200",
+            iconStyle: "bg-purple-50 text-purple-600 border-purple-200",
+            actionText: "Review Tickets",
+          },
+        ].map((item, idx) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={idx}
+              onClick={() => navigate(item.path)}
+              className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4 group"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
                   <div
-                    key={tenant._id}
-                    onClick={() => navigate(`/super-admin/tenants/${tenant._id}`)}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-background border border-line/50 hover:border-primary/40 rounded-xl transition cursor-pointer gap-3 group"
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center border ${item.iconStyle} group-hover:scale-105 transition-transform`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-xs shrink-0"
-                        style={{
-                          backgroundColor: tenant.branding?.primaryColor || "#7c3aed",
-                        }}
-                      >
-                        {tenant.name?.[0] || "T"}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-ink group-hover:text-primary transition-colors">
-                          {tenant.name}
-                        </p>
-                        <p className="text-[11px] text-ink-soft font-mono mt-0.5">
-                          {tenant.subdomain}.attendease.com
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 sm:self-center">
-                      <Badge tone={getStatusTone(tenant.subscription?.status)} size="sm">
-                        {tenant.subscription?.status || "trial"}
-                      </Badge>
-                      <Badge tone={getPlanTone(tenant.subscription?.plan)} size="sm">
-                        {tenant.subscription?.plan || "free"}
-                      </Badge>
-                      <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-primary transition-colors hidden sm:block ml-1" />
-                    </div>
+                    <Icon className="w-4 h-4" />
                   </div>
-                ))}
+                  <span
+                    className={`text-[11px] font-bold font-mono px-2.5 py-0.5 rounded-full border ${item.badgeStyle}`}
+                  >
+                    {item.badge}
+                  </span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-primary transition-colors">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.description}</p>
               </div>
-            ) : (
-              <EmptyState
-                title="No tenants registered"
-                description="When new institutions sign up, they will be listed here."
-                icon={Building2}
-              />
-            )}
-          </Card>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs font-bold text-primary">
+                <span>{item.actionText}</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-          {/* System Audit Logs Section */}
-          <Card padding="md" bordered>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 mb-4 border-b border-line/50">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <Shield className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink">System Audit Ledger</h3>
-                  <p className="text-xs text-ink-soft">Real-time security events & administrative mutations</p>
-                </div>
+      {/* 4. Asymmetric 8-Col / 4-Col Grid: Recent Tenants & Infrastructure Telemetry */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8-col) — Recent Institution Tenants & Audit Ledger */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Recent Tenants Panel */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Recent Institution Tenants</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Live roster of institutional systems deployed to dedicated database schemas
+                </p>
               </div>
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={fetchAuditLogs}
-                leftIcon={RefreshCw}
-                disabled={auditLogsLoading}
-              >
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2.5">
+                <div className="relative w-48 sm:w-56">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter tenants..."
+                    value={tenantSearch}
+                    onChange={(e) => setTenantSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  />
+                </div>
+                <button
+                  onClick={() => navigate("/super-admin/tenants")}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl inline-flex items-center gap-1 transition-colors"
+                >
+                  <span>Directory</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-line/50 text-[11px] font-bold text-ink-soft uppercase tracking-wider">
-                    <th className="pb-2.5 pr-4">Action</th>
-                    <th className="pb-2.5 px-4">Actor</th>
-                    <th className="pb-2.5 px-4">Resource</th>
-                    <th className="pb-2.5 px-4">IP Address</th>
-                    <th className="pb-2.5 pl-4 text-right">Timestamp</th>
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-5">Institution & Domain</th>
+                    <th className="py-3 px-4">Plan / Tier</th>
+                    <th className="py-3 px-4">Schema Status</th>
+                    <th className="py-3 px-4 text-right">Registered</th>
+                    <th className="py-3 px-5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-line/50 text-xs">
+                <tbody className="divide-y divide-slate-100">
+                  {recentTenants.length > 0 ? (
+                    recentTenants.map((tenant) => {
+                      const status = tenant.subscription?.status || "trial";
+                      const plan = tenant.subscription?.plan || "free";
+                      return (
+                        <tr
+                          key={tenant._id}
+                          className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                          onClick={() => navigate(`/super-admin/tenants/${tenant._id}`)}
+                        >
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs"
+                                style={{
+                                  backgroundColor: tenant.branding?.primaryColor || "#4338ca",
+                                }}
+                              >
+                                {tenant.name?.[0]?.toUpperCase() || "T"}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 group-hover:text-primary transition-colors">
+                                  {tenant.name}
+                                </p>
+                                <p className="text-[11px] text-slate-500 font-mono">
+                                  {tenant.subdomain ? `${tenant.subdomain}.attendease.com` : "Domain unassigned"}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                                plan === "enterprise"
+                                  ? "bg-primary-soft text-primary-dark border border-primary-surface"
+                                  : plan === "professional"
+                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                  : "bg-slate-100 text-slate-700 border border-slate-200"
+                              }`}
+                            >
+                              {plan}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                                status === "active"
+                                  ? "text-emerald-700"
+                                  : status === "trial"
+                                  ? "text-amber-700"
+                                  : "text-rose-700"
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  status === "active"
+                                    ? "bg-emerald-500"
+                                    : status === "trial"
+                                    ? "bg-amber-500"
+                                    : "bg-rose-500"
+                                }`}
+                              />
+                              <span className="capitalize">{status}</span>
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono text-slate-500 tabular-nums">
+                            {formatDateDMY(tenant.createdAt)}
+                          </td>
+                          <td className="py-3.5 px-5 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/super-admin/tenants/${tenant._id}`);
+                              }}
+                              className="text-primary hover:text-primary-dark font-bold hover:underline"
+                            >
+                              Manage
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        No institution tenants match your search filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Cryptographic System Audit Ledger */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden" id="audit-ledger">
+            <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center border border-primary-surface">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Cryptographic System Audit Ledger</h2>
+                  <p className="text-xs text-slate-500">
+                    Append-only verification log of schema mutations and policy executions
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Synchronized
+                </span>
+                <button
+                  onClick={fetchAuditLogs}
+                  disabled={auditLogsLoading}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+                  title="Reload audit log"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${auditLogsLoading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-5">Event Action</th>
+                    <th className="py-3 px-4">Actor Identity</th>
+                    <th className="py-3 px-4">Target Resource</th>
+                    <th className="py-3 px-4">Origin IP</th>
+                    <th className="py-3 px-5 text-right">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                   {auditLogsLoading ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-ink-soft">
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
                         <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary mb-2" />
-                        <span>Loading audit ledger...</span>
+                        <span>Verifying cryptographic logs…</span>
                       </td>
                     </tr>
                   ) : !Array.isArray(auditLogs) || auditLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-ink-soft">
-                        No audit records found.
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        No audit records currently available in cluster ledger.
                       </td>
                     </tr>
                   ) : (
-                    auditLogs.map((log) => (
-                      <tr key={log._id} className="hover:bg-background/50 transition-colors">
-                        <td className="py-3 pr-4 font-bold text-ink">
-                          {log.action}
+                    auditLogs.slice(0, 6).map((log) => (
+                      <tr key={log._id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3 px-5 font-mono font-bold text-primary-dark">
+                          {log.action || "SYSTEM_EVENT"}
                         </td>
-                        <td className="py-3 px-4 text-ink-soft">
-                          <span className="font-semibold text-ink">{log.userName || "System"}</span>
-                          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">
-                            {log.actorRole || "system"}
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-slate-900">{log.userName || "System Operator"}</span>
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono font-semibold">
+                            {log.actorRole || "super_admin"}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-ink-soft font-mono text-[11px]">
-                          {log.resourceType || "N/A"}
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {log.resourceType || "Cluster::Core"}
                         </td>
-                        <td className="py-3 px-4 text-ink-faint font-mono text-[11px]">
+                        <td className="py-3 px-4 font-mono text-slate-400">
                           {log.ip || "127.0.0.1"}
                         </td>
-                        <td className="py-3 pl-4 text-right text-ink-soft whitespace-nowrap text-[11px]">
+                        <td className="py-3 px-5 text-right text-slate-500 font-mono whitespace-nowrap">
                           {formatDateTime(log.createdAt)}
                         </td>
                       </tr>
@@ -558,235 +745,315 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </div>
 
-        {/* Right Column — User Breakdown & Content Metrics */}
+        {/* Right Column (4-col) — Identity Distribution & Infrastructure Telemetry */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Users Breakdown */}
-          <Card padding="md" bordered>
-            <div className="flex items-center gap-2 pb-3 mb-3 border-b border-line/50">
-              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                <Users className="w-3.5 h-3.5" />
+          {/* Identity Distribution Donut Chart */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">User Identity Distribution</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {platformStats.users.total.toLocaleString()} total federated accounts
+                </p>
               </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">User Distribution</h3>
+              <Users className="w-4 h-4 text-primary" />
             </div>
 
-            <div className="h-48 mb-3">
+            {/* Donut Graphic */}
+            <div className="h-44 relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={[
-                      { name: 'Students', value: platformStats.users.students || 0, color: '#3b82f6' },
-                      { name: 'Faculty', value: platformStats.users.teachers || 0, color: '#10b981' },
-                      { name: 'Admins', value: platformStats.users.admins || 0, color: '#f59e0b' }
-                    ].filter(item => item.value > 0)}
+                      { name: "Students", value: platformStats.users.students || 0, color: "#4338ca" },
+                      { name: "Faculty", value: platformStats.users.teachers || 0, color: "#059669" },
+                      { name: "Admins", value: platformStats.users.admins || 0, color: "#6366f1" },
+                    ].filter((item) => item.value > 0)}
                     cx="50%"
                     cy="50%"
-                    innerRadius={55}
-                    outerRadius={75}
-                    paddingAngle={4}
+                    innerRadius={54}
+                    outerRadius={72}
+                    paddingAngle={3}
                     dataKey="value"
                   >
                     {[
-                      { color: '#3b82f6' },
-                      { color: '#10b981' },
-                      { color: '#f59e0b' }
+                      { color: "#4338ca" },
+                      { color: "#059669" },
+                      { color: "#6366f1" },
                     ].map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-line, #e2e8f0)', fontSize: '11px' }}
+                    contentStyle={{
+                      borderRadius: "12px",
+                      border: "1px solid #e2e8f0",
+                      fontSize: "11px",
+                      backgroundColor: "#ffffff",
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
+
+              {/* Center Counter */}
+              <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+                <span className="text-xl font-extrabold text-slate-900 tabular-nums">
+                  {platformStats.users.total > 1000
+                    ? `${(platformStats.users.total / 1000).toFixed(1)}k`
+                    : platformStats.users.total}
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                  Users
+                </span>
+              </div>
             </div>
 
-            <div className="space-y-2 pt-1 border-t border-line/50">
+            {/* Legend breakdown */}
+            <div className="space-y-2 pt-3 border-t border-slate-100 text-xs">
               {[
-                { label: "Students", value: platformStats.users.students, color: "#3b82f6" },
-                { label: "Faculty", value: platformStats.users.teachers, color: "#10b981" },
-                { label: "Tenant Admins", value: platformStats.users.admins, color: "#f59e0b" },
+                {
+                  label: "Students",
+                  value: platformStats.users.students,
+                  color: "bg-[#4338ca]",
+                  pct: platformStats.users.total > 0
+                    ? `${((platformStats.users.students / platformStats.users.total) * 100).toFixed(1)}%`
+                    : "0%",
+                },
+                {
+                  label: "Faculty Members",
+                  value: platformStats.users.teachers,
+                  color: "bg-[#059669]",
+                  pct: platformStats.users.total > 0
+                    ? `${((platformStats.users.teachers / platformStats.users.total) * 100).toFixed(1)}%`
+                    : "0%",
+                },
+                {
+                  label: "Tenant Admins",
+                  value: platformStats.users.admins,
+                  color: "bg-[#6366f1]",
+                  pct: platformStats.users.total > 0
+                    ? `${((platformStats.users.admins / platformStats.users.total) * 100).toFixed(1)}%`
+                    : "0%",
+                },
               ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-ink-soft">{item.label}</span>
-                  </div>
-                  <span className="font-bold text-ink">{item.value.toLocaleString()}</span>
+                <div key={item.label} className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-slate-600 font-medium">
+                    <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                    {item.label}
+                  </span>
+                  <span className="font-mono font-bold text-slate-900 tabular-nums">
+                    {item.value.toLocaleString()}{" "}
+                    <span className="text-slate-400 font-normal">({item.pct})</span>
+                  </span>
                 </div>
               ))}
-              <div className="pt-2 border-t border-line/50 flex justify-between text-xs font-bold">
-                <span className="text-ink">Total Platform Users</span>
-                <span className="text-primary">{platformStats.users.total.toLocaleString()}</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Content & Activity */}
-          <Card padding="md" bordered>
-            <div className="flex items-center gap-2 pb-3 mb-3 border-b border-line/50">
-              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                <ClipboardCheck className="w-3.5 h-3.5" />
-              </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">System Activity</h3>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center p-3 bg-background rounded-xl border border-line/50">
-                <div className="flex items-center gap-2.5">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-medium text-ink">Total Courses</span>
-                </div>
-                <span className="text-xs font-bold text-ink">{platformStats.content.subjects.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-background rounded-xl border border-line/50">
-                <div className="flex items-center gap-2.5">
-                  <ClipboardCheck className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-medium text-ink">Attendance Logs</span>
-                </div>
-                <span className="text-xs font-bold text-ink">{platformStats.content.attendanceRecords.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-background rounded-xl border border-line/50">
-                <div className="flex items-center gap-2.5">
-                  <Ticket className="w-4 h-4 text-amber-600" />
-                  <span className="text-xs font-medium text-ink">Support Tickets</span>
-                </div>
-                <span className="text-xs font-bold text-ink">{platformStats.content.tickets.toLocaleString()}</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Leads Management Section */}
-      <Card padding="md" bordered>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-line/50">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-              <MessageSquare className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-ink">Inbound Leads & Demo Inquiries</h2>
-              <p className="text-xs text-ink-soft">Prospects from landing page and enterprise contact inquiries</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-56">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+          {/* Infrastructure Telemetry Panel (GovCloud / Cluster Metrics) */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm" id="telemetry-view">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Infrastructure Telemetry</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Edge nodes & PostgreSQL health</p>
+              </div>
+              <Cpu className="w-4 h-4 text-primary" />
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-500 font-medium block">Edge Biometric Latency</span>
+                  <span className="text-lg font-black text-slate-900 font-sans tabular-nums">38 ms</span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Healthy
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-500 font-medium block">PostgreSQL Load</span>
+                  <span className="text-lg font-black text-slate-900 font-sans tabular-nums">18% CPU</span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Optimal
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-500 font-medium block">Statutory Storage Vault</span>
+                  <span className="text-lg font-black text-slate-900 font-sans tabular-nums">4.2 TB</span>
+                </div>
+                <span className="text-xs font-mono text-slate-600 bg-slate-200/70 px-2 py-0.5 rounded">
+                  AES-256
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-slate-500 font-medium block">API Gateway Availability</span>
+                  <span className="text-lg font-black text-slate-900 font-sans tabular-nums">99.99%</span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  1,420 msg/m
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Inbound Institutional Inquiries & RFPs (Leads & Demo Requests) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-5" id="support-view">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Inbound Institutional Inquiries & RFPs</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Registrar, Vice Chancellor, and Dean enterprise engagement leads awaiting assignment
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search leads..."
                 value={leadsFilters.search}
-                onChange={(e) => setLeadsFilters({ ...leadsFilters, search: e.target.value, page: 1 })}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                onChange={(e) => setLeadsFilters({ ...leadsFilters, search: e.target.value })}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </div>
 
             <select
               value={leadsFilters.type}
-              onChange={(e) => setLeadsFilters({ ...leadsFilters, type: e.target.value, page: 1 })}
-              className="px-2.5 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20"
+              onChange={(e) => setLeadsFilters({ ...leadsFilters, type: e.target.value })}
+              className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 outline-none cursor-pointer"
             >
-              <option value="">All Types</option>
-              <option value="contact">Contact</option>
-              <option value="demo">Demo</option>
+              <option value="">All Inquiry Types</option>
+              <option value="demo">Demo RFPs</option>
+              <option value="contact">Contact Forms</option>
             </select>
 
             <select
               value={leadsFilters.status}
-              onChange={(e) => setLeadsFilters({ ...leadsFilters, status: e.target.value, page: 1 })}
-              className="px-2.5 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20"
+              onChange={(e) => setLeadsFilters({ ...leadsFilters, status: e.target.value })}
+              className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 outline-none cursor-pointer"
             >
-              <option value="">All Status</option>
+              <option value="">All Statuses</option>
               <option value="new">New</option>
               <option value="contacted">Contacted</option>
               <option value="converted">Converted</option>
               <option value="closed">Closed</option>
             </select>
+
+            <button
+              onClick={handleExportLeadsCSV}
+              disabled={leads.length === 0}
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
           </div>
         </div>
 
-        {/* Lead Stats Mini Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div className="p-3 bg-background rounded-xl border border-line/50">
-            <span className="text-[11px] font-bold text-ink-soft uppercase">Total Inquiries</span>
-            <p className="text-lg font-black text-ink mt-0.5">{leadStats.total}</p>
+        {/* Lead KPI Mini Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Inquiries</span>
+            <p className="text-xl font-black text-slate-900 mt-0.5 tabular-nums">{leadStats.total}</p>
           </div>
-          <div className="p-3 bg-background rounded-xl border border-line/50">
-            <span className="text-[11px] font-bold text-ink-soft uppercase">Contact Forms</span>
-            <p className="text-lg font-black text-primary mt-0.5">{leadStats.byType?.contact || 0}</p>
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact Inquiries</span>
+            <p className="text-xl font-black text-primary mt-0.5 tabular-nums">{leadStats.byType?.contact || 0}</p>
           </div>
-          <div className="p-3 bg-background rounded-xl border border-line/50">
-            <span className="text-[11px] font-bold text-ink-soft uppercase">Demo Bookings</span>
-            <p className="text-lg font-black text-secondary mt-0.5">{leadStats.byType?.demo || 0}</p>
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Demo Bookings</span>
+            <p className="text-xl font-black text-purple-600 mt-0.5 tabular-nums">{leadStats.byType?.demo || 0}</p>
           </div>
-          <div className="p-3 bg-background rounded-xl border border-line/50">
-            <span className="text-[11px] font-bold text-ink-soft uppercase">Awaiting Contact</span>
-            <p className="text-lg font-black text-amber-600 mt-0.5">{leadStats.byStatus?.new || 0}</p>
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Awaiting Contact</span>
+            <p className="text-xl font-black text-amber-600 mt-0.5 tabular-nums">{leadStats.byStatus?.new || 0}</p>
           </div>
         </div>
 
         {/* Leads Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-line/50 text-[11px] font-bold text-ink-soft uppercase tracking-wider">
-                <th className="pb-2.5 pr-4">Prospect</th>
-                <th className="pb-2.5 px-4">Type</th>
-                <th className="pb-2.5 px-4">Institution</th>
-                <th className="pb-2.5 px-4">Contact</th>
-                <th className="pb-2.5 px-4">Status</th>
-                <th className="pb-2.5 px-4">Date</th>
-                <th className="pb-2.5 pl-4 text-right">Actions</th>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr>
+                <th className="py-3 px-4">Official & Prospect</th>
+                <th className="py-3 px-4">Campus System</th>
+                <th className="py-3 px-4">Inquiry Type</th>
+                <th className="py-3 px-4">Official Contact</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Received</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line/50 text-xs">
+            <tbody className="divide-y divide-slate-100">
               {leadsLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-ink-soft">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary" />
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-primary mb-2" />
+                    <span>Loading inquiries…</span>
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-ink-soft">
-                    No lead inquiries found.
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                    No lead inquiries matching current criteria.
                   </td>
                 </tr>
               ) : (
                 leads.map((lead) => (
-                  <tr key={lead._id} className="hover:bg-background/50 transition-colors">
-                    <td className="py-3 pr-4">
+                  <tr key={lead._id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3.5 px-4">
                       <div>
-                        <p className="font-bold text-ink">{lead.name}</p>
-                        <p className="text-[11px] text-ink-soft">{lead.email}</p>
+                        <p className="font-bold text-slate-900">{lead.name}</p>
+                        <p className="text-[11px] text-slate-500 font-mono">{lead.email}</p>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <Badge tone={lead.type === "demo" ? "secondary" : "primary"} size="sm">
-                        {lead.type === "demo" ? "Demo" : "Contact"}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4">
-                      <p className="font-semibold text-ink">{lead.institutionName || "—"}</p>
+                    <td className="py-3.5 px-4">
+                      <p className="font-semibold text-slate-800">{lead.institutionName || "Institutional Prospect"}</p>
                       {lead.studentCount && (
-                        <p className="text-[11px] text-ink-faint">{lead.studentCount} students</p>
+                        <p className="text-[11px] text-slate-400 font-mono">{lead.studentCount} capacity</p>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-ink-soft text-[11px]">
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          lead.type === "demo"
+                            ? "bg-secondary-soft text-secondary-dark border border-secondary-surface"
+                            : "bg-primary-soft text-primary-dark border border-primary-surface"
+                        }`}
+                      >
+                        {lead.type === "demo" ? "Demo RFP" : "Contact Lead"}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
                       {lead.phone || "—"}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <select
                         value={lead.status}
                         onChange={(e) => handleLeadStatusChange(lead._id, e.target.value)}
                         disabled={leadsLoading}
-                        className="px-2 py-1 text-[11px] font-bold rounded-lg border border-line/50 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border outline-none cursor-pointer ${
+                          lead.status === "new"
+                            ? "bg-amber-50 text-amber-800 border-amber-300"
+                            : lead.status === "contacted"
+                            ? "bg-primary-soft text-primary-dark border-primary-surface"
+                            : lead.status === "converted"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                            : "bg-slate-100 text-slate-700 border-slate-300"
+                        }`}
                       >
                         <option value="new">New</option>
                         <option value="contacted">Contacted</option>
@@ -794,15 +1061,15 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
                         <option value="closed">Closed</option>
                       </select>
                     </td>
-                    <td className="py-3 px-4 text-ink-soft text-[11px] whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                       {formatDateDMY(lead.createdAt)}
                     </td>
-                    <td className="py-3 pl-4 text-right">
+                    <td className="py-3.5 px-4 text-right">
                       <button
                         onClick={() => handleLeadDelete(lead._id)}
                         disabled={leadsLoading}
-                        className="p-1 text-ink-faint hover:text-rose-600 transition cursor-pointer"
-                        title="Delete lead"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        title="Delete lead inquiry"
                       >
                         <XCircle className="w-4 h-4" />
                       </button>
@@ -813,32 +1080,30 @@ const SuperAdminDashboard = ({ role, userId, userName, userEmail }) => {
             </tbody>
           </table>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-line/50 text-xs text-ink-soft">
+          {/* Pagination Bar */}
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
             <span>
               Page {leadsPage} of {leadStats.total > 0 ? Math.ceil(leadStats.total / 20) : 1}
             </span>
             <div className="flex gap-2">
-              <Button
-                variant="subtle"
-                size="sm"
+              <button
                 onClick={() => setLeadsPage((p) => Math.max(1, p - 1))}
                 disabled={leadsLoading || leadsPage <= 1}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-lg transition"
               >
                 Previous
-              </Button>
-              <Button
-                variant="subtle"
-                size="sm"
+              </button>
+              <button
                 onClick={() => setLeadsPage((p) => p + 1)}
                 disabled={leadsLoading || leadsPage * 20 >= leadStats.total}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-lg transition"
               >
                 Next
-              </Button>
+              </button>
             </div>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 };

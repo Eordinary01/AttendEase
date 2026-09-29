@@ -63,10 +63,10 @@ const TYPE_CONFIG = {
   },
   meeting: {
     label: "Meeting",
-    tone: "neutral",
-    bgClass: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-    dotClass: "bg-purple-500",
-    pillClass: "bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+    tone: "secondary",
+    bgClass: "bg-secondary/10 text-secondary border-secondary/20",
+    dotClass: "bg-secondary",
+    pillClass: "bg-secondary-soft text-secondary-dark border-secondary-surface",
   },
 };
 
@@ -74,7 +74,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function AcademicCalendar({ role }) {
   const { colors } = useTheme();
-  const primary = colors?.primary || "#1d4ed8";
+  const primary = colors?.primary || "#6366f1";
 
   // Determine user role
   const userRole = useMemo(() => {
@@ -397,7 +397,7 @@ export default function AcademicCalendar({ role }) {
 
       {/* Spotlight Banner: Nearest Upcoming Event */}
       {nextUpcomingEvent && (
-        <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-r from-primary/10 via-indigo-500/10 to-purple-500/10 border border-primary/20 shadow-xs">
+        <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-r from-primary/10 via-primary-surface/30 to-secondary/10 border border-primary/20 shadow-xs">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shrink-0">

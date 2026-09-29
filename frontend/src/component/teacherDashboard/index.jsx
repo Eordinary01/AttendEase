@@ -179,15 +179,6 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
     }
   };
 
-  const handleMarkAttendance = async (ticketId) => {
-    try {
-      await api.post(`/tickets/${ticketId}/mark-attendance`, {});
-      fetchData(true);
-    } catch (err) {
-      alert(err.response?.data?.message || "Error updating attendance");
-    }
-  };
-
   const handleFileClick = async (ticketId, file) => {
     try {
       const fileId = file.id || file._id;
@@ -235,10 +226,11 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
   const metaText = subjectCodes ? `Assigned Courses: ${subjectCodes} • ${myAssignments.length} Teaching Batches` : "Faculty Department of Engineering & Technology";
 
   return (
-    <div style={cssVars} className="min-h-screen bg-background text-ink pb-12">
+    <div style={cssVars} className="space-y-6 font-sans antialiased text-slate-800">
       {/* Shared Dashboard Header Strip */}
       <DashboardHeader
         greeting={`Good ${timeOfDay}, ${teacherName}`}
+        badge={`${myAssignments.length} Batches Assigned`}
         meta={metaText}
         highlightAction={
           <Button
@@ -273,8 +265,8 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
         }
       />
 
-      {/* Main Container */}
-      <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+      {/* Main Content Space */}
+      <div className="space-y-6">
         {/* ── Academic Mentorship & Cohort Roles Banner ── */}
         {myRoles.length > 0 && (
           <motion.div
@@ -305,11 +297,11 @@ export default function TeacherDashboard({ userId, userName, userEmail }) {
                     >
                       <span className="font-bold text-primary">{r.name}</span>
                       {r.section ? (
-                        <span className="text-purple-600 font-bold">
+                        <span className="text-secondary font-bold">
                           • Section {r.section}
                         </span>
                       ) : r.branch ? (
-                        <span className="text-indigo-600 font-bold">
+                        <span className="text-primary font-bold">
                           • {r.branch}
                         </span>
                       ) : (

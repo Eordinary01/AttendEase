@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import { 
   Mail, Lock, Hash, ArrowRight, 
-  Key, GraduationCap, School, AlertCircle, Globe, Eye, EyeOff 
+  Key, GraduationCap, School, Globe, Eye, EyeOff 
 } from "lucide-react";
 import axios from "axios";
 import { logError } from "../../utils/logger";

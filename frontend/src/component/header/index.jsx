@@ -31,15 +31,17 @@ import {
   Package,
   FileText
 } from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContexts';
 
 const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
+  const { colors: themeContextColors } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUserName, setCurrentUserName] = useState('');
   const [planModules, setPlanModules] = useState(null);
   const getInitialColors = () => {
     const cached = getCachedTenantBranding();
-    const primary = cached?.branding?.primaryColor || '#7c3aed';
-    const secondary = cached?.branding?.secondaryColor || '#6d28d9';
+    const primary = cached?.branding?.primaryColor || themeContextColors?.primary || '#6366f1';
+    const secondary = cached?.branding?.secondaryColor || themeContextColors?.secondary || '#8b5cf6';
     return {
       primary,
       secondary,
@@ -50,6 +52,17 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const [themeColors, setThemeColors] = useState(getInitialColors);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (themeContextColors?.primary) {
+      setThemeColors({
+        primary: themeContextColors.primary,
+        secondary: themeContextColors.secondary || '#8b5cf6',
+        light: adjustColor(themeContextColors.primary, 85),
+        lighter: adjustColor(themeContextColors.primary, 92),
+      });
+    }
+  }, [themeContextColors]);
 
   // Don't show header on landing page
   const isLandingPage = location.pathname === '/';

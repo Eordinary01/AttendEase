@@ -92,17 +92,18 @@ const ExamSchedule = ({ role }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting="Examination Timetable & Venues"
-        meta={`Upcoming academic assessments, shift timings, and hall allocations (${filtered.length} exams registered)`}
+        title="Examination Timetable & Venues"
+        subtitle={`Upcoming academic assessments, shift timings, and hall allocations (${filtered.length} exams registered)`}
+        badge={<Badge tone="primary">{filtered.length} Scheduled</Badge>}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {role !== "student" && courseOptions.length > 0 && (
               <select
                 value={courseFilter}
                 onChange={(e) => setCourseFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+                className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer font-medium"
               >
                 <option value="">All Courses</option>
                 {courseOptions.map((c) => (
@@ -114,7 +115,7 @@ const ExamSchedule = ({ role }) => {
               <select
                 value={semesterFilter}
                 onChange={(e) => setSemesterFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+                className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer font-medium"
               >
                 <option value="all">All Semesters</option>
                 {semesterOptions.map((s) => (
@@ -125,7 +126,7 @@ const ExamSchedule = ({ role }) => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+              className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer font-medium"
             >
               <option value="all">All Exam Types</option>
               {examTypes.map((t) => (
@@ -157,7 +158,7 @@ const ExamSchedule = ({ role }) => {
                   <Badge tone={getTypeTone(typeCode)} size="sm" className="capitalize">
                     {typeName}
                   </Badge>
-                  <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">{exam.subjectCode}</span>
+                  <span className="text-xs font-mono font-bold text-primary bg-primary-soft px-2.5 py-0.5 rounded-lg border border-primary-surface">{exam.subjectCode}</span>
                 </div>
                 <div>
                   <h3 className="font-bold text-ink text-sm truncate">{exam.title}</h3>

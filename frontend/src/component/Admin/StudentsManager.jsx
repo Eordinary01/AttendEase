@@ -128,6 +128,9 @@ const StudentsManager = ({ role }) => {
     if (!formData.name || !formData.email || !formData.rollNo || !formData.section) {
       setError("Fill all required fields"); return;
     }
+    if (courses.length > 0 && !formData.courseId) {
+      setError("Please select a course for the student"); return;
+    }
     try {
       setSubmitting(true);
       if (editing) {
@@ -154,8 +157,8 @@ const StudentsManager = ({ role }) => {
   };
 
   const columns = [
-    { 
-      header: "Student Name", 
+    {
+      header: "Student Name",
       cell: (s) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
@@ -169,27 +172,27 @@ const StudentsManager = ({ role }) => {
       )
     },
     { header: "Roll No", cell: (s) => <span className="font-mono text-xs font-bold text-ink">{s.rollNo}</span> },
-    { 
-      header: "Section", 
+    {
+      header: "Section",
       cell: (s) => (
         <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
           Section {s.section}
         </span>
-      ) 
+      )
     },
-    { 
-      header: "Course / Branch", 
+    {
+      header: "Course / Branch",
       cell: (s) => (
         <span className="text-xs text-ink-soft font-medium">
           {(s.courseName || s.courseId?.name || s.courseId?.code || "—")}{s.branch ? ` / ${s.branch}` : ""}
         </span>
-      ) 
+      )
     },
     { header: "Semester", cell: (s) => s.semester ? <Badge tone="primary" size="sm">Sem {s.semester}</Badge> : <Badge tone="neutral" size="sm">—</Badge> },
     { header: "Batch", cell: (s) => <span className="text-xs text-ink-soft font-medium">{s.admissionYear || "—"}</span> },
     { header: "Attendance", cell: attendanceBadge },
-    ...(canWrite ? [{ 
-      header: "", 
+    ...(canWrite ? [{
+      header: "",
       cell: (s) => (
         <button
           onClick={() => openEdit(s)}
@@ -198,15 +201,16 @@ const StudentsManager = ({ role }) => {
         >
           <Edit className="w-3.5 h-3.5" />
         </button>
-      ) 
+      )
     }] : []),
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
         greeting="Student Directory & Enrollment"
-        meta={`Managing ${pagination.total || students.length} student profiles and attendance telemetry`}
+        badge={`${pagination.total || students.length} Students`}
+        meta={`Managing student profiles, academic rosters, and attendance telemetry`}
         actions={
           canWrite ? (
             <Button
@@ -222,38 +226,38 @@ const StudentsManager = ({ role }) => {
       />
 
       {error && (
-        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold shadow-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-medium flex items-center gap-2">
-          <Check className="w-4 h-4 shrink-0" />
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700 text-xs font-semibold shadow-xs flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
       )}
 
       {/* Filter Toolbar */}
-      <Card padding="md" bordered>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto flex-1">
             <div className="relative flex-1 sm:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by student name, roll no, email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all"
               />
             </div>
             <div className="relative w-full sm:w-48">
               <select
                 value={selectedSection}
                 onChange={(e) => setSelectedSection(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 cursor-pointer font-semibold transition-all"
               >
                 <option value="">{isTeacher ? "All Assigned Sections" : "All Sections"}</option>
                 {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
@@ -282,72 +286,78 @@ const StudentsManager = ({ role }) => {
             <span className="text-xs text-ink-soft font-semibold">{pagination.total || students.length} students found</span>
           </div>
         </div>
-      </Card>
 
-      {loading ? (
-        <Card padding="lg" bordered><Skeleton rows={6} /></Card>
-      ) : students.length === 0 ? (
-        <EmptyState
-          title="No Students Found"
-          description="No students matching your search criteria."
-          icon={Users}
-          action={canWrite ? <Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Enroll Student</Button> : null}
-        />
-      ) : (
-        <Card padding="none" bordered className="overflow-hidden">
-          <Table columns={columns} data={students} rowKey="id" pagination={pagination} onPageChange={setPage} />
-        </Card>
-      )}
 
-      {/* Student Form Modal */}
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? "Edit Student Profile" : "Enroll New Student"} size="lg" error={error}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-3.5">
-            <Input label="Full Name *" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Alex Johnson" />
-            <Input label="Student Email *" type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required placeholder="alex@campus.edu" />
-            <Input label="Roll Number *" value={formData.rollNo} onChange={e => setFormData(p => ({ ...p, rollNo: e.target.value }))} required placeholder="e.g. CS2026-042" />
-            <Input label="Section *" value={formData.section} onChange={e => setFormData(p => ({ ...p, section: e.target.value.toUpperCase() }))} required placeholder="A" />
-          </div>
+        {loading ? (
+          <Card padding="lg" bordered><Skeleton rows={6} /></Card>
+        ) : students.length === 0 ? (
+          <EmptyState
+            title="No Students Found"
+            description="No students matching your search criteria."
+            icon={Users}
+            action={canWrite ? <Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Enroll Student</Button> : null}
+          />
+        ) : (
+          <Card padding="none" bordered className="overflow-hidden">
+            <Table columns={columns} data={students} rowKey="id" pagination={pagination} onPageChange={setPage} />
+          </Card>
+        )}
 
-          <div className="grid md:grid-cols-3 gap-3">
-            <div>
-              <Select label="Course" value={formData.courseId} onChange={e => handleCourseChange(e.target.value)}>
-                <option value="">Select course (optional)</option>
-                {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
-              </Select>
+        {/* Student Form Modal */}
+        <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? "Edit Student Profile" : "Enroll New Student"} size="lg" error={error}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-3.5">
+              <Input label="Full Name *" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Alex Johnson" />
+              <Input label="Student Email *" type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required placeholder="alex@campus.edu" />
+              <Input label="Roll Number *" value={formData.rollNo} onChange={e => setFormData(p => ({ ...p, rollNo: e.target.value }))} required placeholder="e.g. CS2026-042" />
+              <Input label="Section *" value={formData.section} onChange={e => setFormData(p => ({ ...p, section: e.target.value.toUpperCase() }))} required placeholder="A" />
             </div>
-            <div>
-              <Select label="Branch / Stream" value={formData.branch} onChange={e => setFormData(p => ({ ...p, branch: e.target.value }))} disabled={!formData.courseId || branchOptions.length === 0}>
-                <option value="">
-                  {!formData.courseId ? "Select course first" : branchOptions.length === 0 ? "No branches" : "Select branch"}
-                </option>
-                {branchOptions.map((b, i) => (
-                  <option key={b._id || b.name + i} value={b.name}>{b.name}{b.totalSemesters ? ` (${b.durationYears}y / ${b.totalSemesters}s)` : ""}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Input label="Admission Year" type="number" min="2000" max="2100" value={formData.admissionYear} onChange={e => setFormData(p => ({ ...p, admissionYear: e.target.value }))} />
-            </div>
-          </div>
 
-          <div className="grid md:grid-cols-2 gap-3.5 pt-2 border-t border-line/50">
-            <Input label="Phone Number" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+91 9876543210" />
-            <Input label="Parent / Guardian Name" value={formData.parentName} onChange={e => setFormData(p => ({ ...p, parentName: e.target.value }))} placeholder="Parent name" />
-            <Input label="Parent Phone" value={formData.parentPhone} onChange={e => setFormData(p => ({ ...p, parentPhone: e.target.value }))} placeholder="Parent contact" />
-            <Input label="Current Semester" type="number" min="1" max="16" value={formData.semester} onChange={e => setFormData(p => ({ ...p, semester: parseInt(e.target.value, 10) || 1 }))} />
-          </div>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div>
+                <Select
+                  label={courses.length > 0 ? "Course *" : "Course"}
+                  value={formData.courseId}
+                  onChange={e => handleCourseChange(e.target.value)}
+                  required={courses.length > 0}
+                >
+                  <option value="">{courses.length > 0 ? "Select course *" : "No courses available"}</option>
+                  {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
+                </Select>
+              </div>
+              <div>
+                <Select label="Branch / Stream" value={formData.branch} onChange={e => setFormData(p => ({ ...p, branch: e.target.value }))} disabled={!formData.courseId || branchOptions.length === 0}>
+                  <option value="">
+                    {!formData.courseId ? "Select course first" : branchOptions.length === 0 ? "No branches" : "Select branch"}
+                  </option>
+                  {branchOptions.map((b, i) => (
+                    <option key={b._id || b.name + i} value={b.name}>{b.name}{b.totalSemesters ? ` (${b.durationYears}y / ${b.totalSemesters}s)` : ""}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Input label="Admission Year" type="number" min="2000" max="2100" value={formData.admissionYear} onChange={e => setFormData(p => ({ ...p, admissionYear: e.target.value }))} />
+              </div>
+            </div>
 
-          <div className="flex justify-end pt-3 gap-2.5 border-t border-line/50">
-            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="sm" loading={submitting}>
-              {editing ? "Update Profile" : "Save Enrollment"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+            <div className="grid md:grid-cols-2 gap-3.5 pt-2 border-t border-line/50">
+              <Input label="Phone Number" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+91 9876543210" />
+              <Input label="Parent / Guardian Name" value={formData.parentName} onChange={e => setFormData(p => ({ ...p, parentName: e.target.value }))} placeholder="Parent name" />
+              <Input label="Parent Phone" value={formData.parentPhone} onChange={e => setFormData(p => ({ ...p, parentPhone: e.target.value }))} placeholder="Parent contact" />
+              <Input label="Current Semester" type="number" min="1" max="16" value={formData.semester} onChange={e => setFormData(p => ({ ...p, semester: parseInt(e.target.value, 10) || 1 }))} />
+            </div>
+
+            <div className="flex justify-end pt-3 gap-2.5 border-t border-line/50">
+              <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" loading={submitting}>
+                {editing ? "Update Profile" : "Save Enrollment"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      </div>
     </div>
   );
 };

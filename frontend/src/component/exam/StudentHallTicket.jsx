@@ -105,8 +105,13 @@ const StudentHallTicket = () => {
       {/* Top Header & Actions (Hidden during print) */}
       <div className="print:hidden space-y-4">
         <DashboardHeader
-          greeting="Examination Admit Card & Hall Ticket"
-          meta="Generate and print your official cryptographically verified admit card with seating allocations and QR security"
+          title="Examination Admit Card & Hall Ticket"
+          subtitle="Generate and print your official cryptographically verified admit card with seating allocations and QR security"
+          badge={
+            <Badge tone="primary">
+              {currentPeriod?.name || "Official Admit Card"}
+            </Badge>
+          }
           actions={
             <div className="flex items-center gap-2">
               <Button
@@ -124,12 +129,12 @@ const StudentHallTicket = () => {
 
         {/* Exam Period Selector Bar */}
         {availablePeriods.length > 0 && (
-          <div className="p-3 bg-surface border border-line rounded-2xl shadow-2xs space-y-2">
+          <div className="p-4 bg-white border border-slate-200/90 rounded-2xl shadow-sm space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-ink-faint flex items-center gap-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-primary" /> Select Examination Period
               </span>
-              <span className="text-[11px] text-ink-faint">
+              <span className="text-[11px] font-medium text-slate-400">
                 Admit cards are isolated per exam period
               </span>
             </div>
@@ -144,20 +149,20 @@ const StudentHallTicket = () => {
                     key={period._id}
                     type="button"
                     onClick={() => handlePeriodChange(period._id)}
-                    className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium transition border ${
+                    className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition border ${
                       isSelected
-                        ? "bg-primary text-white border-primary shadow-sm"
-                        : "bg-surface text-ink hover:bg-surface-alt border-line"
+                        ? "bg-primary text-white border-primary shadow-xs"
+                        : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200"
                     }`}
                   >
                     <span className="font-semibold">{period.name}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono font-bold ${
                         isSelected
                           ? "bg-white/20 text-white"
                           : hasExams
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-amber-50 text-amber-700 border border-amber-200"
                       }`}
                     >
                       {hasExams ? `${period.examsCount || allocations.length} Exams` : "No Exams"}

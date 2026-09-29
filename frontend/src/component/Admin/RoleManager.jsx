@@ -164,10 +164,11 @@ const RoleManager = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
         greeting="Granular Role-Based Access Control"
-        meta={`Design delegation profiles, assigning scoped capabilities and authority modules to faculty (${roles.length} roles defined)`}
+        badge={`${roles.length} Roles Defined`}
+        meta="Design delegation profiles, assigning scoped capabilities and authority modules to faculty"
         actions={
           <Button variant="primary" size="sm" leftIcon={Plus} onClick={openCreate}>
             Create Role
@@ -175,13 +176,23 @@ const RoleManager = () => {
         }
       />
 
-      {error && <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-semibold">{error}</div>}
-      {success && <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-semibold">{success}</div>}
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold shadow-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{error}</span>
+        </div>
+      )}
+      {success && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700 text-xs font-semibold shadow-xs flex items-center gap-2">
+          <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+          <span>{success}</span>
+        </div>
+      )}
 
       {loading ? (
-        <Card padding="lg" bordered>
-          <Skeleton rows={4} />
-        </Card>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm">
+          <Skeleton rows={5} />
+        </div>
       ) : roles.length === 0 ? (
         <EmptyState
           title="No Custom Roles Defined"
@@ -190,31 +201,38 @@ const RoleManager = () => {
           action={<Button variant="primary" size="sm" onClick={openCreate} leftIcon={Plus}>Create First Role</Button>}
         />
       ) : (
-        <div className="grid gap-3.5">
+        <div className="grid gap-4">
           {roles.map(role => (
-            <Card key={role._id} padding="md" bordered className="transition hover:border-primary/30">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                      <Shield className="w-4 h-4" />
-                    </div>
-                    <h3 className="text-sm font-bold text-ink">{role.name}</h3>
+            <div
+              key={role._id}
+              className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm transition-all hover:border-primary/40"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-soft text-primary border border-primary-surface flex items-center justify-center shrink-0 shadow-xs">
+                    <Shield className="w-5 h-5" />
                   </div>
-                  {role.description && <p className="text-xs text-ink-soft mt-1 ml-9">{role.description}</p>}
+                  <div className="min-w-0">
+                    <h3 className="text-base font-bold text-slate-900 leading-tight">{role.name}</h3>
+                    {role.description && (
+                      <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">{role.description}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button 
                     onClick={() => openEdit(role)} 
-                    className="p-1.5 text-ink-soft hover:text-primary hover:bg-primary/10 rounded-lg transition cursor-pointer" 
+                    className="p-2 text-slate-400 hover:text-primary hover:bg-primary-soft rounded-xl transition-all shadow-xs border border-slate-200/60 bg-white" 
                     title="Edit Role"
+                    aria-label={`Edit ${role.name}`}
                   >
                     <Edit className="w-4 h-4" />
                   </button>
                   <button 
                     onClick={() => handleDelete(role._id)} 
-                    className="p-1.5 text-ink-soft hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition cursor-pointer" 
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-xs border border-slate-200/60 bg-white" 
                     title="Delete Role"
+                    aria-label={`Delete ${role.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -222,25 +240,28 @@ const RoleManager = () => {
               </div>
 
               {role.permissions?.length > 0 && (
-                <div className="mt-3.5 pt-3 border-t border-line/50 flex flex-wrap gap-1.5">
+                <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap gap-1.5">
                   {role.permissions.map(p => {
                     const group = PERMISSION_GROUPS.find(g => g.permissions.some(pp => pp.key === p));
                     const perm = group?.permissions.find(pp => pp.key === p);
                     return (
-                      <span key={p} className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-md text-[11px] font-medium font-mono">
+                      <span
+                        key={p}
+                        className="px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200/90 rounded-lg text-[11px] font-semibold font-mono tracking-tight"
+                      >
                         {perm?.label || p}
                       </span>
                     );
                   })}
                 </div>
               )}
-            </Card>
+            </div>
           ))}
         </div>
       )}
 
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingRole ? "Edit Role Profile" : "Create Security Role"} size="lg" error={error}>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 font-sans">
           <Input
             label="Role Name *"
             value={formData.name}
@@ -256,15 +277,20 @@ const RoleManager = () => {
             placeholder="What responsibilities does this role have?"
           />
           <div>
-            <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-2">Assigned Permissions Matrix</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Assigned Permissions Matrix</label>
             <div className="grid md:grid-cols-2 gap-3">
               {PERMISSION_GROUPS.map(group => (
-                <div key={group.label} className="p-3 bg-background rounded-xl border border-line/50">
-                  <p className="text-[11px] font-bold text-ink uppercase tracking-wider mb-2">{group.label}</p>
-                  <div className="space-y-1.5">
+                <div key={group.label} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80">
+                  <p className="text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200/60">{group.label}</p>
+                  <div className="space-y-2">
                     {group.permissions.map(perm => (
-                      <label key={perm.key} className="flex items-center gap-2 cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
-                        <input type="checkbox" checked={formData.permissions.includes(perm.key)} onChange={() => togglePermission(perm.key)} className="rounded border-line/60 text-primary focus:ring-primary/30" />
+                      <label key={perm.key} className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={formData.permissions.includes(perm.key)}
+                          onChange={() => togglePermission(perm.key)}
+                          className="rounded border-slate-300 text-primary focus:ring-primary/20"
+                        />
                         <span>{perm.label}</span>
                       </label>
                     ))}
@@ -273,8 +299,8 @@ const RoleManager = () => {
               ))}
             </div>
           </div>
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-line/50">
-            <Button type="button" variant="subtle" size="sm" onClick={() => setShowForm(false)}>
+          <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="sm" leftIcon={Save}>

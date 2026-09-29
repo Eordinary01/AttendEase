@@ -20,6 +20,12 @@ const {
   updateStructure: updateStructureCtrl,
   getPromotionPreview,
   promoteStudents,
+  promoteStudentsBatch,
+  getPromotionJobStatus,
+  getPromotionAudit,
+  getPromotionSettings,
+  updatePromotionSettings,
+  bulkAssignCourse,
   getSemesterTimeline,
 } = require("../controllers/academicController");
 
@@ -40,6 +46,14 @@ router.put("/structure", adminAuth, featureGuard("academic_structure"), updateSt
 // Semester auto-increment (admin-triggered promotion)
 router.get("/promotion-preview", adminAuth, featureGuard("academic_structure"), getPromotionPreview);
 router.post("/promote", adminAuth, featureGuard("academic_structure"), promoteStudents);
+router.post("/promote/batch", adminAuth, featureGuard("academic_structure"), promoteStudentsBatch);
+router.get("/promote/status/:jobId", adminAuth, featureGuard("academic_structure"), getPromotionJobStatus);
+router.get("/promote/audit", adminAuth, featureGuard("academic_structure"), getPromotionAudit);
+router.get("/promote/settings", adminAuth, featureGuard("academic_structure"), getPromotionSettings);
+router.post("/promote/settings", adminAuth, featureGuard("academic_structure"), updatePromotionSettings);
+
+// Bulk student course assignment
+router.post("/students/bulk-assign-course", adminAuth, featureGuard("academic_structure"), bulkAssignCourse);
 
 // Semester timeline (read-only, all authenticated users)
 router.get("/courses/:id/semester-timeline", getSemesterTimeline);

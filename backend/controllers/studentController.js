@@ -61,8 +61,13 @@ const createStudent = async (req, res) => {
       courseId, branch, semester, admissionYear,
     } = req.body;
 
-    if (!name || !email || !rollNo || !section) {
-      return res.status(400).json({ success: false, message: "Name, email, roll number and section are required" });
+    if (!name || !email || !rollNo || !section || !courseId) {
+      return res.status(400).json({
+        success: false,
+        message: !courseId
+          ? "Course is required for creating a student."
+          : "Name, email, roll number and section are required",
+      });
     }
 
     const cleanEmail = email.toLowerCase().trim();

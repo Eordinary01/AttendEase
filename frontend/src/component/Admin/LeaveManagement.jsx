@@ -23,6 +23,7 @@ import api from "../../utils/api";
 import { formatDateDMY, formatDateTime, getLocalTodayStr } from "../../utils/dateUtils";
 import Button from "../common/ui/Button";
 import Card from "../common/ui/Card";
+import StatCard from "../common/ui/StatCard";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import { Select, Textarea } from "../common/ui/Input";
@@ -188,43 +189,30 @@ export default function LeaveManagement() {
   const rejectedCount = leaves.filter((l) => l.status === "rejected").length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <DashboardHeader
-          title="Institutional Leave Management & Reconciliation"
-          subtitle="Manage student absence requests across sections, execute administrative overrides, and audit automated attendance reconciliation."
-        />
-        <div className="flex items-center gap-2">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 px-4 sm:px-6 lg:px-8 py-6 font-sans antialiased text-slate-800">
+      <DashboardHeader
+        greeting="Institutional Leave Management & Reconciliation"
+        badge={`${pendingCount} Pending Review`}
+        meta="Manage student absence requests across sections, execute administrative overrides, and audit automated attendance reconciliation."
+        actions={
           <Button
             variant="primary"
             size="sm"
             onClick={handleExportCsv}
+            leftIcon={Download}
             className="flex items-center gap-1.5 text-xs font-semibold"
           >
-            <Download className="h-4 w-4" />
-            <span>Export CSV</span>
+            Export CSV
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card padding="md" className="border-line">
-          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Total Applications</p>
-          <p className="text-2xl font-black text-ink mt-1">{totalCount}</p>
-        </Card>
-        <Card padding="md" className="border-line border-l-4 border-l-amber-500">
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-600">Pending Review</p>
-          <p className="text-2xl font-black text-ink mt-1">{pendingCount}</p>
-        </Card>
-        <Card padding="md" className="border-line border-l-4 border-l-emerald-500">
-          <p className="text-xs font-bold uppercase tracking-wider text-emerald-600">Approved & Reconciled</p>
-          <p className="text-2xl font-black text-ink mt-1">{approvedCount}</p>
-        </Card>
-        <Card padding="md" className="border-line border-l-4 border-l-red-500">
-          <p className="text-xs font-bold uppercase tracking-wider text-red-600">Rejected</p>
-          <p className="text-2xl font-black text-ink mt-1">{rejectedCount}</p>
-        </Card>
+        <StatCard label="Total Applications" value={totalCount} icon={FileText} tone="neutral" />
+        <StatCard label="Pending Review" value={pendingCount} icon={Clock} tone="warning" highlight={pendingCount > 0} />
+        <StatCard label="Approved & Reconciled" value={approvedCount} icon={CheckCircle2} tone="success" />
+        <StatCard label="Rejected" value={rejectedCount} icon={XCircle} tone="danger" />
       </div>
 
       {/* Filter and Search Bar */}

@@ -1,28 +1,29 @@
+
 const eventBus = require('./eventBus');
 const logger = require('../utils/logger');
 
-/**
- * Domain Event Publishers for AttendEase
- *
- * Each publisher formats a domain event into the standardized envelope shape,
- * assigns a deterministic dedupeId, and publishes via eventBus.
- * All publishers are fire-and-forget and safe to call from controllers.
- */
+// Helper to safely extract string ID from ObjectId, populated object, or string
+function resolveEntityId(val) {
+  if (!val) return null;
+  if (typeof val === 'object' && val._id) return val._id.toString();
+  if (typeof val === 'object' && val.id) return val.id.toString();
+  return String(val);
+}
 
-// ==================== ALERT / NOTIFICATION FAMILY ====================
+// ==================== ALERT FAMILY ====================
 
 /**
- * Emitted when an alert/announcement is created.
+ * Emitted when a new alert or announcement is created.
  *
  * @param {string|null} tenantId
- * @param {object} alert
- * @param {string|null} [actorUserId] - ID of the user creating the alert (excluded from live push)
+ * @param {object} alert - Mongoose Alert document or plain object
+ * @param {string|null} [excludeUserId] - ID of user creating the alert (excluded from live push)
  */
-function publishAlertCreated(tenantId, alert, actorUserId = null) {
+function publishAlertCreated(tenantId, alert, excludeUserId = null) {
   try {
     const alertId = alert._id ? alert._id.toString() : String(alert.id || Date.now());
-    const creatorId = alert.createdBy ? alert.createdBy.toString() : null;
-    const excludeUserId = actorUserId ? String(actorUserId) : creatorId;
+    const creatorId = resolveEntityId(alert.createdBy);
+    const resolvedExcludeUserId = resolveEntityId(excludeUserId);
 
     const targetRoles = Array.isArray(alert.targetRoles) ? alert.targetRoles : [];
     const targetSections = Array.isArray(alert.targetSections) ? alert.targetSections.map(s => String(s).trim().toUpperCase()) : [];
@@ -32,9 +33,8 @@ function publishAlertCreated(tenantId, alert, actorUserId = null) {
     const targetUsers = Array.isArray(alert.targetUsers) ? alert.targetUsers.map(String) : [];
 
     return eventBus.publish('alert.created', {
-      tenantId: alert.isPlatformAlert ? null : tenantId,
-      userId: creatorId,
-      excludeUserId,
+      tenantId: alert.isPlatformAlert ? null : (tenantId ? String(tenantId) : null),
+      excludeUserId: resolvedExcludeUserId,
       targetFilter: {
         targetRoles,
         targetSections,
@@ -45,7 +45,8 @@ function publishAlertCreated(tenantId, alert, actorUserId = null) {
       },
       payload: {
         id: alertId,
-        title: alert.title || 'Announcement',
+        _id: alertId,
+        title: alert.title,
         message: alert.message,
         type: alert.type || 'announcement',
         priority: alert.priority || 'normal',
@@ -56,11 +57,13 @@ function publishAlertCreated(tenantId, alert, actorUserId = null) {
         targetSubjectIds,
         targetUsers,
         createdBy: creatorId,
-        isPlatformAlert: Boolean(alert.isPlatformAlert),
+        tenantId: alert.isPlatformAlert ? null : (tenantId ? String(tenantId) : null),
+        metadata: alert.metadata || {},
         createdAt: alert.createdAt || new Date().toISOString(),
-        expiryDate: alert.expiryDate,
+        expiryDate: alert.expiryDate || null,
+        isPlatformAlert: Boolean(alert.isPlatformAlert),
       },
-      dedupeId: `alert.created:${alertId}:${new Date(alert.createdAt || Date.now()).getTime()}`,
+      dedupeId: `alert.created:${alertId}:${Date.now()}`,
     });
   } catch (err) {
     logger.warn('publishAlertCreated failed (suppressed)', { error: err.message });
@@ -69,17 +72,17 @@ function publishAlertCreated(tenantId, alert, actorUserId = null) {
 }
 
 /**
- * Emitted when an alert is updated.
+ * Emitted when an existing alert is modified.
  *
  * @param {string|null} tenantId
  * @param {object} alert
- * @param {string|null} [actorUserId] - ID of the user updating the alert (excluded from live push)
+ * @param {string|null} [excludeUserId] - ID of user updating the alert
  */
-function publishAlertUpdated(tenantId, alert, actorUserId = null) {
+function publishAlertUpdated(tenantId, alert, excludeUserId = null) {
   try {
     const alertId = alert._id ? alert._id.toString() : String(alert.id || Date.now());
-    const creatorId = alert.createdBy ? alert.createdBy.toString() : null;
-    const excludeUserId = actorUserId ? String(actorUserId) : creatorId;
+    const creatorId = resolveEntityId(alert.createdBy);
+    const resolvedExcludeUserId = resolveEntityId(excludeUserId);
 
     const targetRoles = Array.isArray(alert.targetRoles) ? alert.targetRoles : [];
     const targetSections = Array.isArray(alert.targetSections) ? alert.targetSections.map(s => String(s).trim().toUpperCase()) : [];
@@ -89,8 +92,8 @@ function publishAlertUpdated(tenantId, alert, actorUserId = null) {
     const targetUsers = Array.isArray(alert.targetUsers) ? alert.targetUsers.map(String) : [];
 
     return eventBus.publish('alert.updated', {
-      tenantId: alert.isPlatformAlert ? null : tenantId,
-      excludeUserId,
+      tenantId: alert.isPlatformAlert ? null : (tenantId ? String(tenantId) : null),
+      excludeUserId: resolvedExcludeUserId,
       targetFilter: {
         targetRoles,
         targetSections,
@@ -101,9 +104,11 @@ function publishAlertUpdated(tenantId, alert, actorUserId = null) {
       },
       payload: {
         id: alertId,
+        _id: alertId,
         title: alert.title,
         message: alert.message,
-        priority: alert.priority,
+        type: alert.type || 'announcement',
+        priority: alert.priority || 'normal',
         targetRoles,
         targetSections,
         targetCourseIds,
@@ -111,7 +116,7 @@ function publishAlertUpdated(tenantId, alert, actorUserId = null) {
         targetSubjectIds,
         targetUsers,
         createdBy: creatorId,
-        updatedBy: alert.updatedBy ? alert.updatedBy.toString() : creatorId,
+        updatedBy: alert.updatedBy ? resolveEntityId(alert.updatedBy) : creatorId,
         isActive: alert.isActive,
         updatedAt: new Date().toISOString(),
       },
@@ -134,8 +139,8 @@ function publishAlertExpired(tenantId, alertId, actorUserId = null) {
   try {
     const id = String(alertId);
     return eventBus.publish('alert.expired', {
-      tenantId,
-      excludeUserId: actorUserId ? String(actorUserId) : null,
+      tenantId: tenantId ? String(tenantId) : null,
+      excludeUserId: resolveEntityId(actorUserId),
       payload: { id, expiredAt: new Date().toISOString() },
       dedupeId: `alert.expired:${id}:${Date.now()}`,
     });
@@ -157,7 +162,7 @@ function publishAttendanceMarked(tenantId, data) {
   try {
     const key = data.sessionId || data.subjectId || Date.now();
     return eventBus.publish('attendance.marked', {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: data.studentId || null,
       payload: data,
       dedupeId: `attendance.marked:${key}:${Date.now()}`,
@@ -178,7 +183,7 @@ function publishAttendanceCorrected(tenantId, data) {
   try {
     const recordId = data.attendanceId || data.id || Date.now();
     return eventBus.publish('attendance.corrected', {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: data.studentId || null,
       payload: data,
       dedupeId: `attendance.corrected:${recordId}:${Date.now()}`,
@@ -201,7 +206,7 @@ function publishLeaveSubmitted(tenantId, leave) {
   try {
     const leaveId = leave._id ? leave._id.toString() : String(leave.id || Date.now());
     return eventBus.publish('leave.submitted', {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: leave.studentId ? leave.studentId.toString() : null,
       payload: leave,
       dedupeId: `leave.submitted:${leaveId}:${Date.now()}`,
@@ -224,7 +229,7 @@ function publishLeaveStatusChanged(tenantId, status, leave) {
     const eventName = `leave.${status}`;
     const leaveId = leave._id ? leave._id.toString() : String(leave.id || Date.now());
     return eventBus.publish(eventName, {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: leave.studentId ? leave.studentId.toString() : null,
       payload: leave,
       dedupeId: `${eventName}:${leaveId}:${Date.now()}`,
@@ -248,7 +253,7 @@ function publishTicketEvent(tenantId, eventName, ticket) {
   try {
     const ticketId = ticket._id ? ticket._id.toString() : String(ticket.id || Date.now());
     return eventBus.publish(eventName, {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: ticket.userId ? ticket.userId.toString() : null,
       payload: ticket,
       dedupeId: `${eventName}:${ticketId}:${Date.now()}`,
@@ -272,7 +277,7 @@ function publishExamEvent(tenantId, eventName, exam) {
   try {
     const examId = exam._id ? exam._id.toString() : String(exam.id || Date.now());
     return eventBus.publish(eventName, {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       payload: exam,
       dedupeId: `${eventName}:${examId}:${Date.now()}`,
     });
@@ -294,7 +299,7 @@ function publishAnnouncementIssued(tenantId, broadcast) {
   try {
     const id = broadcast.id || broadcast._id || Date.now();
     return eventBus.publish('broadcast.announcement', {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       payload: broadcast,
       dedupeId: `broadcast.announcement:${id}:${Date.now()}`,
     });
@@ -316,13 +321,42 @@ function publishAtRiskAlert(tenantId, riskData) {
   try {
     const studentId = riskData.studentId || 'unknown';
     return eventBus.publish('risk.critical', {
-      tenantId,
+      tenantId: tenantId ? String(tenantId) : null,
       userId: studentId,
       payload: riskData,
       dedupeId: `risk.critical:${studentId}:${Date.now()}`,
     });
   } catch (err) {
     logger.warn('publishAtRiskAlert failed (suppressed)', { error: err.message });
+    return '';
+  }
+}
+
+/**
+ * Emitted when a promotion batch job completes.
+ *
+ * @param {string} tenantId
+ * @param {object} result - { jobId, promoted, graduated, eligible, skipped, details[], finishedAt }
+ */
+function publishPromotionCompleted(tenantId, result) {
+  try {
+    const { jobId, promoted, graduated, eligible, skipped, details, finishedAt } = result;
+    return eventBus.publish('promotion.completed', {
+      tenantId: tenantId ? String(tenantId) : null,
+      payload: {
+        jobId: jobId ?? null,
+        promoted: promoted ?? 0,
+        graduated: graduated ?? 0,
+        eligible: eligible ?? 0,
+        skipped: skipped ?? 0,
+        details: details || [],
+        finishedAt: finishedAt || new Date().toISOString(),
+        message: `Semester promotion complete — ${promoted} promoted, ${graduated} graduated${eligible ? `, ${eligible} eligible` : ''}`,
+      },
+      dedupeId: `promotion.completed:${tenantId}:${jobId ?? 'sync'}:${Date.now()}`,
+    });
+  } catch (err) {
+    logger.warn('publishPromotionCompleted failed (suppressed)', { error: err.message });
     return '';
   }
 }
@@ -339,4 +373,5 @@ module.exports = {
   publishExamEvent,
   publishAnnouncementIssued,
   publishAtRiskAlert,
+  publishPromotionCompleted,
 };

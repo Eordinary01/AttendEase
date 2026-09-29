@@ -12,7 +12,10 @@ const {
   deleteAlert,
   getAlertStats,
   markAlertAsRead,
-  markAllAlertsAsRead
+  markAllAlertsAsRead,
+  getAutomatedAlerts,
+  resolveAlert,
+  testTriggerAutomatedAlert
 } = require('../controllers/alertController');
 
 const createAlertValidator = [
@@ -129,6 +132,17 @@ router.post('/mark-all-read', markAllAlertsAsRead);
 
 // Mark alert as read
 router.post('/:alertId/read', markAlertAsRead);
+
+// ==================== AUTOMATED SYSTEM ALERTS ====================
+
+// Dedicated Automated Alerts Ledger & Management for Tenant Admins
+router.get('/automated', authorizeRoles(['admin', 'super_admin']), getAutomatedAlerts);
+
+// Test trigger simulation
+router.post('/automated/test-trigger', authorizeRoles(['admin', 'super_admin']), testTriggerAutomatedAlert);
+
+// Resolve / Acknowledge alert
+router.patch('/:alertId/resolve', authorizeRoles(['admin', 'super_admin']), resolveAlert);
 
 // ==================== AUTHORIZED CREATION & MANAGEMENT ROUTES ====================
 

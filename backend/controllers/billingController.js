@@ -338,6 +338,43 @@ const cancelSubscription = async (req, res) => {
   }
 };
 
+const continueFreeTier = async (req, res) => {
+  try {
+    const tenantId = req.body.tenantId || req.tenantId || (req.tenant && req.tenant._id);
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Tenant not found' });
+    }
+
+    applyPlanUpgradeToTenant(tenant, 'free');
+    tenant.subscription.plan = 'free';
+    tenant.subscription.status = 'active';
+    tenant.subscription.billingCycle = 'monthly';
+    tenant.subscription.trialEndsAt = null;
+    await tenant.save();
+
+    await cache.del(`tenant:${tenant._id}`);
+    if (tenant.subdomain) {
+      await cache.del(`tenant:subdomain:${tenant.subdomain}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Successfully switched to Free Tier',
+      data: {
+        subscription: tenant.subscription,
+      },
+    });
+  } catch (error) {
+    logger.error('Error continuing on free tier', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to switch to free tier',
+      error: error.message,
+    });
+  }
+};
+
 const getUpcomingInvoice = async (req, res) => {
   try {
     const tenant = await Tenant.findById(req.tenantId);
@@ -1211,33 +1248,6 @@ const adjustTenantBilling = async (req, res) => {
       message: 'Failed to adjust billing',
       error: error.message
     });
-  }
-};
-
-// Export all functions
-const continueFreeTier = async (req, res) => {
-  try {
-    const tenant = await Tenant.findById(req.tenantId);
-    if (!tenant) {
-      return res.status(404).json({ success: false, message: 'Tenant not found' });
-    }
-
-    // Update status to active and remove trial expiration
-    tenant.subscription.status = 'active';
-    tenant.subscription.trialEndsAt = null;
-    
-    await tenant.save();
-
-    return res.status(200).json({
-      success: true,
-      message: 'Successfully continued with Free Tier',
-      data: {
-        subscription: tenant.subscription
-      }
-    });
-  } catch (error) {
-    logger.error('Error continuing free tier', { error: error.message });
-    res.status(500).json({ success: false, message: error.message });
   }
 };
 

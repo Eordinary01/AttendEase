@@ -456,7 +456,7 @@ const TenantSettings = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
         greeting="Institutional Configuration & Preferences"
         meta={`Custom branding, contact profiles, academic terms, and security parameters for ${tenantInfo?.name || "your campus"}`}
@@ -474,39 +474,41 @@ const TenantSettings = () => {
 
       {/* Error/Success Messages */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          {error}
+        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-          <Check className="w-5 h-5" />
-          {success}
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-700 text-xs font-semibold">
+          <Check className="w-4 h-4 shrink-0" />
+          <span>{success}</span>
         </div>
       )}
 
       {reloginRequired && (
-        <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-lg flex items-center gap-3 text-amber-800">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-800 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
           <div className="flex-1">
-            <p className="font-semibold">Settings updated. Redirecting to login…</p>
-            <p className="text-sm">Please log in again to apply the changes.</p>
+            <p className="font-bold">Settings updated. Redirecting to institutional login…</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">Please re-authenticate to apply modified tenant schema parameters.</p>
           </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-line mb-8 overflow-x-auto hide-scrollbar">
+      <div className="flex border-b border-slate-200 mb-6 overflow-x-auto hide-scrollbar">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative px-6 py-4 font-medium text-sm transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id ? 'text-primary' : 'text-ink-faint hover:text-ink-soft'}`}
+            className={`relative px-5 py-3 font-semibold text-xs transition-colors whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+              activeTab === tab.id ? 'text-primary' : 'text-slate-500 hover:text-slate-900'
+            }`}
           >
             {tab.icon}
-            {tab.label}
+            <span>{tab.label}</span>
             {activeTab === tab.id && (
               <motion.div
                 layoutId="activeTab"

@@ -11,6 +11,7 @@ const MIN_FACE_WIDTH = 80;
 const MIN_FACE_HEIGHT = 80;
 const LAPLACIAN_HARD_MIN_STANDARD = 14;
 const LAPLACIAN_HARD_MIN_DIM = 8;
+// eslint-disable-next-line no-unused-vars
 const EAR_HARD_MIN = 0.15;
 
 const MIN_INFERENCE_INTERVAL_MS = 40;

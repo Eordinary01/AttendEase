@@ -291,7 +291,7 @@ const invalidateTenantStats = async (tenantId) => {
  */
 const getTenantInfo = async (req, res) => {
   try {
-    const tenantId = req.tenant?._id || req.tenant?.id || req.user?.tenantId;
+    const tenantId = req.query?.tenantId || req.tenant?._id || req.tenant?.id || req.user?.tenantId;
     
     if (!tenantId) {
       return res.status(200).json({
@@ -379,8 +379,11 @@ const getTenantInfo = async (req, res) => {
  */
 const updateTenantSettings = async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-    const { branding, settings, contact, collegeMetadata } = req.body;
+    let tenantId = req.tenantId || req.user?.tenantId || req.body?.tenantId || req.query?.tenantId;
+    if (!tenantId && req.user?.role === 'super_admin') {
+      const firstTenant = await Tenant.findOne().select('_id');
+      tenantId = firstTenant?._id;
+    }
 
     const tenant = await Tenant.findById(tenantId);
 

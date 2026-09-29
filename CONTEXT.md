@@ -1,6 +1,6 @@
 # AttendEase — Project Context
 
-> Last updated: 2026-09-02 (Biometric Anti-Spoofing & Relative EAR Liveness + Dynamic Blink Gate + Spatial Face Track Locking + Biometric Eval Telemetry + Blink Fix Plan v1)
+> Last updated: 2026-09-22 (Semester Promotion Engine + Real-time SSE Layer + Sender Exclusion + Trial Grace Period & Reminders + Universal Pagination & Audit Trails)
 
 This file is the fast on-ramp for anyone (human or AI) working on AttendEase. It covers what the product is, how it's built, and the conventions that matter for adding features — without a full repo scan.
 
@@ -288,6 +288,63 @@ OpenAPI 3.0 spec lives at `backend/docs/openapi.yaml`. It covers all 209 endpoin
 - add UI feedback for “Blink detected — Verifying...” in `FaceOverlay.jsx` and `DetectedPanel.jsx`
 
 **Verified blocker:** `blinkConfirmedRef.current.delete(tId)` at `useFaceDetection.js:736` wipes blink state on track expiry.
+
+---
+
+## Semester Promotion Engine & Automated Scanner
+
+AttendEase provides an automated, queue-backed semester progression engine that advances students through academic terms based on their admission year, course configuration, and duration.
+
+- **`backend/services/promotionService.js`**:
+  - `computeExpectedSemester(admissionYear, currentDate)`: Pure function calculating the expected semester (supports odd/even semester starts, freshman clamping, and year-turn transitions).
+  - `resolveTotalSemesters(student, course)`: Resolves duration from explicit student override, course branch, or `durationYears * semestersPerYear`.
+  - `buildPromotionContext(tenantId)`: Scans all active students, identifies eligible candidates, detects graduated students, and returns `missingCourseCount` with student records missing `courseId`.
+  - `runPromotionBatch(tenantId, studentIds, options)`: Executes promotions atomically, graduated status tagging, and creates persistent audit records.
+- **`backend/models/SemesterPromotion.js`**:
+  - Schema tracking every promotion run (`tenantId`, `jobId`, `type`, `promotedCount`, `graduatedCount`, `eligibleCount`, `skippedCount`, `failedCount`, `details`, `runBy`, `runByName`, `status`, `executedAt`).
+- **`backend/promotionScanner.js`**:
+  - Daily scanner inspecting all active tenants. When `tenant.settings.semesterStructure.autoPromote !== false`, automatically enqueues a background Bull job.
+  - Registers a persistent Redis-backed Bull repeatable job (`daily_promotion_scan`, cron: `0 2 * * *`) surviving server restarts, with in-memory interval fallback.
+- **`backend/queue/worker.js`**:
+  - Bull worker processing `promote` batches and `daily_promotion_scan` jobs.
+- **Frontend Academic Console (`AcademicStructure.jsx`)**:
+  - Promotion Audit History ledger (`GET /api/academic/promote/audit`).
+  - Auto-promotion toggle (`GET/POST /api/academic/promote/settings`).
+  - Bulk course assignment tool (`POST /api/academic/students/bulk-assign-course`) for unassigned students without mutating existing demo records.
+
+---
+
+## Real-Time SSE Infrastructure & Sender Exclusion
+
+- **Server-Sent Events (`backend/utils/sseManager.js`)**:
+  - Connection pooling with per-tenant connection caps (`MAX_CLIENTS_PER_TENANT = 200`), heartbeat pings (15s), backpressure queues, and user session deduplication.
+  - Strict role-based event permission filters.
+  - `publishLocal(tenantId, eventName, payload, dedupeId, targetFilter, excludeUserId)`:
+    - **Sender Exclusion**: Rejects push to clients where `client.userId === excludeUserId`.
+    - **Target Filtering**: Enforces academic section, course, branch, and role filtering at the connection level.
+- **Event Bus (`backend/events/eventBus.js` & `backend/events/publishers.js`)**:
+  - In-process EventEmitter + Redis Pub/Sub distribution for multi-instance clusters.
+  - Safe ID resolution (`resolveEntityId`) preventing `[object Object]` serialization issues.
+- **Frontend Real-time Context (`frontend/src/contexts/NotificationContext.jsx`)**:
+  - EventSource connection via `eventSourceManager.js`.
+  - Robust `currentUserId` resolution (prop > localStorage > user JSON parse).
+  - Author exclusion guard: Alerts authored by current user do not inflate `unreadCount` or trigger incoming toast notifications.
+  - Topbar integration with `<NotificationBell />`.
+
+---
+
+## Trial Lifecycle, Grace Period & Billing Continuity
+
+- **3-Day Grace Period (`backend/middleware/auth.js`)**:
+  - Expired free trials enter a 3-day grace period (`GRACE_PERIOD_MS = 259200000`).
+  - Allows institutional access with tagged grace period status (`isInGracePeriod = true`, `graceDaysLeft`).
+  - Hard 403 lockout with `upgradeRequired: true` only triggers after grace period ends.
+- **Automated Trial Reminders (`backend/services/trialReminderService.js`)**:
+  - Scans active trials and issues in-app Alerts and emails at Day 10 (4 days left), Day 12 (2 days left), and during the grace period.
+- **Continue Free Tier (`backend/controllers/billingController.js`)**:
+  - `POST /api/billing/continue-free`: Resets tenant subscription to `'free'`, clears `trialEndsAt`, updates allowed modules to free tier defaults, and invalidates cache.
+- **Trial Notification Banner (`frontend/src/component/common/TrialBanner.jsx`)**:
+  - Renders in `AppShell` with remaining trial / grace days and one-click upgrade / continue free actions.
 
 ---
 

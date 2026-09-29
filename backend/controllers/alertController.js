@@ -92,6 +92,7 @@ const createAlert = async (req, res) => {
       isPlatformAlert,
       tenantId: targetTenantId,
       createdBy: userId,
+      readBy: [userId],
       targetRoles: targetRoles || ['student', 'teacher', 'admin'],
       targetSections: resolvedSections,
       targetCourseIds: resolvedCourseIds,
@@ -108,7 +109,7 @@ const createAlert = async (req, res) => {
     await newAlert.save();
 
     // Emit real-time event (excluding sender from live push)
-    publishAlertCreated(targetTenantId, newAlert, userId);
+    publishAlertCreated(targetTenantId, newAlert, userId ? String(userId) : null);
 
     return res.status(201).json({
       success: true,
@@ -149,6 +150,16 @@ const getAlerts = async (req, res) => {
 
     if (userRole === 'super_admin') {
       const query = { isActive: true };
+      if (req.query.tenantId) {
+        // Super Admin explicitly auditing a specific campus tenant
+        query.tenantId = req.query.tenantId;
+      } else {
+        // Super Admin platform view: ONLY platform-wide alerts, NEVER campus automated alerts
+        query.$or = [
+          { isPlatformAlert: true },
+          { targetRoles: 'super_admin' },
+        ];
+      }
       if (includeExpired !== 'true') query.expiryDate = { $gte: new Date() };
       allAlerts = await Alert.find(query)
         .sort({ priority: -1, createdAt: -1 })
@@ -161,6 +172,7 @@ const getAlerts = async (req, res) => {
         $or: [
           { isPlatformAlert: true },
           { tenantId, createdBy: userId },
+          { tenantId, targetRoles: userRole },
           { tenantId, targetSections: { $size: 0 }, targetCourseIds: { $size: 0 } },
         ],
       };
@@ -304,7 +316,7 @@ const updateAlert = async (req, res) => {
     if (priority) alert.priority = priority;
     if (expiryDate) alert.expiryDate = new Date(expiryDate);
     if (isActive !== undefined) alert.isActive = isActive;
-    
+
     alert.updatedAt = new Date();
     alert.metadata.updatedBy = userId;
     alert.metadata.updatedAt = new Date();
@@ -385,7 +397,7 @@ const getAlertStats = async (req, res) => {
     const { fromDate, toDate } = req.query;
 
     let query = { isActive: true };
-    
+
     if (userRole === 'super_admin') {
       // Super admin sees all
     } else {
@@ -410,7 +422,7 @@ const getAlertStats = async (req, res) => {
           activeNow: {
             $sum: {
               $cond: [
-                { 
+                {
                   $or: [
                     { expiryDate: null },
                     { expiryDate: { $gte: new Date() } }
@@ -541,6 +553,228 @@ const markAllAlertsAsRead = async (req, res) => {
   }
 };
 
+/**
+ * GET AUTOMATED ALERTS (Tenant Admin dedicated section)
+ * Full ledger of automated system notifications for the tenant
+ */
+const getAutomatedAlerts = async (req, res) => {
+  try {
+    let tenantId = req.user.tenantId || req.query.tenantId;
+    const { status = 'all', priority, type, search, page = 1, limit = 20 } = req.query;
+
+    const automatedTypes = [
+      'absence_escalation',
+      'attendance_warning',
+      'system',
+      'proxy_warning',
+      'promotion_notice',
+      'fee_reminder'
+    ];
+
+    const query = {
+      type: type && automatedTypes.includes(type) ? type : { $in: automatedTypes },
+      isActive: true,
+    };
+
+    if (tenantId) {
+      query.tenantId = tenantId;
+    }
+
+    if (priority && priority !== 'all') {
+      query.priority = priority;
+    }
+
+    if (status === 'unresolved') {
+      query['metadata.resolved'] = { $ne: true };
+    } else if (status === 'resolved') {
+      query['metadata.resolved'] = true;
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query.$or = [
+        { title: { $regex: s, $options: 'i' } },
+        { message: { $regex: s, $options: 'i' } },
+        { 'metadata.studentName': { $regex: s, $options: 'i' } },
+        { 'metadata.rollNo': { $regex: s, $options: 'i' } },
+        { 'metadata.section': { $regex: s, $options: 'i' } },
+      ];
+    }
+
+    const skip = (Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit, 10);
+    const take = parseInt(limit, 10);
+
+    const tenantFilter = tenantId ? { tenantId } : {};
+
+    const [alerts, total, unresolvedCount, absenceCount, proxyCount] = await Promise.all([
+      Alert.find(query)
+        .sort({ 'metadata.resolved': 1, priority: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(take)
+        .populate('createdBy', 'name email')
+        .lean(),
+      Alert.countDocuments(query),
+      Alert.countDocuments({
+        ...tenantFilter,
+        type: { $in: automatedTypes },
+        isActive: true,
+        'metadata.resolved': { $ne: true },
+      }),
+      Alert.countDocuments({
+        ...tenantFilter,
+        type: 'absence_escalation',
+        isActive: true,
+      }),
+      Alert.countDocuments({
+        ...tenantFilter,
+        type: { $in: ['system', 'proxy_warning'] },
+        isActive: true,
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        alerts,
+        pagination: {
+          total,
+          page: parseInt(page, 10),
+          pages: Math.ceil(total / take) || 1,
+          limit: take,
+        },
+        stats: {
+          total,
+          unresolved: unresolvedCount,
+          unresolvedCount,
+          absenceEscalations: absenceCount,
+          absenceCount,
+          systemProxyAlerts: proxyCount,
+          proxyCount,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching automated alerts', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch automated alerts' });
+  }
+};
+
+/**
+ * RESOLVE / ACKNOWLEDGE ALERT
+ */
+const resolveAlert = async (req, res) => {
+  try {
+    const alertId = req.params.alertId || req.params.id;
+    if (!alertId || !mongoose.Types.ObjectId.isValid(alertId)) {
+      return res.status(400).json({ success: false, message: 'Invalid or missing alert ID' });
+    }
+
+    const { note } = req.body || {};
+    const query = { _id: alertId };
+    if (req.user.role !== 'super_admin' && req.user.tenantId) {
+      query.tenantId = req.user.tenantId;
+    }
+
+    const alert = await Alert.findOne(query);
+    if (!alert) {
+      return res.status(404).json({ success: false, message: 'Alert not found' });
+    }
+
+    const currentResolved = Boolean(alert.metadata?.resolved);
+    const nextResolved = !currentResolved;
+
+    alert.metadata = {
+      ...(alert.metadata || {}),
+      resolved: nextResolved,
+      resolvedAt: nextResolved ? new Date() : null,
+      resolvedBy: nextResolved ? req.user.name : null,
+      resolvedByName: nextResolved ? req.user.name : null,
+      resolvedById: nextResolved ? req.user._id : null,
+      resolutionNote: nextResolved && note ? String(note).trim() : (nextResolved ? (alert.metadata?.resolutionNote || '') : null),
+    };
+
+    alert.markModified('metadata');
+    await alert.save();
+
+    return res.status(200).json({
+      success: true,
+      message: nextResolved ? 'Alert acknowledged and marked as resolved' : 'Alert marked as action required',
+      data: alert,
+    });
+  } catch (error) {
+    logger.error('Error resolving alert', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to update alert resolution' });
+  }
+};
+
+/**
+ * TEST TRIGGER AUTOMATED ALERT (Simulation for Tenant Admins)
+ */
+const testTriggerAutomatedAlert = async (req, res) => {
+  try {
+    let tenantId = req.user.tenantId || req.body.tenantId || req.query.tenantId;
+    if (!tenantId && req.user.role === 'super_admin') {
+      const Tenant = require('../models/Tenant');
+      const firstTenant = await Tenant.findOne().select('_id');
+      tenantId = firstTenant?._id || null;
+    }
+
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'No target tenant found for simulation' });
+    }
+
+    const { type = 'absence_escalation', severity = 'high' } = req.body;
+
+    const titleMap = {
+      absence_escalation: 'Test Escalation: 3 Consecutive Absences Simulation',
+      attendance_warning: 'Test Notice: Low Attendance Defaulter Warning (<75%)',
+      proxy_warning: 'Test Security: Unusual IP Attendance Pattern Detected',
+      promotion_notice: 'Test Academic: Semester Promotion Readiness Notice',
+      fee_reminder: 'Test Finance: Tuition Fee Payment Due Notice',
+    };
+
+    const messageMap = {
+      absence_escalation: 'Sample Student (Roll No: TEST-101) in Section A has missed 3 consecutive scheduled classes. Automated early warning test execution.',
+      attendance_warning: 'Sample Student attendance is currently 68.5% (below institutional threshold of 75%). Academic intervention advised.',
+      proxy_warning: 'Simulated 45 attendance marks from single IP address 192.168.1.100 flagged for biometric review.',
+      promotion_notice: 'Promotion scanner simulated audit: 24 students ready for Semester 4 rollover.',
+      fee_reminder: 'Tuition fee installment due in 7 days for Semester 3 cohort.',
+    };
+
+    const testAlert = await Alert.create({
+      tenantId,
+      title: titleMap[type] || 'Automated System Test Notification',
+      message: messageMap[type] || 'This is an automated system notification simulation for validation.',
+      type: type === 'proxy_warning' ? 'system' : type,
+      priority: severity,
+      isActive: true,
+      targetRoles: ['admin'],
+      expiryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      metadata: {
+        isTestSimulation: true,
+        studentName: 'Sample Student',
+        rollNo: 'TEST-101',
+        section: 'A',
+        streakLength: 3,
+        triggeredBy: req.user.name,
+        triggeredAt: new Date(),
+        resolved: false,
+      },
+    });
+
+    publishAlertCreated(tenantId, testAlert, null);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Test automated notification generated and published to your campus stream',
+      data: testAlert,
+    });
+  } catch (error) {
+    logger.error('Error triggering test automated alert', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to test-trigger alert' });
+  }
+};
+
 module.exports = {
   createAlert,
   getAlerts,
@@ -548,5 +782,8 @@ module.exports = {
   deleteAlert,
   getAlertStats,
   markAlertAsRead,
-  markAllAlertsAsRead
+  markAllAlertsAsRead,
+  getAutomatedAlerts,
+  resolveAlert,
+  testTriggerAutomatedAlert,
 };

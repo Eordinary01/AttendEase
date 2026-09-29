@@ -5,8 +5,25 @@ const logger = require('./logger');
 /**
  * Send transactional email using Brevo REST API if API Key is configured,
  * otherwise fall back to Nodemailer SMTP (e.g. Brevo SMTP or Gmail SMTP).
+ * 
+ * Feature flag: BREVO_PRODUCTION=false (default) = no emails sent, just logged
+ * Set BREVO_PRODUCTION=true in production to enable actual delivery.
  */
-const sendMail = async ({ to, subject, html, text }) => {
+const isProductionEmail = process.env.BREVO_PRODUCTION === 'true';
+
+const sendMail = async ({ to, subject, html, text, tenantId, template }) => {
+  // Feature flag: skip actual sending in non-production
+  if (!isProductionEmail) {
+    logger.info(`[EMAIL DEV MODE] Would send email to ${to}`, {
+      subject,
+      template,
+      tenantId,
+      to,
+      preview: text || html?.replace(/<[^>]+>/g, '').slice(0, 200),
+    });
+    return { success: true, devMode: true, messageId: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  }
+
   const brevoApiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || 'noreply@attendease.com';
   const senderName = process.env.BREVO_SENDER_NAME || 'AttendEase';

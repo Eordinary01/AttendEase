@@ -19,6 +19,7 @@ import {
   LayoutDashboard,
   Network,
   Megaphone,
+  Bell,
   Award,
   Activity,
   Camera,
@@ -45,6 +46,7 @@ import Topbar from './Topbar';
 import BottomNav from './BottomNav';
 import CommandPalette from './CommandPalette';
 import DemoBanner from './DemoBanner';
+import TrialBanner from './TrialBanner';
 
 export const roleNav = {
   super_admin: [
@@ -82,6 +84,7 @@ export const roleNav = {
     ]},
     { group: 'Administration', items: [
       { to: '/admin/announcements', label: 'Announcements', icon: Megaphone, module: 'alerts' },
+      { to: '/admin/automated-notifications', label: 'Automated Alerts', icon: Bell, module: 'alerts' },
       { to: '/admin/upload-enrollments', label: 'Enrollments', icon: Upload },
       { to: '/admin/fees', label: 'Fees', icon: DollarSign, module: 'financeManagement' },
       { to: '/admin/settings', label: 'Settings', icon: Settings },
@@ -207,6 +210,8 @@ export const AppShell = ({ role, userName, userId, onLogout, children }) => {
   const [tenantName, setTenantName] = useState(cachedBranding?.name || 'AttendEase');
   const [tenantLogo, setTenantLogo] = useState(cachedBranding?.branding?.logo || null);
   const [tenantSubdomain, setTenantSubdomain] = useState(cachedBranding?.subdomain || null);
+  const [tenantSubscription, setTenantSubscription] = useState(null);
+  const [tenantId, setTenantId] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [userAvatar, setUserAvatar] = useState(localStorage.getItem('userAvatar') || null);
 
@@ -228,6 +233,8 @@ export const AppShell = ({ role, userName, userId, onLogout, children }) => {
       setTenantName('AttendEase');
       setTenantLogo(null);
       setTenantSubdomain(null);
+      setTenantSubscription(null);
+      setTenantId(null);
       const faviconLink = document.querySelector("link[rel='icon']");
       if (faviconLink) faviconLink.href = '/favicon.ico';
       return;
@@ -242,6 +249,8 @@ export const AppShell = ({ role, userName, userId, onLogout, children }) => {
       }
       const tenant = infoRes.data?.data?.tenant;
       if (tenant) {
+        setTenantSubscription(tenant.subscription || null);
+        setTenantId(tenant._id || null);
         setTenantName(tenant.name || 'AttendEase');
         setTenantLogo(tenant.branding?.logo || null);
         setTenantSubdomain(tenant.subdomain || null);
@@ -365,6 +374,12 @@ export const AppShell = ({ role, userName, userId, onLogout, children }) => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         <DemoBanner />
+        <TrialBanner
+          subscription={tenantSubscription}
+          tenantId={tenantId}
+          onRefresh={fetchTenantInfo}
+          role={role}
+        />
         <Topbar
           onMenuClick={() => setMobileOpen(true)}
           onCollapseClick={() => setCollapsed((prev) => !prev)}

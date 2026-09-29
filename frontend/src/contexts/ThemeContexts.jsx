@@ -4,7 +4,7 @@ import api from '../utils/api';
 import { logError } from '../utils/logger';
 import { fetchTenantInfo, getCachedTenantBranding, clearCachedTenantBranding } from '../utils/tenantService';
 
-const ThemeContext = createContext();
+export const ThemeContext = createContext();
 
 export const useTheme = () => useContext(ThemeContext);
 
@@ -53,47 +53,73 @@ export const ThemeProvider = ({ children }) => {
   // Helper to convert hex to "R G B" triplet (used by CSS var tokens)
   const toRgbTriplet = (hex) => {
     if (!hex) return null;
-    const clean = hex.replace('#', '');
+    const clean = hex.replace('#', '').trim();
     if (clean.length !== 6) return null;
     const r = parseInt(clean.slice(0, 2), 16);
     const g = parseInt(clean.slice(2, 4), 16);
     const b = parseInt(clean.slice(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
     return `${r} ${g} ${b}`;
   };
 
   const adjustColor = (hex, percent) => {
     if (!hex) return hex;
-    // Helper to lighten/darken hex colors
-    const num = parseInt(hex.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = Math.min(255, Math.max(0, (num >> 16) + amt));
-    const G = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amt));
-    const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
-    return `#${((1 << 24) | (R << 16) | (G << 8) | B).toString(16).slice(1)}`;
+    const clean = hex.replace('#', '').trim();
+    if (clean.length !== 6) return hex;
+    const num = parseInt(clean, 16);
+    if (isNaN(num)) return hex;
+    const r = (num >> 16) & 0xff;
+    const g = (num >> 8) & 0xff;
+    const b = num & 0xff;
+
+    if (percent > 0) {
+      // Lighten towards pure white (#ffffff) smoothly
+      const factor = percent / 100;
+      const R = Math.min(255, Math.max(0, Math.round(r + (255 - r) * factor)));
+      const G = Math.min(255, Math.max(0, Math.round(g + (255 - g) * factor)));
+      const B = Math.min(255, Math.max(0, Math.round(b + (255 - b) * factor)));
+      return `#${((1 << 24) | (R << 16) | (G << 8) | B).toString(16).slice(1)}`;
+    } else {
+      // Darken towards black smoothly
+      const factor = 1 + (percent / 100);
+      const R = Math.min(255, Math.max(0, Math.round(r * factor)));
+      const G = Math.min(255, Math.max(0, Math.round(g * factor)));
+      const B = Math.min(255, Math.max(0, Math.round(b * factor)));
+      return `#${((1 << 24) | (R << 16) | (G << 8) | B).toString(16).slice(1)}`;
+    }
   };
 
   const applyThemeColors = useCallback((colors) => {
+    if (!colors) return;
     const root = document.documentElement;
-    const primary = colors.primary || '#6366f1';
-    const secondary = colors.secondary || '#8b5cf6';
-    const accent = colors.accent || '#4f46e5';
+    const primary = colors.primary || colors.primaryColor || '#6366f1';
+    const secondary = colors.secondary || colors.secondaryColor || '#8b5cf6';
+    const accent = colors.accent || colors.accentColor || '#4f46e5';
 
     const setVar = (name, hex, fallback) => {
       const triplet = toRgbTriplet(hex) || toRgbTriplet(fallback);
-      root.style.setProperty(name, triplet);
+      if (triplet) {
+        root.style.setProperty(name, triplet);
+      }
     };
 
     setVar('--color-primary', primary, '#6366f1');
-    setVar('--color-primary-light', adjustColor(primary, 8), '#818cf8');
-    setVar('--color-primary-dark', adjustColor(primary, -14), '#4338ca');
+    setVar('--color-primary-light', adjustColor(primary, 20), '#818cf8');
+    setVar('--color-primary-dark', adjustColor(primary, -15), '#4338ca');
     setVar('--color-primary-soft', adjustColor(primary, 90), '#eef2ff');
-    setVar('--color-primary-surface', adjustColor(primary, 82), '#e0e7ff');
+    setVar('--color-primary-surface', adjustColor(primary, 80), '#e0e7ff');
     setVar('--color-secondary', secondary, '#8b5cf6');
-    setVar('--color-secondary-light', adjustColor(secondary, 8), '#a78bfa');
-    setVar('--color-secondary-dark', adjustColor(secondary, -14), '#6d28d9');
+    setVar('--color-secondary-light', adjustColor(secondary, 20), '#a78bfa');
+    setVar('--color-secondary-dark', adjustColor(secondary, -15), '#6d28d9');
     setVar('--color-secondary-soft', adjustColor(secondary, 90), '#f5f3ff');
-    setVar('--color-secondary-surface', adjustColor(secondary, 82), '#ede9fe');
+    setVar('--color-secondary-surface', adjustColor(secondary, 80), '#ede9fe');
     setVar('--color-accent', accent, '#4f46e5');
+
+    // Also set direct hex variables for standard CSS & SVG rules
+    root.style.setProperty('--theme-primary', primary);
+    root.style.setProperty('--theme-secondary', secondary);
+    root.style.setProperty('--header-primary', primary);
+    root.style.setProperty('--header-secondary', secondary);
 
     // Update meta theme color
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
@@ -105,27 +131,23 @@ export const ThemeProvider = ({ children }) => {
   const fetchTenantBranding = async () => {
     try {
       const hasAuth = localStorage.getItem('userId') || localStorage.getItem('token');
-      // Unauthenticated users or users on login/public routes do not need protected tenant info
-      if (!hasAuth || window.location.pathname.startsWith('/login')) {
-        applyThemeColors({ primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' });
-        setLoading(false);
-        return;
-      }
 
-      // Super admins are platform-level — keep default branding, never a tenant's
+      // Super admins are platform-level — keep default platform branding
       if (localStorage.getItem('role') === 'super_admin') {
-        applyThemeColors({ primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' });
+        const platformDefaults = { primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' };
+        setTenantColors(platformDefaults);
+        applyThemeColors(platformDefaults);
         setLoading(false);
         return;
       }
 
-      // Instant hydration from cache
+      // Check instant hydration from cache
       const cached = getCachedTenantBranding();
-      if (cached?.branding) {
+      if (cached?.branding && (cached.branding.primaryColor || cached.branding.primary)) {
         const colors = {
-          primary: cached.branding.primaryColor || '#6366f1',
-          secondary: cached.branding.secondaryColor || '#8b5cf6',
-          accent: cached.branding.accentColor || '#4f46e5',
+          primary: cached.branding.primaryColor || cached.branding.primary || '#6366f1',
+          secondary: cached.branding.secondaryColor || cached.branding.secondary || '#8b5cf6',
+          accent: cached.branding.accentColor || cached.branding.accent || '#4f46e5',
           background: cached.branding.backgroundColor || '#f3f4f6',
           text: cached.branding.textColor || '#1f2937',
         };
@@ -133,15 +155,20 @@ export const ThemeProvider = ({ children }) => {
         applyThemeColors(colors);
       }
 
+      if (!hasAuth) {
+        setLoading(false);
+        return;
+      }
+
       const response = await fetchTenantInfo();
 
       if (response.data?.success) {
         const branding = response.data.data?.tenant?.branding;
-        if (branding) {
+        if (branding && (branding.primaryColor || branding.primary)) {
           const colors = {
-            primary: branding.primaryColor || '#6366f1',
-            secondary: branding.secondaryColor || '#8b5cf6',
-            accent: branding.accentColor || '#4f46e5',
+            primary: branding.primaryColor || branding.primary || '#6366f1',
+            secondary: branding.secondaryColor || branding.secondary || '#8b5cf6',
+            accent: branding.accentColor || branding.accent || '#4f46e5',
             background: branding.backgroundColor || '#f3f4f6',
             text: branding.textColor || '#1f2937',
           };
@@ -161,9 +188,9 @@ export const ThemeProvider = ({ children }) => {
     try {
       const response = await api.put('/tenant/settings', {
         branding: {
-          primaryColor: colors.primary,
-          secondaryColor: colors.secondary,
-          accentColor: colors.accent,
+          primaryColor: colors.primary || colors.primaryColor,
+          secondaryColor: colors.secondary || colors.secondaryColor,
+          accentColor: colors.accent || colors.accentColor,
         }
       });
 
@@ -190,6 +217,9 @@ export const ThemeProvider = ({ children }) => {
       loading,
       updateTheme,
       applyThemeColors,
+      refreshTheme: fetchTenantBranding,
+      toRgbTriplet,
+      adjustColor,
     }}>
       {children}
     </ThemeContext.Provider>

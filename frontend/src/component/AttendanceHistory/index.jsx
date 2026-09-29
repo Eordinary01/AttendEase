@@ -392,10 +392,11 @@ const AttendanceHistory = ({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting="Attendance History & Audit Registry"
-        meta="Comprehensive logs of classroom attendance sessions, roll records, and aggregate performance"
+        title="Attendance History & Audit Registry"
+        subtitle="Comprehensive logs of classroom attendance sessions, roll records, and aggregate performance"
+        badge={<Badge tone="primary">Audit Log</Badge>}
         actions={
           <div className="flex gap-2">
             <Button variant="subtle" size="sm" onClick={fetchHistory} leftIcon={RefreshCw} loading={loading}>
@@ -443,7 +444,7 @@ const AttendanceHistory = ({
               ? `${stats.percentage}% (Good)`
               : `${stats.percentage}% (At Risk)`
           }
-          subtext={
+          subtitle={
             stats.totalClasses > 0 && stats.percentage < 75
               ? `+${Math.max(0, Math.ceil((0.75 * stats.totalClasses - stats.presentCount) / 0.25))} needed for 75%`
               : "Meets 75% criteria"
@@ -455,17 +456,17 @@ const AttendanceHistory = ({
 
       {/* View Mode Toggle for Admin / Teacher */}
       {isStaff && (
-        <div className="flex items-center justify-between bg-surface p-2 rounded-xl border border-line">
-          <div className="text-xs font-semibold text-ink-soft px-2">
+        <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200/90 shadow-sm">
+          <div className="text-xs font-bold text-slate-500 px-2 uppercase tracking-wider">
             Display Mode:
           </div>
-          <div className="flex gap-1 bg-background p-1 rounded-lg">
+          <div className="flex gap-1.5 bg-slate-100/80 p-1 rounded-xl">
             <button
               onClick={() => setViewMode("sessions")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 viewMode === "sessions"
-                  ? "bg-surface text-primary shadow-sm"
-                  : "text-ink-soft hover:text-ink"
+                  ? "bg-white text-primary shadow-xs border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -473,10 +474,10 @@ const AttendanceHistory = ({
             </button>
             <button
               onClick={() => setViewMode("detailed")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 viewMode === "detailed"
-                  ? "bg-surface text-primary shadow-sm"
-                  : "text-ink-soft hover:text-ink"
+                  ? "bg-white text-primary shadow-xs border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <User className="w-3.5 h-3.5" />
@@ -487,15 +488,15 @@ const AttendanceHistory = ({
       )}
 
       {/* Filters Bar */}
-      <Card className="p-4">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
         <div className="grid sm:grid-cols-2 md:grid-cols-5 gap-3">
           {(showStudentSelector || isStaff) && (
             <div>
-              <label className="block text-xs font-semibold text-ink-faint uppercase mb-1">Student</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Student</label>
               <select
                 value={selectedStudent}
                 onChange={(e) => { setSelectedStudent(e.target.value); setPage(1); }}
-                className="w-full text-sm px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30"
+                className="w-full text-xs px-3 py-2 border border-slate-200 bg-white text-slate-800 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
               >
                 <option value="">All Students</option>
                 {Array.isArray(students) && students.map((s) => (
@@ -506,11 +507,11 @@ const AttendanceHistory = ({
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-ink-faint uppercase mb-1">Subject</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Subject</label>
             <select
               value={selectedSubject}
               onChange={(e) => { setSelectedSubject(e.target.value); setPage(1); }}
-              className="w-full text-sm px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30"
+              className="w-full text-xs px-3 py-2 border border-slate-200 bg-white text-slate-800 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
             >
               <option value="">All Subjects</option>
               {Array.isArray(subjects) && subjects.map((sub) => (
@@ -522,11 +523,11 @@ const AttendanceHistory = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-ink-faint uppercase mb-1">Status</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
             <select
               value={selectedStatus}
               onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
-              className="w-full text-sm px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30"
+              className="w-full text-xs px-3 py-2 border border-slate-200 bg-white text-slate-800 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
             >
               <option value="">All Statuses</option>
               <option value="present">Present</option>
@@ -536,26 +537,26 @@ const AttendanceHistory = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-ink-faint uppercase mb-1">From Date</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">From Date</label>
             <input
               type="date"
               value={fromDate}
               onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
-              className="w-full text-sm px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30"
+              className="w-full text-xs px-3 py-2 border border-slate-200 bg-white text-slate-800 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-ink-faint uppercase mb-1">To Date</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">To Date</label>
             <input
               type="date"
               value={toDate}
               onChange={(e) => { setToDate(e.target.value); setPage(1); }}
-              className="w-full text-sm px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30"
+              className="w-full text-xs px-3 py-2 border border-slate-200 bg-white text-slate-800 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium"
             />
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Attendance History Table */}
       <Card>

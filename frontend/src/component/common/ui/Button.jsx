@@ -7,13 +7,13 @@ const sizeStyles = {
 };
 
 const variantStyles = {
-  primary: 'bg-primary text-white shadow-sm hover:bg-primary-dark focus-visible:ring-primary',
-  secondary: 'bg-secondary text-white shadow-sm hover:bg-secondary-dark focus-visible:ring-secondary',
-  outline: 'border border-line bg-surface text-ink hover:bg-background hover:border-ink-faint focus-visible:ring-ink-faint',
-  ghost: 'text-ink-soft hover:bg-background hover:text-ink focus-visible:ring-ink-faint',
+  primary: 'bg-primary text-white shadow-xs hover:bg-primary-dark focus-visible:ring-primary',
+  secondary: 'bg-secondary text-white shadow-xs hover:bg-secondary-dark focus-visible:ring-secondary',
+  outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-primary/20 shadow-xs',
+  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   subtle: 'bg-primary-soft text-primary-dark hover:bg-primary-surface focus-visible:ring-primary',
-  danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-500',
-  dangerSubtle: 'bg-red-50 text-red-700 hover:bg-red-100 focus-visible:ring-red-500',
+  danger: 'bg-rose-600 text-white shadow-xs hover:bg-rose-700 focus-visible:ring-rose-500',
+  dangerSubtle: 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 focus-visible:ring-rose-500',
 };
 
 const Button = ({
@@ -31,7 +31,7 @@ const Button = ({
     <button
       disabled={disabled || loading}
       className={`
-        inline-flex items-center justify-center rounded-lg font-semibold
+        inline-flex items-center justify-center rounded-xl font-semibold font-sans
         transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
         disabled:opacity-50 disabled:cursor-not-allowed
         active:scale-[0.98]

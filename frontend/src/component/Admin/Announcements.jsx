@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Bell, Plus, Trash2, Megaphone, Clock, Filter, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, Plus, Trash2, Megaphone, Clock, Filter, Users, Sliders } from "lucide-react";
 import api from "../../utils/api";
 import { formatDateDMY } from "../../utils/dateUtils";
 import { useToast } from "../../contexts/ToastContext";
@@ -16,6 +17,7 @@ const SHORT_TERM_HOURS = 6;
 const ANNOUNCEMENT_DAYS = 7;
 
 const Announcements = () => {
+  const navigate = useNavigate();
   const { success: toastSuccess, error: toastError } = useToast();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,14 +127,24 @@ const Announcements = () => {
         greeting="Campus Broadcasts & Alerts"
         meta={`Publish announcements, critical flashes, and institutional notifications (${announcements.length} active records)`}
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowForm(true)}
-            leftIcon={Plus}
-          >
-            New Broadcast
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/admin/automated-notifications")}
+              leftIcon={Sliders}
+            >
+              Automated Alerts
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowForm(true)}
+              leftIcon={Plus}
+            >
+              New Broadcast
+            </Button>
+          </div>
         }
       />
 
@@ -270,7 +282,7 @@ const Announcements = () => {
                           : p.targetRoles.filter((r) => r !== role),
                       }));
                     }}
-                    className="rounded border-line"
+                    className="rounded border-line accent-primary"
                   />
                   <span className="capitalize">{role}s</span>
                 </label>

@@ -30,6 +30,22 @@ const updateTenantSettings = [
     .optional()
     .isInt({ min: 5, max: 480 })
     .withMessage('Session timeout must be between 5 and 480 minutes'),
+  body('settings.automatedNotifications')
+    .optional()
+    .isObject()
+    .withMessage('automatedNotifications must be an object'),
+  body('settings.automatedNotifications.consecutiveAbsenceStreak')
+    .optional()
+    .isInt({ min: 1, max: 30 })
+    .withMessage('consecutiveAbsenceStreak must be between 1 and 30'),
+  body('settings.automatedNotifications.lowAttendanceThreshold')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('lowAttendanceThreshold must be between 1 and 100'),
+  body('settings.automatedNotifications.proxyThresholdCount')
+    .optional()
+    .isInt({ min: 5, max: 500 })
+    .withMessage('proxyThresholdCount must be between 5 and 500'),
   body('branding.primaryColor')
     .optional()
     .matches(/^#[0-9A-Fa-f]{6}$/)

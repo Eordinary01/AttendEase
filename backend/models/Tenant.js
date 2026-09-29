@@ -6,7 +6,7 @@ const tenantSchema = new mongoose.Schema({
   name: { type: String, required: true },
   subdomain: { type: String, required: true, unique: true, lowercase: true },
   domain: { type: String, unique: true, sparse: true },
-  
+
   // Contact Info
   contact: {
     email: { type: String, required: true },
@@ -17,11 +17,11 @@ const tenantSchema = new mongoose.Schema({
     country: String,
     pincode: String
   },
-  
+
   // Subscription
   subscription: {
-    plan: { 
-      type: String, 
+    plan: {
+      type: String,
       enum: ['free', 'basic', 'professional', 'enterprise'],
       default: 'free'
     },
@@ -42,7 +42,7 @@ const tenantSchema = new mongoose.Schema({
     lastPaymentDate: Date,
     nextBillingDate: Date
   },
-  
+
   // Limits (cached from Plan for performance)
   limits: {
     maxStudents: { type: Number, default: 50 },
@@ -51,7 +51,7 @@ const tenantSchema = new mongoose.Schema({
     maxStorageMB: { type: Number, default: 1024 },
     features: [String]
   },
-  
+
   // Branding
   branding: {
     logo: String,
@@ -73,7 +73,7 @@ const tenantSchema = new mongoose.Schema({
     nirfEligible: { type: Boolean, default: false },
     aicteApproved: { type: Boolean, default: false },
   },
-  
+
   // Settings
   settings: {
     language: { type: String, default: 'en' },
@@ -115,8 +115,22 @@ const tenantSchema = new mongoose.Schema({
       endDate: { type: Date, required: true },
       isActive: { type: Boolean, default: true },
     }],
+    // Automated notification policies & thresholds per tenant
+    automatedNotifications: {
+      enableAbsenceEscalations: { type: Boolean, default: true },
+      consecutiveAbsenceStreak: { type: Number, default: 3 },
+      enableLowAttendanceWarning: { type: Boolean, default: true },
+      lowAttendanceThreshold: { type: Number, default: 75 },
+      enableParentEmailNotifications: { type: Boolean, default: true },
+      enableAdminEscalations: { type: Boolean, default: true },
+      enableProxyAlerts: { type: Boolean, default: true },
+      proxyThresholdCount: { type: Number, default: 40 },
+      enablePromotionScannerAlerts: { type: Boolean, default: true },
+      enableFeeDueReminders: { type: Boolean, default: true },
+      enableExamScheduleAlerts: { type: Boolean, default: true },
+    },
   },
-  
+
   // Stats (denormalized for quick access)
   stats: {
     totalStudents: { type: Number, default: 0 },
@@ -125,13 +139,13 @@ const tenantSchema = new mongoose.Schema({
     totalSubjects: { type: Number, default: 0 },
     storageUsedMB: { type: Number, default: 0 }
   },
-  
+
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   isActive: { type: Boolean, default: true },
   isDemo: { type: Boolean, default: false },
   isSandbox: { type: Boolean, default: false },
   deletedAt: Date
-  
+
 }, { timestamps: true });
 
 // Indexes
@@ -146,41 +160,41 @@ tenantSchema.index({ 'subscription.endDate': 1 });
  * Update tenant statistics by counting documents from related collections
  * This denormalizes counts for performance optimization
  */
-tenantSchema.methods.updateStats = async function() {
+tenantSchema.methods.updateStats = async function () {
   try {
     logger.debug(`Updating stats for tenant: ${this.name}`);
-    
+
     // Import models dynamically to avoid circular dependencies
     const User = mongoose.model('User');
-    
+
     // Get counts for different roles
     const [studentCount, teacherCount, adminCount] = await Promise.all([
-      User.countDocuments({ 
-        tenantId: this._id, 
+      User.countDocuments({
+        tenantId: this._id,
         role: 'student',
         isActive: { $ne: false }
       }),
-      User.countDocuments({ 
-        tenantId: this._id, 
+      User.countDocuments({
+        tenantId: this._id,
         role: 'teacher',
         isActive: { $ne: false }
       }),
-      User.countDocuments({ 
-        tenantId: this._id, 
+      User.countDocuments({
+        tenantId: this._id,
         role: 'admin',
         isActive: { $ne: false }
       })
     ]);
-    
+
     // Update stats
     this.stats.totalStudents = studentCount;
     this.stats.totalTeachers = teacherCount;
     this.stats.totalAdmins = adminCount;
-    
+
     // If you have Subject or Course model, update those too
     try {
       const Subject = mongoose.model('Subject');
-      const subjectCount = await Subject.countDocuments({ 
+      const subjectCount = await Subject.countDocuments({
         tenantId: this._id,
         isActive: { $ne: false }
       });
@@ -189,19 +203,19 @@ tenantSchema.methods.updateStats = async function() {
       // Subject model might not exist yet, skip gracefully
       logger.debug('Subject model not found, skipping subject count');
     }
-    
+
     // Update the updatedAt timestamp
     this.updatedAt = new Date();
-    
+
     // Save the tenant document
     await this.save();
-    
+
     logger.debug(`Stats updated for tenant ${this.name}`, {
       students: studentCount,
       teachers: teacherCount,
       admins: adminCount
     });
-    
+
     return this;
   } catch (error) {
     logger.error(`Error updating stats for tenant ${this._id}`, { error: error.message });
@@ -209,7 +223,7 @@ tenantSchema.methods.updateStats = async function() {
   }
 };
 
-tenantSchema.statics.updateAllStats = async function() {
+tenantSchema.statics.updateAllStats = async function () {
   try {
     const tenants = await this.find({ isActive: true });
     logger.info(`Updating stats for ${tenants.length} tenants`);
@@ -221,7 +235,7 @@ tenantSchema.statics.updateAllStats = async function() {
     throw error;
   }
 };
-tenantSchema.pre('save', function(next) {
+tenantSchema.pre('save', function (next) {
   // Ensure stats object exists
   if (!this.stats) {
     this.stats = {
@@ -232,7 +246,7 @@ tenantSchema.pre('save', function(next) {
       storageUsedMB: 0
     };
   }
-  
+
   // Ensure limits object exists with defaults
   if (!this.limits) {
     this.limits = {
@@ -243,12 +257,12 @@ tenantSchema.pre('save', function(next) {
       features: []
     };
   }
-  
+
   next();
 });
 
 // ========== ADD POST-SAVE HOOK FOR INITIAL STATS UPDATE ==========
-tenantSchema.post('save', async function(doc, next) {
+tenantSchema.post('save', async function (doc, next) {
   // If this is a new tenant, initialize stats
   if (doc.isNew) {
     try {

@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Network,
   Plus,
-  Pencil,
   Trash2,
   Save,
   GraduationCap,
@@ -14,6 +12,10 @@ import {
   TrendingUp,
   UserCheck,
   Calendar,
+  RefreshCw,
+  Play,
+  History,
+  Pencil,
 } from "lucide-react";
 import api from "../../utils/api";
 import Modal from "../common/ui/Modal";
@@ -22,9 +24,9 @@ import Card from "../common/ui/Card";
 import Badge from "../common/ui/Badge";
 import DashboardHeader from "../common/ui/DashboardHeader";
 import Input, { Select } from "../common/ui/Input";
-import EmptyState from "../common/ui/EmptyState";
 import Skeleton from "../common/ui/Skeleton";
 import BulkImportModal from "../common/ui/BulkImportModal";
+import EmptyState from "../common/ui/EmptyState";
 
 const emptyBranch = () => ({ name: "", code: "", durationYears: 3, totalSemesters: 6, feeAmount: "" });
 const emptyCourseForm = () => ({
@@ -73,10 +75,19 @@ const AcademicStructure = () => {
   const [courses, setCourses] = useState([]);
   const [structure, setStructure] = useState({ semestersPerYear: 2, autoPromote: true, academicStartMonth: 5 });
   const [summary, setSummary] = useState({ courses: 0, students: 0, studentBySemester: {} });
-  const [preview, setPreview] = useState({ eligible: [], skipped: [], eligibleCount: 0, skippedCount: 0, graduatingCount: 0 });
+  const [preview, setPreview] = useState({ eligible: [], skipped: [], eligibleCount: 0, skippedCount: 0, graduatingCount: 0, missingAdmissionYearCount: 0 });
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [bgJob, setBgJob] = useState(null); // { jobId, status, progress, result, failedReason }
+  const bgPollIntervalRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (bgPollIntervalRef.current) clearInterval(bgPollIntervalRef.current);
+    };
+  }, []);
+
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -86,6 +97,14 @@ const AcademicStructure = () => {
   const [form, setForm] = useState(emptyCourseForm());
   const [saving, setSaving] = useState(false);
 
+  // Audit Logs and Course Assignment
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [showBulkAssignCourse, setShowBulkAssignCourse] = useState(false);
+  const [assignTargetCourse, setAssignTargetCourse] = useState("");
+  const [assignTargetBranch, setAssignTargetBranch] = useState("");
+  const [assignSelectedStudents, setAssignSelectedStudents] = useState(new Set());
+  const [assigning, setAssigning] = useState(false);
+
   const flash = (type, msg) => {
     if (type === "error") setError(msg); else setSuccess(msg);
     setTimeout(() => { if (type === "error") setError(null); else setSuccess(null); }, 4000);
@@ -93,15 +112,17 @@ const AcademicStructure = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [coursesRes, structureRes, previewRes] = await Promise.allSettled([
+      const [coursesRes, structureRes, previewRes, auditRes] = await Promise.allSettled([
         api.get("/academic/courses"),
         api.get("/academic/structure"),
         api.get("/academic/promotion-preview"),
+        api.get("/academic/promote/audit"),
       ]);
       if (coursesRes.status === "fulfilled") setCourses(coursesRes.value.data?.data || []);
       if (structureRes.status === "fulfilled") setStructure(structureRes.value.data?.data?.structure || { semestersPerYear: 2, autoPromote: true, academicStartMonth: 5 });
       if (structureRes.status === "fulfilled") setSummary(structureRes.value.data?.data?.summary || { courses: 0, students: 0, studentBySemester: {} });
       if (previewRes.status === "fulfilled") setPreview(previewRes.value.data?.data || { eligible: [], skipped: [], eligibleCount: 0, skippedCount: 0, graduatingCount: 0 });
+      if (auditRes.status === "fulfilled") setAuditLogs(auditRes.value.data?.data || []);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load academic structure");
     } finally {
@@ -114,13 +135,56 @@ const AcademicStructure = () => {
   const loadPreview = async () => {
     setPreviewLoading(true);
     try {
-      const res = await api.get("/academic/promotion-preview");
-      setPreview(res.data?.data || preview);
-      setSelectedIds(new Set());
+      const [res, auditRes] = await Promise.allSettled([
+        api.get("/academic/promotion-preview"),
+        api.get("/academic/promote/audit"),
+      ]);
+      if (res.status === "fulfilled") {
+        setPreview(res.value.data?.data || preview);
+        setSelectedIds(new Set());
+      }
+      if (auditRes.status === "fulfilled") {
+        setAuditLogs(auditRes.value.data?.data || []);
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load promotion preview");
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const handleBulkAssignCourse = async (e) => {
+    e.preventDefault();
+    if (!assignTargetCourse) {
+      flash("error", "Please select a target course");
+      return;
+    }
+    const studentIds = assignSelectedStudents.size > 0
+      ? Array.from(assignSelectedStudents)
+      : (preview.missingCourseStudents || []).map(s => s._id);
+
+    if (studentIds.length === 0) {
+      flash("error", "No students selected to assign");
+      return;
+    }
+
+    setAssigning(true);
+    try {
+      const res = await api.post("/academic/students/bulk-assign-course", {
+        studentIds,
+        courseId: assignTargetCourse,
+        branch: assignTargetBranch || undefined,
+      });
+      flash("success", res.data?.message || "Course assigned successfully");
+      setShowBulkAssignCourse(false);
+      setAssignTargetCourse("");
+      setAssignTargetBranch("");
+      setAssignSelectedStudents(new Set());
+      await Promise.all([loadAll(), loadPreview()]);
+    } catch (err) {
+      flash("error", err.response?.data?.message || "Failed to assign course");
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -278,6 +342,67 @@ const AcademicStructure = () => {
       setPromoting(false);
     }
   };
+
+  const promoteBackground = async () => {
+    if (preview.eligibleCount === 0) return;
+    const studentIds = selectedIds.size > 0 ? Array.from(selectedIds) : undefined;
+    const scope = studentIds ? `${selectedIds.size} selected` : `all ${preview.eligibleCount}`;
+    if (!window.confirm(`Queue background promotion for ${scope} student(s)?`)) return;
+
+    try {
+      const res = await api.post("/academic/promote/batch", { studentIds });
+      if (res.data?.fallbackSync || !res.data?.jobId) {
+        flash("info", res.data?.message || "Queue unavailable; executing directly...");
+        promote();
+        return;
+      }
+
+      const jobId = res.data.jobId;
+      setBgJob({ jobId, status: "queued", progress: 0 });
+      flash("success", "Background promotion queued. Monitoring progress...");
+
+      if (bgPollIntervalRef.current) clearInterval(bgPollIntervalRef.current);
+
+      bgPollIntervalRef.current = setInterval(async () => {
+        try {
+          const statusRes = await api.get(`/academic/promote/status/${jobId}`);
+          const job = statusRes.data?.data;
+          if (!job) return;
+
+          setBgJob({
+            jobId: job.jobId,
+            status: job.state,
+            progress: typeof job.progress === "number" ? job.progress : 0,
+            result: job.result,
+            failedReason: job.failedReason,
+          });
+
+          if (job.state === "completed") {
+            clearInterval(bgPollIntervalRef.current);
+            bgPollIntervalRef.current = null;
+            flash(
+              "success",
+              `Batch promotion complete: ${job.result?.promoted || 0} promoted, ${job.result?.graduated || 0} graduated.`
+            );
+            await Promise.all([loadAll(), loadPreview()]);
+            setTimeout(() => setBgJob(null), 5000);
+          } else if (job.state === "failed") {
+            clearInterval(bgPollIntervalRef.current);
+            bgPollIntervalRef.current = null;
+            flash("error", `Promotion job failed: ${job.failedReason || "Unknown error"}`);
+            setTimeout(() => setBgJob(null), 5000);
+          }
+        } catch (pollErr) {
+          console.error("Poll error", pollErr);
+        }
+      }, 1500);
+    } catch (err) {
+      flash("error", err.response?.data?.message || "Failed to queue background promotion");
+    }
+  };
+
+  const targetCourseObj = courses.find((c) => String(c._id) === String(assignTargetCourse));
+  const targetBranches = targetCourseObj?.branches?.filter((b) => b.isActive !== false) || [];
 
   if (loading) {
     return (
@@ -447,12 +572,22 @@ const AcademicStructure = () => {
         titleRight={<Badge tone="info">Auto-increment</Badge>}
         actions={
           preview.eligibleCount > 0 && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={toggleSelectAll}>
                 {selectedIds.size === preview.eligible.length ? "Deselect All" : "Select All"}
               </Button>
+              <Button
+                variant="subtle"
+                size="sm"
+                leftIcon={Play}
+                loading={bgJob?.status === "active" || bgJob?.status === "queued"}
+                onClick={promoteBackground}
+                title="Process promotion via background worker queue"
+              >
+                Queue in Background
+              </Button>
               <Button size="sm" leftIcon={UserCheck} loading={promoting} onClick={promote}>
-                Promote {selectedIds.size > 0 ? `${selectedIds.size} selected` : "All Eligible"}
+                Promote {selectedIds.size > 0 ? `${selectedIds.size} selected` : "All"}
               </Button>
             </div>
           )
@@ -461,6 +596,61 @@ const AcademicStructure = () => {
         <p className="text-sm text-ink-soft mb-4">
           Students advance one semester per term, computed from their admission year and your semester rules. Students at their program&apos;s final semester are automatically graduated instead.
         </p>
+
+        {preview.missingAdmissionYearCount > 0 && (
+          <div className="mb-4 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 flex items-start sm:items-center gap-3 text-sm">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5 sm:mt-0" />
+            <div className="flex-1">
+              <span className="font-semibold">{preview.missingAdmissionYearCount} student(s) have no admission year recorded</span> — they are skipped during promotion runs. Add admission years in their student profile to enable automated semester progression.
+            </div>
+          </div>
+        )}
+
+        {preview.missingCourseCount > 0 && (
+          <div className="mb-4 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+            <div className="flex items-start sm:items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5 sm:mt-0" />
+              <div>
+                <span className="font-semibold">{preview.missingCourseCount} student(s) have no course assigned</span> — they are bypassed during semester promotion calculations. Assign them to a course to enable automated term progression.
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAssignSelectedStudents(new Set((preview.missingCourseStudents || []).map((s) => s._id)));
+                setShowBulkAssignCourse(true);
+              }}
+              className="shrink-0"
+            >
+              Assign Course
+            </Button>
+          </div>
+        )}
+
+        {bgJob && (
+          <div className="mb-4 p-4 rounded-xl border border-primary/30 bg-primary/5 text-ink">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <div className="flex items-center gap-2 font-medium">
+                <RefreshCw className={`w-4 h-4 text-primary ${bgJob.status !== 'completed' && bgJob.status !== 'failed' ? 'animate-spin' : ''}`} />
+                <span>
+                  {bgJob.status === "completed"
+                    ? "Batch Promotion Complete!"
+                    : bgJob.status === "failed"
+                    ? "Batch Promotion Failed"
+                    : `Processing Promotion in Background (${bgJob.status})...`}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-primary">{bgJob.progress}%</span>
+            </div>
+            <div className="w-full bg-line rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-primary h-2 transition-all duration-300 rounded-full"
+                style={{ width: `${Math.max(5, bgJob.progress)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {previewLoading ? (
           <Skeleton rows={3} />
@@ -529,6 +719,88 @@ const AcademicStructure = () => {
               </details>
             )}
           </>
+        )}
+      </Card>
+
+      {/* Promotion Audit History */}
+      <Card
+        title="Promotion Audit History"
+        icon={History}
+        titleRight={<Badge tone="neutral">{auditLogs.length} run(s) recorded</Badge>}
+      >
+        <p className="text-sm text-ink-soft mb-4">
+          Complete historical ledger of semester promotion executions across manual runs, background worker batches, and automatic daily scanners.
+        </p>
+
+        {auditLogs.length === 0 ? (
+          <p className="text-sm text-ink-soft py-4 text-center">No past promotion runs recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto border border-line rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-background/70 text-left text-xs uppercase tracking-wider text-ink-faint">
+                <tr>
+                  <th className="px-3 py-2.5">Date & Time</th>
+                  <th className="px-3 py-2.5">Execution Type</th>
+                  <th className="px-3 py-2.5">Promoted</th>
+                  <th className="px-3 py-2.5">Graduated</th>
+                  <th className="px-3 py-2.5">Eligible / Skipped</th>
+                  <th className="px-3 py-2.5">Initiated By</th>
+                  <th className="px-3 py-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {auditLogs.map((log) => (
+                  <tr key={log._id} className="bg-surface hover:bg-background/40 transition-colors">
+                    <td className="px-3 py-2.5 font-medium text-ink whitespace-nowrap">
+                      {new Date(log.executedAt || log.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Badge
+                        tone={
+                          log.type === "auto_scanner"
+                            ? "primary"
+                            : log.type === "background_batch"
+                            ? "info"
+                            : "neutral"
+                        }
+                      >
+                        {log.type === "auto_scanner"
+                          ? "Auto Scanner"
+                          : log.type === "background_batch"
+                          ? "Background Job"
+                          : "Manual Batch"}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                      {log.promotedCount || 0}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold text-sky-600 dark:text-sky-400">
+                      {log.graduatedCount || 0}
+                    </td>
+                    <td className="px-3 py-2.5 text-ink-soft">
+                      {log.eligibleCount || 0} / {log.skippedCount || 0}
+                    </td>
+                    <td className="px-3 py-2.5 text-ink-soft whitespace-nowrap">
+                      {log.runByName || "System"}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Badge
+                        tone={
+                          log.status === "completed"
+                            ? "success"
+                            : log.status === "partial"
+                            ? "warning"
+                            : "danger"
+                        }
+                      >
+                        {log.status || "completed"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -606,6 +878,103 @@ const AcademicStructure = () => {
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
             <Button type="submit" loading={saving} leftIcon={Save}>{editingCourse ? "Update Course" : "Create Course"}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Bulk Assign Course Modal */}
+      <Modal
+        isOpen={showBulkAssignCourse}
+        onClose={() => setShowBulkAssignCourse(false)}
+        title="Assign Course to Students"
+        subtitle="Select a course and branch for unassigned students"
+        size="md"
+        error={error}
+      >
+        <form onSubmit={handleBulkAssignCourse} className="space-y-4">
+          <p className="text-xs text-ink-soft">
+            Assigning a course sets the academic foundation (branches, duration, and total semesters) needed for automated semester advancement.
+          </p>
+
+          <div>
+            <Select
+              label="Target Course *"
+              value={assignTargetCourse}
+              onChange={(e) => {
+                setAssignTargetCourse(e.target.value);
+                setAssignTargetBranch("");
+              }}
+              required
+            >
+              <option value="">Select course</option>
+              {courses.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name} ({c.code})
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {targetBranches.length > 0 && (
+            <div>
+              <Select
+                label="Branch / Stream (Optional)"
+                value={assignTargetBranch}
+                onChange={(e) => setAssignTargetBranch(e.target.value)}
+              >
+                <option value="">Default (no specific branch)</option>
+                {targetBranches.map((b, i) => (
+                  <option key={b.name + i} value={b.name}>
+                    {b.name} ({b.totalSemesters} semesters)
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-line/60">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-ink">
+                Target Students ({(preview.missingCourseStudents || []).length} unassigned)
+              </span>
+              <span className="text-xs text-ink-soft">
+                {assignSelectedStudents.size} selected
+              </span>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1.5 border border-line rounded-lg p-2 bg-background/50 text-xs">
+              {(preview.missingCourseStudents || []).map((s) => (
+                <label
+                  key={s._id}
+                  className="flex items-center gap-2 p-1 rounded hover:bg-surface cursor-pointer text-ink"
+                >
+                  <input
+                    type="checkbox"
+                    checked={assignSelectedStudents.has(s._id)}
+                    onChange={() => {
+                      setAssignSelectedStudents((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s._id)) next.delete(s._id);
+                        else next.add(s._id);
+                        return next;
+                      });
+                    }}
+                    className="w-3.5 h-3.5 accent-primary"
+                  />
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-ink-soft font-mono">({s.rollNo})</span>
+                  <span className="text-ink-faint ml-auto">Sem {s.semester || 1}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-line">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowBulkAssignCourse(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" loading={assigning} leftIcon={Check}>
+              Assign Course ({assignSelectedStudents.size})
+            </Button>
           </div>
         </form>
       </Modal>

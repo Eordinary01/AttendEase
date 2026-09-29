@@ -90,14 +90,23 @@ export default function ParentDashboard() {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting={`${studentName}'s Academic Portal`}
-        meta="Parent monitoring overview — verified attendance, examination progress, subject roster, and faculty directory"
+        title={`${studentName}'s Academic Portal`}
+        subtitle="Parent monitoring overview — verified attendance, examination progress, subject roster, and faculty directory"
+        badge={
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+            (att.percentage || 0) >= 75
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}>
+            {att.percentage || 0}% Compliance
+          </span>
+        }
       />
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-        <StatCard label="Overall Attendance" value={`${att.percentage || 0}%`} icon={TrendingUp} tone="success" />
+        <StatCard label="Overall Attendance" value={`${att.percentage || 0}%`} icon={TrendingUp} tone={att.percentage >= 75 ? "success" : "warning"} />
         <StatCard label="Total Classes" value={att.totalClasses || 0} icon={BookOpen} tone="primary" />
         <StatCard label="Present Logged" value={att.presentCount || 0} icon={CheckCircle} tone="success" />
         <StatCard label="Absent Logged" value={att.absentCount || 0} icon={XCircle} tone="danger" />
@@ -212,21 +221,21 @@ export default function ParentDashboard() {
               {teachers.map(t => (
                 <div key={t.id} className="p-4 bg-background rounded-lg border border-line">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary-soft flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 rounded-xl bg-primary-soft text-primary border border-primary-surface flex items-center justify-center shrink-0 shadow-xs">
+                      <User className="w-5 h-5" />
                     </div>
                     <div>
-                      <p className="font-semibold text-ink">{t.name}</p>
-                      <div className="flex flex-wrap gap-3 text-xs text-ink-soft mt-1">
-                        {t.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{t.email}</span>}
-                        {t.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{t.phone}</span>}
+                      <p className="font-bold text-sm text-slate-900">{t.name}</p>
+                      <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-1">
+                        {t.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3 text-slate-400" />{t.email}</span>}
+                        {t.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3 text-slate-400" />{t.phone}</span>}
                       </div>
                     </div>
                   </div>
                   {t.subjects?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
                       {t.subjects.map(s => (
-                        <span key={s.name} className="px-2 py-0.5 bg-primary-soft text-primary-dark rounded text-xs">{s.name}</span>
+                        <span key={s.name} className="px-2.5 py-0.5 bg-primary-soft text-primary-dark border border-primary-surface rounded-lg text-xs font-semibold">{s.name}</span>
                       ))}
                     </div>
                   )}

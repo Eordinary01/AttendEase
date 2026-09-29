@@ -964,8 +964,7 @@ const AssignSubjects = () => {
                             type="checkbox"
                             checked={selectedSectionFilter.includes(section)}
                             onChange={() => toggleSectionFilter(section)}
-                            className="rounded focus:ring-primary/50"
-                            style={{ accentColor: themeColors.primary }}
+                            className="rounded focus:ring-primary/50 accent-primary"
                           />
                           <span>Section {section}</span>
                         </label>
@@ -995,12 +994,7 @@ const AssignSubjects = () => {
               {selectedSectionFilter.map(section => (
                 <span
                   key={section}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border"
-                  style={{
-                    backgroundColor: `${themeColors.primary}15`,
-                    color: themeColors.primary,
-                    borderColor: `${themeColors.primary}30`
-                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-primary-soft text-primary-dark border border-primary-surface"
                 >
                   Sec {section}
                   <button
@@ -1033,9 +1027,9 @@ const AssignSubjects = () => {
                   title={`Sort ${sortOrder === "asc" ? "Descending" : "Ascending"}`}
                 >
                   {sortOrder === "asc" ? (
-                    <ChevronUp className="w-4 h-4" style={{ color: themeColors.primary }} />
+                    <ChevronUp className="w-4 h-4 text-primary" />
                   ) : (
-                    <ChevronDown className="w-4 h-4" style={{ color: themeColors.primary }} />
+                    <ChevronDown className="w-4 h-4 text-primary" />
                   )}
                 </button>
               </div>
@@ -1105,57 +1099,31 @@ const AssignSubjects = () => {
               }}
             >
               <Card className="overflow-hidden">
-                <div
-                  className="p-6 border-b"
-                  style={{
-                    background: `linear-gradient(135deg, ${themeColors.lighter}, #ffffff)`,
-                    borderColor: `${themeColors.primary}20`
-                  }}
-                >
+                <div className="p-5 sm:p-6 border-b border-slate-100 bg-white">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1">
-                      <div
-                        className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{
-                          backgroundColor: `${themeColors.primary}20`,
-                          color: themeColors.primary
-                        }}
-                      >
-                        <span className="font-bold text-xl">
-                          {group.teacher?.name?.charAt(0)?.toUpperCase()}
-                        </span>
+                      <div className="w-12 h-12 rounded-xl bg-primary-soft text-primary border border-primary-surface flex items-center justify-center shrink-0 font-bold text-lg shadow-xs">
+                        {group.teacher?.name?.charAt(0)?.toUpperCase()}
                       </div>
                       <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-3 mb-2">
-                          <h3 className="font-bold text-xl text-ink">
+                        <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
+                          <h3 className="font-bold text-lg text-slate-900">
                             {group.teacher?.name}
                           </h3>
-                          <span className="px-3 py-1 bg-background text-ink-soft rounded-full text-sm border border-line">
+                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-medium border border-slate-200/80">
                             {group.teacher?.email}
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3 mb-3">
-                          <span className="text-lg font-semibold" style={{ color: themeColors.primary }}>
+                        <div className="flex flex-wrap items-center gap-2.5 mb-3">
+                          <span className="text-base font-bold text-primary">
                             {group.subject?.subjectName}
                           </span>
-                          <span
-                            className="px-3 py-0.5 rounded-full text-xs font-semibold"
-                            style={{
-                              backgroundColor: `${themeColors.primary}20`,
-                              color: themeColors.primary
-                            }}
-                          >
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary-soft text-primary-dark border border-primary-surface">
                             {group.subject?.subjectCode}
                           </span>
                           {group.subject?.courseCode && (
-                            <span
-                              className="px-2.5 py-0.5 rounded-md text-xs font-semibold uppercase"
-                              style={{
-                                backgroundColor: `${themeColors.secondary}20`,
-                                color: themeColors.secondary,
-                              }}
-                            >
+                            <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase bg-secondary-soft text-secondary-dark border border-secondary-surface">
                               {group.subject.courseCode}
                             </span>
                           )}
@@ -1163,7 +1131,7 @@ const AssignSubjects = () => {
                             const semNum = parseInt(String(group.subject.semester).replace(/\D/g, ""), 10);
                             const year = group.subject.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
                             return (
-                              <span className="text-sm text-ink-soft font-medium">
+                              <span className="text-xs text-slate-500 font-medium">
                                 Sem {group.subject.semester}{year ? ` (Yr ${year})` : ""}
                               </span>
                             );
@@ -1171,29 +1139,24 @@ const AssignSubjects = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4">
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {group.sections.map(section => (
                               <span
                                 key={section}
-                                className="px-4 py-1.5 rounded-full text-sm font-medium border"
-                                style={{
-                                  backgroundColor: `${themeColors.primary}20`,
-                                  color: themeColors.primary,
-                                  borderColor: `${themeColors.primary}30`
-                                }}
+                                className="px-2.5 py-1 rounded-full text-xs font-bold bg-primary-soft text-primary-dark border border-primary-surface"
                               >
                                 Section {section}
                               </span>
                             ))}
                           </div>
 
-                          <div className="flex items-center gap-3 text-sm text-ink-soft">
+                          <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
                             <span className="flex items-center gap-1">
-                              <Calendar className="w-4 h-4" style={{ color: themeColors.primary }} />
+                              <Calendar className="w-3.5 h-3.5 text-primary" />
                               {formatDateDMY(group.lastAssignedDate)}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Users className="w-4 h-4" style={{ color: themeColors.primary }} />
+                              <Users className="w-3.5 h-3.5 text-primary" />
                               {group.totalStudentsUpdated} students
                             </span>
                           </div>
@@ -1202,36 +1165,34 @@ const AssignSubjects = () => {
                     </div>
 
                     <div className="flex items-center gap-2 md:flex-col md:items-end">
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5">
                         <button
                           onClick={() => handleViewDetails(group)}
-                          className="p-2 rounded-lg transition hover:bg-opacity-20"
-                          style={{ color: themeColors.primary }}
+                          className="p-2 rounded-xl text-primary hover:bg-primary-soft transition"
                           title="View details"
                         >
-                          <Eye className="w-5 h-5" />
+                          <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleEdit(group)}
-                          className="p-2 rounded-lg transition hover:bg-opacity-20"
-                          style={{ color: themeColors.primary }}
+                          className="p-2 rounded-xl text-primary hover:bg-primary-soft transition"
                           title="Edit assignment"
                         >
-                          <Edit className="w-5 h-5" />
+                          <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => toggleGroupExpand(group.id)}
-                          className="p-2 text-ink-soft hover:bg-background rounded-lg transition"
+                          className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl transition"
                           title={expandedGroups.has(group.id) ? "Show less" : "Show all assignments"}
                         >
                           {expandedGroups.has(group.id) ? (
-                            <ChevronUp className="w-5 h-5" />
+                            <ChevronUp className="w-4 h-4" />
                           ) : (
-                            <ChevronDown className="w-5 h-5" />
+                            <ChevronDown className="w-4 h-4" />
                           )}
                         </button>
                       </div>
-                      <span className="text-xs text-ink-faint">
+                      <span className="text-xs text-slate-400 font-medium">
                         {group.assignments.length} assignment{group.assignments.length !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -1241,7 +1202,7 @@ const AssignSubjects = () => {
                 {expandedGroups.has(group.id) && (
                   <div className="p-4 bg-background space-y-3">
                     <h4 className="text-sm font-medium text-ink-soft mb-2 flex items-center gap-2">
-                      <Calendar className="w-4 h-4" style={{ color: themeColors.primary }} />
+                      <Calendar className="w-4 h-4 text-primary" />
                       Assignment History
                     </h4>
                     {group.assignments.map((assignment, index) => (
@@ -1250,13 +1211,7 @@ const AssignSubjects = () => {
                         className="bg-surface rounded-lg p-4 flex items-center justify-between hover:shadow-card transition"
                       >
                         <div className="flex items-center gap-4">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center"
-                            style={{
-                              backgroundColor: `${themeColors.primary}20`,
-                              color: themeColors.primary
-                            }}
-                          >
+                          <div className="w-7 h-7 rounded-lg bg-primary-soft text-primary border border-primary-surface flex items-center justify-center font-bold text-xs">
                             <span className="font-medium">
                               {index + 1}
                             </span>
@@ -1417,16 +1372,10 @@ const AssignSubjects = () => {
             const semNum = parseInt(String(selectedSub.semester || "").replace(/\D/g, ""), 10);
             const year = selectedSub.year || (!isNaN(semNum) && semNum > 0 ? Math.ceil(semNum / 2) : null);
             return (
-              <div
-                className="p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-sm"
-                style={{
-                  backgroundColor: themeColors.lighter,
-                  borderColor: `${themeColors.primary}30`
-                }}
-              >
+              <div className="p-3.5 rounded-xl border border-primary-surface bg-primary-soft flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <GraduationCap className="w-4 h-4" style={{ color: themeColors.primary }} />
-                  <span className="font-semibold" style={{ color: themeColors.primary }}>
+                  <GraduationCap className="w-4 h-4 text-primary" />
+                  <span className="font-bold text-primary">
                     Course: {selectedSub.courseCode || "Generic"}
                   </span>
                   {selectedSub.branch && (
@@ -1463,8 +1412,8 @@ const AssignSubjects = () => {
               />
               <Button
                 type="button"
+                variant="primary"
                 onClick={handleAddSection}
-                style={{ backgroundColor: themeColors.primary }}
               >
                 Add
               </Button>
@@ -1536,11 +1485,7 @@ const AssignSubjects = () => {
                   {selectedSections.map(section => (
                     <span
                       key={section}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm"
-                      style={{
-                        backgroundColor: `${themeColors.primary}20`,
-                        color: themeColors.primary
-                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary-soft text-primary-dark border border-primary-surface"
                     >
                       {section}
                       <button
@@ -1569,14 +1514,8 @@ const AssignSubjects = () => {
             )}
           </div>
 
-          <div
-            className="p-4 rounded-lg"
-            style={{
-              backgroundColor: `${themeColors.primary}10`,
-              border: `1px solid ${themeColors.primary}20`
-            }}
-          >
-            <p className="text-sm flex items-center gap-2" style={{ color: themeColors.primary }}>
+          <div className="p-3.5 rounded-xl bg-primary-soft border border-primary-surface">
+            <p className="text-xs text-primary font-medium flex items-center gap-2">
               <BookMarked className="w-4 h-4" />
               Note: Subject will be assigned to the selected teacher for all chosen sections
             </p>
@@ -1595,7 +1534,6 @@ const AssignSubjects = () => {
               type="submit"
               disabled={!formData.teacherId || !formData.subjectId || selectedSections.length === 0 || submitting}
               loading={submitting}
-              style={{ backgroundColor: themeColors.primary }}
             >
               {submitting
                 ? (editingGroup ? "Updating Assignment..." : "Assigning Subject...")
@@ -1610,16 +1548,8 @@ const AssignSubjects = () => {
         {selectedGroup && (
           <div className="space-y-6">
             <div className="flex items-center gap-4">
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center"
-                style={{
-                  backgroundColor: `${themeColors.primary}20`,
-                  color: themeColors.primary
-                }}
-              >
-                <span className="text-2xl font-semibold">
-                  {selectedGroup.teacher?.name?.charAt(0)?.toUpperCase()}
-                </span>
+              <div className="w-14 h-14 rounded-2xl bg-primary-soft text-primary border border-primary-surface flex items-center justify-center font-bold text-xl shadow-xs">
+                {selectedGroup.teacher?.name?.charAt(0)?.toUpperCase()}
               </div>
               <div>
                 <h2 className="text-xl font-bold text-ink">{selectedGroup.teacher?.name}</h2>
@@ -1646,11 +1576,7 @@ const AssignSubjects = () => {
                   {selectedGroup.sections.map(section => (
                     <span
                       key={section}
-                      className="px-3 py-1 rounded-full text-sm"
-                      style={{
-                        backgroundColor: `${themeColors.primary}20`,
-                        color: themeColors.primary
-                      }}
+                      className="px-3 py-1 rounded-full text-xs font-bold bg-primary-soft text-primary-dark border border-primary-surface"
                     >
                       Section {section}
                     </span>
@@ -1695,7 +1621,7 @@ const AssignSubjects = () => {
                   <div key={assignment._id} className="flex items-center justify-between p-3 bg-surface rounded-lg border border-line">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-medium text-ink-faint">#{idx + 1}</span>
-                      <span className="text-sm font-medium" style={{ color: themeColors.primary }}>Section {assignment.section}</span>
+                      <span className="text-xs font-bold text-primary">Section {assignment.section}</span>
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-xs text-ink-faint">

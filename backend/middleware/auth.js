@@ -149,17 +149,29 @@ const authenticateToken = async (req, res, next) => {
           }
 
           if (subscription.plan === 'free' && subscription.trialEndsAt && new Date(subscription.trialEndsAt) < new Date()) {
-            await Tenant.findByIdAndUpdate(user.tenantId, {
-              'subscription.status': 'expired'
-            });
-            await cache.del(cacheKey);
+            const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
+            const trialEnd = new Date(subscription.trialEndsAt).getTime();
+            const now = Date.now();
 
-            return res.status(403).json({
-              success: false,
-              message: 'Your trial has expired. Please upgrade to continue.',
-              upgradeRequired: true,
-              subscriptionStatus: 'expired'
-            });
+            if (now < trialEnd + GRACE_PERIOD_MS) {
+              // Within 3-day grace period: allow access but tag grace period state
+              subscription.isInGracePeriod = true;
+              subscription.gracePeriodRemainingMs = (trialEnd + GRACE_PERIOD_MS) - now;
+              subscription.graceDaysLeft = Math.max(1, Math.ceil(subscription.gracePeriodRemainingMs / (24 * 60 * 60 * 1000)));
+            } else {
+              // Grace period exceeded: hard lockout
+              await Tenant.findByIdAndUpdate(user.tenantId, {
+                'subscription.status': 'expired'
+              });
+              await cache.del(cacheKey);
+
+              return res.status(403).json({
+                success: false,
+                message: 'Your trial and grace period have expired. Please upgrade to continue.',
+                upgradeRequired: true,
+                subscriptionStatus: 'expired'
+              });
+            }
           }
         }
       }

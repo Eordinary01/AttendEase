@@ -12,6 +12,8 @@ const { createBullRedisClient } = require('./redisClient');
 let emailQueue = null;
 let statsQueue = null;
 
+const isProductionEmail = process.env.BREVO_PRODUCTION === 'true';
+
 if (Bull && REDIS_URL) {
   const bullOptions = {
     createClient: createBullRedisClient,
@@ -42,13 +44,24 @@ if (Bull && REDIS_URL) {
   });
 
   emailQueue.process(async (job) => {
+    const { mailOptions, tenantId, template } = job.data;
+    
+    if (!isProductionEmail) {
+      logger.info(`[EMAIL DEV MODE] Queue would send email to ${mailOptions.to}`, {
+        subject: mailOptions.subject,
+        template,
+        tenantId,
+      });
+      return { success: true, devMode: true };
+    }
+
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE || 'Gmail',
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD }
     });
-    await transporter.sendMail(job.data.mailOptions);
-    logger.info(`Email sent to ${job.data.mailOptions.to}`);
+    await transporter.sendMail(mailOptions);
+    logger.info(`Email sent to ${mailOptions.to}`);
   });
 
   logger.info('Bull queues initialized with Redis');
@@ -56,9 +69,21 @@ if (Bull && REDIS_URL) {
   logger.info('Bull queues inactive (no Redis URL or bull package) — jobs run inline');
 }
 
-function addEmailJob(mailOptions) {
+function addEmailJob(mailOptions, options = {}) {
+  const { tenantId, template, priority = 'normal' } = options;
+  
+  if (!isProductionEmail) {
+    logger.info(`[EMAIL DEV MODE] addEmailJob would queue email to ${mailOptions.to}`, {
+      subject: mailOptions.subject,
+      template,
+      tenantId,
+      priority,
+    });
+    return Promise.resolve({ success: true, devMode: true, messageId: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
+  }
+
   if (emailQueue) {
-    return emailQueue.add({ mailOptions });
+    return emailQueue.add({ mailOptions, tenantId, template, priority }, { priority: 10, attempts: 3 });
   }
   // Fallback: send inline
   const nodemailer = require('nodemailer');

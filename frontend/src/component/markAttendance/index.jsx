@@ -14,7 +14,6 @@ import {
   Loader2,
   UserCheck,
   UserX,
-  BookOpen,
   CheckCircle,
   XCircle,
   Wifi,
@@ -567,13 +566,13 @@ export default function MarkAttendance() {
         <div className={`p-4 rounded-2xl border flex items-center justify-between shadow-card transition-all ${
           !isOnline 
             ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200' 
-            : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-900 dark:text-indigo-200'
+            : 'bg-primary-soft border-primary-surface text-primary-dark'
         }`}>
           <div className="flex items-center gap-3">
             {!isOnline ? (
               <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 animate-pulse" />
             ) : (
-              <Wifi className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+              <Wifi className="w-5 h-5 text-primary flex-shrink-0" />
             )}
             <div>
               <p className="text-sm font-bold">

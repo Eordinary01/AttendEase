@@ -461,20 +461,20 @@ const ManageSubjects = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
         greeting="Subject Catalog & Course Matrix"
         meta={`Managing ${filteredSubjects.length} subjects for ${tenantInfo?.name || "your campus"}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* View Mode Toggle */}
-            <div className="flex bg-surface rounded-xl p-1 border border-line/50">
+            <div className="flex bg-slate-100 rounded-xl p-1 border border-slate-200">
               <button
                 onClick={() => setViewMode('grid')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   viewMode === 'grid'
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'text-ink-soft hover:text-ink'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 aria-label="Grid view"
               >
@@ -484,8 +484,8 @@ const ManageSubjects = () => {
                 onClick={() => setViewMode('list')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   viewMode === 'list'
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'text-ink-soft hover:text-ink'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 aria-label="List view"
               >
@@ -522,39 +522,39 @@ const ManageSubjects = () => {
       />
 
       {error && (
-        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 text-xs font-medium flex items-center gap-2">
+        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {successMessage && (
-        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 text-xs font-medium flex items-center gap-2">
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-medium flex items-center gap-2">
           <Check className="w-4 h-4 shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
       {/* Filters Toolbar */}
-      <Card padding="md" bordered>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               type="text"
               placeholder="Search by name, code or course..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink placeholder:text-ink-faint rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-white text-xs outline-none"
             />
           </div>
 
           <div className="relative">
-            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
               value={filterCourse}
               onChange={(e) => setFilterCourse(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 bg-slate-50 text-slate-900 rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-white text-xs outline-none cursor-pointer"
             >
               <option value="">All Courses</option>
               {availableCourseCodes.map(code => (
@@ -564,11 +564,11 @@ const ManageSubjects = () => {
           </div>
 
           <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+            <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
               value={filterBranch}
               onChange={(e) => setFilterBranch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 bg-slate-50 text-slate-900 rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-white text-xs outline-none cursor-pointer"
             >
               <option value="">All Branches</option>
               {availableBranches.map(b => {
@@ -585,11 +585,11 @@ const ManageSubjects = () => {
           </div>
 
           <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
               value={filterSemester}
               onChange={(e) => setFilterSemester(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 bg-slate-50 text-slate-900 rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-white text-xs outline-none cursor-pointer"
             >
               <option value="">All Semesters</option>
               {availableSemesters.map(s => (
@@ -602,7 +602,7 @@ const ManageSubjects = () => {
             <select
               value={filterYear}
               onChange={(e) => setFilterYear(e.target.value)}
-              className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary appearance-none text-sm"
+              className="w-full px-3 py-2 border border-slate-200 bg-slate-50 text-slate-900 rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-white text-xs outline-none cursor-pointer"
             >
               <option value="">All Years</option>
               {availableYears.map(y => (
@@ -626,7 +626,7 @@ const ManageSubjects = () => {
             )}
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Subjects Grid/List */}
       {loading ? (

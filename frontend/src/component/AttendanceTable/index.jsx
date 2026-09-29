@@ -396,9 +396,11 @@ const AttendanceOverview = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 outline-none ${activeTab === tab.id ? 'text-white shadow-sm' : 'text-ink-soft hover:bg-background'
-                }`}
-              style={activeTab === tab.id ? { background: `linear-gradient(135deg, ${primary}, ${secondary})` } : {}}
+              className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 outline-none ${
+                activeTab === tab.id
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
             >
               {tab.icon}
               {tab.label}

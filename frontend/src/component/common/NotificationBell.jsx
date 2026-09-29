@@ -271,21 +271,31 @@ export const NotificationBell = ({ role = '' }) => {
             </div>
 
             {/* Footer Navigation */}
-            <div className="p-2 border-t border-line bg-background/30 text-center">
+            <div className="p-2 border-t border-line bg-background/30 flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleViewAll}
-                className="w-full py-1.5 px-3 rounded-xl text-xs font-bold text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1"
+                className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1"
               >
                 <span>
                   {role === 'teacher'
                     ? 'View All Broadcasts'
                     : role === 'student'
                     ? 'View All Announcements'
-                    : 'Manage Announcements'}
+                    : 'Announcements'}
                 </span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+              {role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/automated-notifications')}
+                  className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-ink-soft hover:text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1 border border-line/60"
+                >
+                  <span>Auto Alerts</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </Menu.Items>
         </Transition>
@@ -325,6 +335,22 @@ export const NotificationBell = ({ role = '' }) => {
             {selectedAlert.createdBy && (
               <div className="text-[11px] text-ink-faint">
                 Published by: <span className="font-semibold text-ink">{selectedAlert.createdBy.name}</span> ({selectedAlert.createdBy.role})
+              </div>
+            )}
+
+            {role === 'admin' && (selectedAlert.type === 'absence_escalation' || selectedAlert.type === 'system' || selectedAlert.type === 'attendance_warning') && (
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAlert(null);
+                    navigate('/admin/automated-notifications');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-primary text-white font-medium text-xs hover:opacity-90 transition flex items-center gap-1.5"
+                >
+                  <span>Manage in Automated Alerts Hub</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
           </div>

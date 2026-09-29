@@ -3,26 +3,24 @@ const User = require("../models/User");
 const Enrollment = require("../models/Enrollment");
 const Subject = require("../models/Subject");
 const Tenant = require("../models/Tenant");
+const SemesterPromotion = require("../models/SemesterPromotion");
 const logger = require("../utils/logger");
 const { toObjectId } = require("../utils/sanitize");
+const {
+  buildPromotionContext,
+  scanForDuePromotions,
+  runPromotionBatch,
+  computeExpectedSemester,
+} = require("../services/promotionService");
+const { enqueuePromotionBatch, getJobStatus } = require("../queue");
+const { publishPromotionCompleted } = require("../events/publishers");
 
 const sanitizeStr = (v) => (v === undefined || v === null ? "" : String(v).trim());
 
 /**
- * Expected semester for a student based on admission year + current date.
- * 1 academic year = `semestersPerYear` semesters (default 2). Terms roll over
- * every `12 / semestersPerYear` months starting from `academicStartMonth`.
+ * Expected semester re-exported from promotionService for compatibility and deduplication.
  */
-const getExpectedSemester = (admissionYear, academicStartMonth, semestersPerYear) => {
-  if (!admissionYear || isNaN(Number(admissionYear))) return null;
-  const year = Number(admissionYear);
-  const monthsPerSemester = 12 / (semestersPerYear === 1 ? 1 : 2);
-  const startMonth = typeof academicStartMonth === "number" ? academicStartMonth : 5;
-  const now = new Date();
-  const elapsed = now.getFullYear() * 12 + now.getMonth() - (year * 12 + startMonth);
-  if (elapsed < 0) return 1;
-  return 1 + Math.floor(elapsed / monthsPerSemester);
-};
+const getExpectedSemester = computeExpectedSemester;
 
 const getTenant = async (req) => {
   const tenantId = req.user.tenantId;
@@ -432,85 +430,22 @@ const updateStructure = async (req, res) => {
   }
 };
 
-const buildPromotionContext = async (tenantId) => {
-  const tenant = await Tenant.findById(tenantId);
-  const structure = tenant?.settings?.semesterStructure || { semestersPerYear: 2, autoPromote: true, academicStartMonth: 5 };
-
-  const [students, courses] = await Promise.all([
-    User.find({
-      tenantId,
-      role: "student",
-      isActive: true,
-      academicStatus: { $ne: "graduated" },
-    }).select("name rollNo section email courseId courseName branch semester admissionYear totalSemesters academicStatus holdPromotion lastPromotedAt").lean(),
-    Course.find({ tenantId, isActive: true }).select("name code durationYears semestersPerYear branches").lean(),
-  ]);
-
-  const courseMap = new Map(courses.map((c) => [String(c._id), c]));
-
-  const eligible = [];
-  const skipped = [];
-  let graduating = 0;
-
-  students.forEach((student) => {
-    const totalSemesters = student.totalSemesters || (() => {
-      const course = courseMap.get(String(student.courseId));
-      if (!course) return null;
-      const branch = student.branch
-        ? course.branches.find((b) => b.name.toLowerCase() === student.branch.toLowerCase())
-        : null;
-      return branch ? branch.totalSemesters : course.durationYears * course.semestersPerYear;
-    })();
-
-    const expected = getExpectedSemester(student.admissionYear, structure.academicStartMonth, structure.semestersPerYear);
-    const current = student.semester || 1;
-
-    if (student.holdPromotion) {
-      skipped.push({ ...student, expectedSemester: expected, reason: "Promotion on hold" });
-      return;
-    }
-    if (expected === null) {
-      skipped.push({ ...student, expectedSemester: expected, reason: "Missing admission year" });
-      return;
-    }
-    if (expected <= current) {
-      skipped.push({ ...student, expectedSemester: expected, reason: "Not yet due" });
-      return;
-    }
-
-    // Due for promotion
-    if (totalSemesters && current >= totalSemesters) {
-      // They've completed the final semester -> graduate instead of advancing further
-      graduating++;
-      eligible.push({
-        ...student,
-        expectedSemester: expected,
-        nextSemester: current,
-        willGraduate: true,
-        totalSemesters,
-      });
-      return;
-    }
-
-    eligible.push({
-      ...student,
-      expectedSemester: expected,
-      nextSemester: Math.min(current + 1, totalSemesters || current + 1),
-      willGraduate: false,
-      totalSemesters,
-    });
-  });
-
-  return { structure, eligible, skipped, graduating };
-};
-
 /**
  * GET /api/academic/promotion-preview
  * Preview which students would advance on the next promotion run.
  */
 const getPromotionPreview = async (req, res) => {
   try {
-    const { eligible, skipped, graduating, structure } = await buildPromotionContext(req.user.tenantId);
+    const {
+      eligible,
+      skipped,
+      graduating,
+      structure,
+      missingAdmissionYearCount,
+      missingCourseCount,
+      missingCourseStudents,
+    } = await buildPromotionContext(req.user.tenantId);
+
     return res.status(200).json({
       success: true,
       data: {
@@ -520,6 +455,9 @@ const getPromotionPreview = async (req, res) => {
         eligibleCount: eligible.length,
         skippedCount: skipped.length,
         graduatingCount: graduating,
+        missingAdmissionYearCount: missingAdmissionYearCount || 0,
+        missingCourseCount: missingCourseCount || 0,
+        missingCourseStudents: missingCourseStudents || [],
       },
     });
   } catch (error) {
@@ -530,69 +468,226 @@ const getPromotionPreview = async (req, res) => {
 
 /**
  * POST /api/academic/promote
- * Promote students by one semester (or graduate those at the cap).
+ * Synchronously promote students by one semester (or graduate those at the cap).
  * Body: { studentIds?: string[] } — if omitted, promotes all eligible.
  */
 const promoteStudents = async (req, res) => {
   try {
     const { studentIds } = req.body;
     const tenantId = req.user.tenantId;
-    const { eligible } = await buildPromotionContext(tenantId);
 
-    const targets = Array.isArray(studentIds) && studentIds.length > 0
-      ? eligible.filter((s) => studentIds.includes(String(s._id)))
-      : eligible;
+    const result = await runPromotionBatch(tenantId, studentIds, {
+      runBy: req.user?._id,
+      runByName: req.user?.name || "Admin",
+      type: "manual",
+    });
 
-    if (targets.length === 0) {
-      return res.status(200).json({ success: true, message: "No students are due for promotion", data: { promoted: 0, graduated: 0 } });
-    }
+    // Publish event for SSE notification
+    publishPromotionCompleted(tenantId, { jobId: null, ...result });
 
-    const now = new Date();
-    let promoted = 0;
-    let graduated = 0;
-    const details = [];
+    return res.status(200).json({
+      success: true,
+      message: `Promotion complete — ${result.promoted} promoted, ${result.graduated} graduated`,
+      data: result,
+    });
+  } catch (error) {
+    logger.error("Error promoting students", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to promote students" });
+  }
+};
 
-    for (const student of targets) {
-      const updates = {
-        semester: student.nextSemester,
-        lastPromotedAt: now,
-      };
+/**
+ * POST /api/academic/promote/batch
+ * Enqueue background promotion batch job via Bull queue.
+ * Body: { studentIds?: string[] }
+ */
+const promoteStudentsBatch = async (req, res) => {
+  try {
+    const { studentIds } = req.body;
+    const tenantId = req.user.tenantId;
 
-      if (student.willGraduate) {
-        updates.academicStatus = "graduated";
-        updates.graduatedAt = now;
-        graduated++;
-      } else {
-        promoted++;
-      }
-
-      await User.updateOne({ _id: student._id, tenantId }, { $set: updates });
-
-      // Keep the linked Enrollment in sync
-      await Enrollment.updateOne(
-        { userId: student._id, tenantId },
-        { $set: { semester: student.nextSemester, ...(student.willGraduate ? { enrollmentStatus: "graduated" } : {}) } },
-      );
-
-      details.push({
-        id: student._id,
-        name: student.name,
-        rollNo: student.rollNo,
-        section: student.section,
-        from: student.semester,
-        to: student.nextSemester,
-        graduated: Boolean(student.willGraduate),
+    const { jobId, skipped, message } = await enqueuePromotionBatch(tenantId, studentIds, {
+      runBy: req.user?._id,
+      runByName: req.user?.name || "Admin",
+      type: "background_batch",
+    });
+    if (skipped || !jobId) {
+      return res.status(200).json({
+        success: false,
+        fallbackSync: true,
+        message: message || "Background queue unavailable; use direct promotion.",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: `Promotion complete — ${promoted} promoted, ${graduated} graduated`,
-      data: { promoted, graduated, details },
+      jobId,
+      message: "Promotion background job queued successfully",
     });
   } catch (error) {
-    logger.error("Error promoting students", { error: error.message });
-    return res.status(500).json({ success: false, message: "Failed to promote students" });
+    logger.error("Error enqueueing promotion batch", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to enqueue promotion batch" });
+  }
+};
+
+/**
+ * GET /api/academic/promote/status/:jobId
+ * Check status and progress of a background promotion batch job.
+ */
+const getPromotionJobStatus = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const status = await getJobStatus(jobId);
+    if (!status) {
+      return res.status(404).json({ success: false, message: "Promotion job not found or expired" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    logger.error("Error fetching promotion job status", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to fetch promotion job status" });
+  }
+};
+
+/**
+ * GET /api/academic/promote/audit
+ * Fetch historical semester promotion audit records for the tenant.
+ */
+const getPromotionAudit = async (req, res) => {
+  try {
+    const auditLogs = await SemesterPromotion.find({ tenantId: req.user.tenantId })
+      .sort({ executedAt: -1 })
+      .limit(50)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: auditLogs,
+    });
+  } catch (error) {
+    logger.error("Error fetching promotion audit logs", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to fetch promotion audit logs" });
+  }
+};
+
+/**
+ * GET /api/academic/promote/settings
+ * Fetch current promotion settings for the tenant.
+ */
+const getPromotionSettings = async (req, res) => {
+  try {
+    const tenant = await getTenant(req);
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+
+    const structure = tenant.settings?.semesterStructure || {
+      semestersPerYear: 2,
+      autoPromote: true,
+      academicStartMonth: 5,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: structure,
+    });
+  } catch (error) {
+    logger.error("Error fetching promotion settings", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to fetch promotion settings" });
+  }
+};
+
+/**
+ * POST /api/academic/promote/settings
+ * Update promotion settings for the tenant.
+ */
+const updatePromotionSettings = async (req, res) => {
+  try {
+    const { autoPromote, semestersPerYear, academicStartMonth } = req.body;
+    const tenant = await getTenant(req);
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found" });
+
+    const structure = tenant.settings.semesterStructure || {};
+    if (autoPromote !== undefined) structure.autoPromote = Boolean(autoPromote);
+    if (semestersPerYear === 1 || semestersPerYear === 2) structure.semestersPerYear = semestersPerYear;
+    if (academicStartMonth !== undefined && Number(academicStartMonth) >= 0 && Number(academicStartMonth) <= 11) {
+      structure.academicStartMonth = Number(academicStartMonth);
+    }
+    tenant.settings.semesterStructure = structure;
+    await tenant.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Promotion settings updated successfully",
+      data: structure,
+    });
+  } catch (error) {
+    logger.error("Error updating promotion settings", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to update promotion settings" });
+  }
+};
+
+/**
+ * POST /api/academic/students/bulk-assign-course
+ * Bulk assign a course and optional branch to selected student IDs.
+ */
+const bulkAssignCourse = async (req, res) => {
+  try {
+    const { studentIds, courseId, branch } = req.body;
+    const tenantId = req.user.tenantId;
+
+    if (!courseId) {
+      return res.status(400).json({ success: false, message: "Course ID is required" });
+    }
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: "studentIds array cannot be empty" });
+    }
+
+    const course = await Course.findOne({ _id: courseId, tenantId, isActive: true }).lean();
+    if (!course) {
+      return res.status(404).json({ success: false, message: "Active course not found" });
+    }
+
+    const updatePayload = {
+      courseId: course._id,
+      courseName: course.name,
+    };
+    if (branch) {
+      updatePayload.branch = branch;
+    }
+
+    const userResult = await User.updateMany(
+      { _id: { $in: studentIds }, tenantId, role: "student" },
+      { $set: updatePayload }
+    );
+
+    // Synchronize enrollments if any exist
+    try {
+      await Enrollment.updateMany(
+        { userId: { $in: studentIds }, tenantId },
+        { $set: { courseId: course._id, ...(branch ? { branch } : {}) } }
+      );
+    } catch (syncErr) {
+      logger.warn("Enrollment sync failed during bulkAssignCourse (suppressed)", { error: syncErr.message });
+    }
+
+    logger.info("Bulk assigned course to students", {
+      tenantId,
+      courseId,
+      matched: userResult.matchedCount,
+      modified: userResult.modifiedCount,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully assigned course ${course.name} to ${userResult.modifiedCount} student(s)`,
+      modifiedCount: userResult.modifiedCount,
+      matchedCount: userResult.matchedCount,
+    });
+  } catch (error) {
+    logger.error("Error in bulkAssignCourse", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to bulk assign course" });
   }
 };
 
@@ -639,6 +734,12 @@ module.exports = {
   updateStructure,
   getPromotionPreview,
   promoteStudents,
+  promoteStudentsBatch,
+  getPromotionJobStatus,
+  getPromotionAudit,
+  getPromotionSettings,
+  updatePromotionSettings,
+  bulkAssignCourse,
   getExpectedSemester,
   getSemesterTimeline,
 };

@@ -539,10 +539,17 @@ const FeeManager = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting="Institutional Fee & Revenue Management"
-        meta="Manage fee ledgers, track collections, record transactions, and oversee cohort finances"
+        title="Institutional Fee & Revenue Management"
+        subtitle="Manage fee ledgers, track collections, record transactions, and oversee cohort finances"
+        badge={
+          summary ? (
+            <Badge tone="primary">
+              {formatCurrency(summary.totalCollected)} Collected
+            </Badge>
+          ) : null
+        }
         actions={
           canCollect && (
             <div className="flex items-center gap-2">
@@ -565,11 +572,22 @@ const FeeManager = () => {
         </div>
       )}
 
-      <div className="flex gap-1 bg-surface rounded-xl p-1 border border-line w-fit">
-        {["fees", "transactions"].map(tab => (
-          <Button key={tab} onClick={() => setActiveTab(tab)} variant={activeTab === tab ? "primary" : "ghost"}>
-            {tab === "fees" ? "Fee Records" : "Transactions"}
-          </Button>
+      <div className="flex gap-1.5 bg-slate-100/80 rounded-2xl p-1 border border-slate-200/80 w-fit">
+        {[
+          { id: "fees", label: "Fee Records" },
+          { id: "transactions", label: "Transactions" }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === tab.id
+                ? "bg-white text-primary shadow-xs border border-slate-200/80"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {tab.label}
+          </button>
         ))}
       </div>
 
@@ -600,25 +618,31 @@ const FeeManager = () => {
                 <option value="waived">Waived</option>
               </Select>
             </div>
-            <Button variant="subtle" onClick={() => { setFilterCourse(""); setFilterBranch(""); setFilterStatus(""); setSelectedSection(""); }} leftIcon={X}>Clear Filters</Button>
+            <Button variant="subtle" size="sm" onClick={() => { setFilterCourse(""); setFilterBranch(""); setFilterStatus(""); setSelectedSection(""); }} leftIcon={X}>Clear Filters</Button>
 
-            <div className="ml-auto flex items-center gap-1 bg-surface rounded-xl p-1 border border-line">
-              <Button
-                size="sm"
-                variant={viewLayout === "cohorts" ? "primary" : "ghost"}
+            <div className="ml-auto flex items-center gap-1.5 bg-slate-100/80 rounded-2xl p-1 border border-slate-200/80">
+              <button
                 onClick={() => setViewLayout("cohorts")}
-                leftIcon={LayoutGrid}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                  viewLayout === "cohorts"
+                    ? "bg-white text-primary shadow-xs border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
               >
+                <LayoutGrid className="w-3.5 h-3.5" />
                 Cohort Cards
-              </Button>
-              <Button
-                size="sm"
-                variant={viewLayout === "all" ? "primary" : "ghost"}
+              </button>
+              <button
                 onClick={() => setViewLayout("all")}
-                leftIcon={List}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition ${
+                  viewLayout === "all"
+                    ? "bg-white text-primary shadow-xs border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
               >
+                <List className="w-3.5 h-3.5" />
                 All Records ({fees.length})
-              </Button>
+              </button>
             </div>
           </div>
 

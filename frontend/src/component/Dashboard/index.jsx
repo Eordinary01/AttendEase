@@ -368,10 +368,11 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
   const rollNo = profile?.rollNo || "N/A";
 
   return (
-    <div style={cssVars} className="min-h-screen bg-background text-ink pb-12">
+    <div style={cssVars} className="space-y-6 font-sans antialiased text-slate-800">
       {/* Shared Dashboard Header Strip */}
       <DashboardHeader
         greeting={`Good ${timeOfDay}, ${firstName}`}
+        badge={overallPercent !== null ? `${overallPercent}% Overall Attendance` : "Enrolled Student"}
         meta={`${branch} • Section ${section} • Semester ${semester} • Roll: ${rollNo}`}
         highlightAction={
           <Button
@@ -396,8 +397,8 @@ export default function StudentDashboard({ userId, userName, userEmail }) {
         }
       />
 
-      {/* Main Container */}
-      <div className="max-w-[1440px] mx-auto px-6 pt-6 space-y-6">
+      {/* Main Content Space */}
+      <div className="space-y-6">
         {/* Phase 9: 75% Attendance Deficit Trajectory & Early Warning */}
         <AtRiskGauge
           riskLevel={

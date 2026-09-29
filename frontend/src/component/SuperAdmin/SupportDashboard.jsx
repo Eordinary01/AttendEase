@@ -1,12 +1,12 @@
 // src/components/SuperAdmin/SupportDashboard.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+// Redesigned with Academic Precision System (redesign/DESIGN.md)
+// Institutional Helpdesk, Statutory Compliance Appeals, and Tier-3 COE Ticket Escalations
+import React, { useState, useEffect, useCallback } from "react";
 import {
   LifeBuoy,
   RefreshCw,
   CheckCircle2,
   Clock,
-  Loader2,
   AlertCircle,
   Crown,
   Tag,
@@ -21,88 +21,66 @@ import {
   StickyNote,
   Send,
   AlertTriangle,
-  TrendingUp,
   InboxIcon,
-} from 'lucide-react';
-import api from '../../utils/api';
-import { formatDateDMY, formatDateTime } from '../../utils/dateUtils';
-import { logError } from '../../utils/logger';
-import Button from '../common/ui/Button';
-import Card from '../common/ui/Card';
-import Badge from '../common/ui/Badge';
-import StatCard from '../common/ui/StatCard';
-import DashboardHeader from '../common/ui/DashboardHeader';
-import Input, { Select } from '../common/ui/Input';
+  HelpCircle,
+} from "lucide-react";
+import api from "../../utils/api";
+import { formatDateDMY, formatDateTime } from "../../utils/dateUtils";
+import { logError } from "../../utils/logger";
+import EmptyState from "../common/ui/EmptyState";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
+// Constants
 const CATEGORIES = [
-  { value: '',             label: 'All Categories' },
-  { value: 'trial_expired', label: 'Trial Expired' },
-  { value: 'billing',       label: 'Billing' },
-  { value: 'technical',     label: 'Technical' },
-  { value: 'account',       label: 'Account' },
-  { value: 'other',         label: 'Other' },
+  { value: "", label: "All Categories" },
+  { value: "trial_expired", label: "Trial Expired" },
+  { value: "billing", label: "Billing & Ledger" },
+  { value: "technical", label: "Technical & API" },
+  { value: "account", label: "Account Governance" },
+  { value: "other", label: "General Inquiry" },
 ];
 
 const STATUSES = [
-  { value: '',            label: 'All Statuses' },
-  { value: 'open',        label: 'Open' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'resolved',    label: 'Resolved' },
-  { value: 'closed',      label: 'Closed' },
+  { value: "", label: "All Statuses" },
+  { value: "open", label: "Open" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
 ];
 
 const PRIORITIES = [
-  { value: '',        label: 'All Priorities' },
-  { value: 'urgent',  label: 'Urgent' },
-  { value: 'high',    label: 'High' },
-  { value: 'medium',  label: 'Medium' },
-  { value: 'low',     label: 'Low' },
+  { value: "", label: "All Priorities" },
+  { value: "urgent", label: "Urgent" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
 ];
 
-const STATUS_TONES = {
-  open:        'info',
-  in_progress: 'warning',
-  resolved:    'success',
-  closed:      'neutral',
-};
-
-const PRIORITY_TONES = {
-  urgent: 'primary',
-  high:   'danger',
-  medium: 'warning',
-  low:    'neutral',
-};
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 const SupportDashboard = () => {
-  const [tickets,    setTickets]    = useState([]);
-  const [summary,    setSummary]    = useState({ open: 0, inProgress: 0, resolved: 0 });
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState(null);
+  const [tickets, setTickets] = useState([]);
+  const [summary, setSummary] = useState({ open: 0, inProgress: 0, resolved: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
   // Filters
-  const [filters, setFilters] = useState({ status: 'open', priority: '', category: '' });
+  const [filters, setFilters] = useState({ status: "open", priority: "", category: "" });
 
   // Per-ticket action state
-  const [expanded,       setExpanded]       = useState({});       // { ticketId: bool }
-  const [noteInput,      setNoteInput]      = useState({});       // { ticketId: string }
-  const [statusInput,    setStatusInput]    = useState({});       // { ticketId: string }
-  const [resolutionInput, setResolutionInput] = useState({});     // { ticketId: string }
-  const [actionLoading,  setActionLoading]  = useState({});       // { ticketId: bool }
+  const [expanded, setExpanded] = useState({});
+  const [noteInput, setNoteInput] = useState({});
+  const [statusInput, setStatusInput] = useState({});
+  const [resolutionInput, setResolutionInput] = useState({});
+  const [actionLoading, setActionLoading] = useState({});
 
   const fetchTickets = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const params = new URLSearchParams();
-      if (filters.status)   params.set('status',   filters.status);
-      if (filters.priority) params.set('priority', filters.priority);
-      if (filters.category) params.set('category', filters.category);
-      params.set('limit', '50');
+      if (filters.status) params.set("status", filters.status);
+      if (filters.priority) params.set("priority", filters.priority);
+      if (filters.category) params.set("category", filters.category);
+      params.set("limit", "50");
 
       const res = await api.get(`/support/admin/all?${params}`);
       if (res.data.success) {
@@ -111,13 +89,15 @@ const SupportDashboard = () => {
       }
     } catch (err) {
       logError("Fetch Tickets", err);
-      setError(err.response?.data?.message || 'Failed to load tickets.');
+      setError(err.response?.data?.message || "Failed to load tickets.");
     } finally {
       setLoading(false);
     }
   }, [filters]);
 
-  useEffect(() => { fetchTickets(); }, [fetchTickets]);
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   const showSuccess = (msg) => {
     setSuccessMsg(msg);
@@ -125,23 +105,25 @@ const SupportDashboard = () => {
   };
 
   const setTicketLoading = (id, val) =>
-    setActionLoading(prev => ({ ...prev, [id]: val }));
+    setActionLoading((prev) => ({ ...prev, [id]: val }));
 
   // Update status
   const handleUpdateStatus = async (ticket) => {
     const newStatus = statusInput[ticket._id] || ticket.status;
-    const resolution = resolutionInput[ticket._id] || '';
+    const resolution = resolutionInput[ticket._id] || "";
     if (newStatus === ticket.status && !resolution) return;
 
     setTicketLoading(ticket._id, true);
     try {
-      await api.put(`/support/admin/${ticket._id}/status`,
-        { status: newStatus, resolution });
+      await api.put(`/support/admin/${ticket._id}/status`, {
+        status: newStatus,
+        resolution,
+      });
       showSuccess(`Ticket status updated to "${newStatus}".`);
       fetchTickets();
     } catch (err) {
       logError("Update Ticket Status", err);
-      setError(err.response?.data?.message || 'Failed to update status.');
+      setError(err.response?.data?.message || "Failed to update status.");
       setTimeout(() => setError(null), 5000);
     } finally {
       setTicketLoading(ticket._id, false);
@@ -150,315 +132,380 @@ const SupportDashboard = () => {
 
   // Add note
   const handleAddNote = async (ticketId) => {
-    const content = (noteInput[ticketId] || '').trim();
+    const content = (noteInput[ticketId] || "").trim();
     if (!content) return;
     setTicketLoading(ticketId, true);
     try {
       await api.post(`/support/admin/${ticketId}/notes`, { content });
-      setNoteInput(prev => ({ ...prev, [ticketId]: '' }));
-      showSuccess('Note added.');
+      setNoteInput((prev) => ({ ...prev, [ticketId]: "" }));
+      showSuccess("Internal note added.");
       fetchTickets();
     } catch (err) {
       logError("Add Ticket Note", err);
-      setError(err.response?.data?.message || 'Failed to add note.');
+      setError(err.response?.data?.message || "Failed to save note.");
       setTimeout(() => setError(null), 5000);
     } finally {
       setTicketLoading(ticketId, false);
     }
   };
 
-  // Resolve & Reactivate
-  const handleResolveReactivate = async (ticket) => {
-    const resolution = resolutionInput[ticket._id] ||
-      `Account reactivated on free plan. You may now upgrade anytime. — ${formatDateDMY(new Date())}`;
-    if (!window.confirm(`Resolve ticket and reactivate tenant "${ticket.tenantName}" on the free plan?`)) return;
-
-    setTicketLoading(ticket._id, true);
-    try {
-      await api.post(`/support/admin/${ticket._id}/resolve-reactivate`,
-        { resolution });
-      showSuccess(`Ticket resolved and "${ticket.tenantName}" reactivated on free plan!`);
-      fetchTickets();
-    } catch (err) {
-      logError("Resolve & Reactivate Ticket", err);
-      setError(err.response?.data?.message || 'Failed to resolve and reactivate.');
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setTicketLoading(ticket._id, false);
-    }
-  };
-
   const toggleExpand = (id) =>
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="space-y-6">
-      <DashboardHeader
-        greeting="Support Helpdesk Triage"
-        meta="Review, escalate and resolve institution support tickets and billing inquiries"
-        actions={
-          <Button onClick={fetchTickets} variant="subtle" size="sm" leftIcon={RefreshCw}>
-            Refresh
-          </Button>
-        }
-      />
+    <div className="space-y-6 font-sans antialiased text-slate-900">
+      {/* 1. Header Strip */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-1">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Institutional Helpdesk & Ticket Escalations
+            </h1>
+          </div>
+          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Statutory compliance inquiries, COE ticket discrepancies, and Tier-3 technical support tickets.
+          </p>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard icon={InboxIcon}      label="Open"        value={summary.open        || 0} tone="primary" />
-        <StatCard icon={TrendingUp}     label="In Progress" value={summary.inProgress  || 0} tone="warning" />
-        <StatCard icon={CheckCheck}     label="Resolved"    value={summary.resolved    || 0} tone="success" />
-        <StatCard icon={Crown}          label="Total Handled" value={(summary.open || 0) + (summary.inProgress || 0) + (summary.resolved || 0)} tone="secondary" />
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchTickets}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-xs transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh Queue</span>
+          </button>
+        </div>
       </div>
 
-      {/* Banners */}
-      <AnimatePresence>
-        {successMsg && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="rounded-xl p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-medium flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{successMsg}</span>
-          </motion.div>
-        )}
-        {error && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="rounded-xl p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-medium flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Notifications */}
+      {successMsg && (
+        <div className="rounded-xl p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
-      {/* Filters */}
-      <Card padding="md" bordered>
-        <div className="flex flex-wrap gap-2.5 items-center">
-          <Filter className="w-3.5 h-3.5 text-ink-faint mr-1" />
-          {[
-            { key: 'status',   options: STATUSES },
-            { key: 'priority', options: PRIORITIES },
-            { key: 'category', options: CATEGORIES },
-          ].map(({ key, options }) => (
-            <select
-              key={key}
-              value={filters[key]}
-              onChange={e => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
-              className="px-2.5 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 capitalize cursor-pointer"
-            >
-              {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+      {error && (
+        <div className="rounded-xl p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* 2. Top Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Open Inquiries
+            </span>
+            <span className="text-3xl font-black text-slate-900 tabular-nums mt-1 block">
+              {summary.open ?? 0}
+            </span>
+            <span className="text-[11px] text-amber-600 font-semibold mt-1 block">Awaiting First Response</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              In Investigation
+            </span>
+            <span className="text-3xl font-black text-slate-900 tabular-nums mt-1 block">
+              {summary.inProgress ?? 0}
+            </span>
+            <span className="text-[11px] text-primary font-semibold mt-1 block">Active Engineering Review</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center border border-primary-surface">
+            <LifeBuoy className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Resolved Cases
+            </span>
+            <span className="text-3xl font-black text-slate-900 tabular-nums mt-1 block">
+              {summary.resolved ?? 0}
+            </span>
+            <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">Resolved & Archived</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Filter Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-bold uppercase tracking-wider mr-2">
+            <Filter className="w-3.5 h-3.5 text-primary" />
+            <span>Filter Queue:</span>
+          </div>
+
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none"
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.priority}
+            onChange={(e) => setFilters((prev) => ({ ...prev, priority: e.target.value }))}
+            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none"
+          >
+            {PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.category}
+            onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none"
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
+          <span className="text-xs text-slate-400 font-mono ml-auto">
+            {tickets.length} tickets matching filters
+          </span>
+        </div>
+      </div>
+
+      {/* 4. Ticket Cards List */}
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 bg-white rounded-2xl border border-slate-200/80 p-5 animate-pulse" />
           ))}
-          {(filters.status || filters.priority || filters.category) && (
-            <button
-              onClick={() => setFilters({ status: '', priority: '', category: '' })}
-              className="text-xs text-ink-faint hover:text-rose-600 flex items-center gap-1 transition ml-2 cursor-pointer font-medium"
-            >
-              <X className="w-3 h-3" /> Clear Filters
-            </button>
-          )}
         </div>
-      </Card>
+      ) : tickets.length === 0 ? (
+        <EmptyState
+          title="No support tickets found"
+          description="All institutional inquiries matching this filter set have been attended to."
+          icon={LifeBuoy}
+        />
+      ) : (
+        <div className="space-y-3">
+          {tickets.map((t) => {
+            const isExpanded = !!expanded[t._id];
+            const isLoading = !!actionLoading[t._id];
 
-      {/* Tickets */}
-      <Card padding="none" className="overflow-hidden">
-        <div className="px-6 py-4 border-b border-line flex items-center justify-between bg-background/60">
-          <h2 className="font-semibold text-ink">Tickets</h2>
-          {!loading && <span className="text-xs text-ink-faint">{tickets.length} shown</span>}
-        </div>
+            return (
+              <div
+                key={t._id}
+                className="bg-white rounded-2xl border border-slate-200/90 shadow-sm transition-all overflow-hidden"
+              >
+                {/* Collapsed Header Bar */}
+                <div
+                  onClick={() => toggleExpand(t._id)}
+                  className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+                >
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Priority pill */}
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                          t.priority === "urgent"
+                            ? "bg-rose-50 text-rose-700 border border-rose-200"
+                            : t.priority === "high"
+                            ? "bg-orange-50 text-orange-700 border border-orange-200"
+                            : t.priority === "medium"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}
+                      >
+                        {t.priority || "normal"}
+                      </span>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-ink-faint" />
-          </div>
-        ) : tickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <MessageSquare className="w-12 h-12 text-ink-faint mb-3" />
-            <p className="font-medium text-ink-soft">No tickets match these filters.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-line">
-            {tickets.map(ticket => {
-              const isOpen = expanded[ticket._id];
-              const isLoading = actionLoading[ticket._id];
-              const isTrialExpired = ticket.category === 'trial_expired';
+                      {/* Status pill with dot */}
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                          t.status === "open"
+                            ? "text-amber-700 bg-amber-50 border-amber-200"
+                            : t.status === "in_progress"
+                            ? "text-primary-dark bg-primary-soft border-primary-surface"
+                            : t.status === "resolved"
+                            ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                            : "text-slate-600 bg-slate-100 border-slate-200"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            t.status === "open"
+                              ? "bg-amber-500"
+                              : t.status === "in_progress"
+                              ? "bg-primary"
+                              : t.status === "resolved"
+                              ? "bg-emerald-500"
+                              : "bg-slate-400"
+                          }`}
+                        />
+                        <span className="capitalize">{t.status?.replace("_", " ")}</span>
+                      </span>
 
-              return (
-                <div key={ticket._id} className="p-5 hover:bg-background/50 transition">
-                  {/* Summary Row */}
-                  <div
-                    className="flex items-start justify-between gap-4 cursor-pointer"
-                    onClick={() => toggleExpand(ticket._id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-ink">{ticket.subject}</p>
-                        <Badge tone={STATUS_TONES[ticket.status] || 'neutral'} dot>{ticket.status?.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</Badge>
-                        <Badge tone={PRIORITY_TONES[ticket.priority] || 'neutral'}>
-                          <AlertTriangle className="w-3 h-3" /> {ticket.priority}
-                        </Badge>
-                        {ticket.tenantReactivated && (
-                          <Badge tone="success">
-                            <CheckCheck className="w-3 h-3" /> Reactivated
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                        <span className="text-xs text-ink-faint flex items-center gap-1">
-                          <Building2 className="w-3 h-3" />{ticket.tenantName || 'Unknown Tenant'}
-                        </span>
-                        <span className="text-xs text-ink-faint">{ticket.submitterEmail}</span>
-                        <span className="text-xs text-ink-faint flex items-center gap-1">
-                          <Tag className="w-3 h-3" />
-                          {CATEGORIES.find(c => c.value === ticket.category)?.label || ticket.category}
-                        </span>
-                        <span className="text-xs text-ink-faint flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDateTime(ticket.createdAt)}
-                        </span>
-                      </div>
+                      {/* Category */}
+                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {t.category || "General"}
+                      </span>
+
+                      <h3 className="font-bold text-sm text-slate-900 truncate">
+                        {t.subject}
+                      </h3>
                     </div>
-                    <div className="flex-shrink-0">
-                      {isOpen ? <ChevronUp className="w-4 h-4 text-ink-faint" /> : <ChevronDown className="w-4 h-4 text-ink-faint" />}
+
+                    <div className="flex items-center gap-3 text-xs text-slate-500 font-mono flex-wrap">
+                      <span className="font-semibold text-primary-dark flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5" />
+                        {t.tenantId?.name || "Institution Campus"}
+                      </span>
+                      <span>•</span>
+                      <span>By {t.createdBy?.name || "Official"} ({t.createdBy?.email || "—"})</span>
+                      <span>•</span>
+                      <span>{formatDateDMY(t.createdAt)}</span>
                     </div>
                   </div>
 
-                  {/* Expanded Detail & Actions */}
-                  <AnimatePresence>
-                    {isOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-4 space-y-4">
-                          {/* Description */}
-                          <div>
-                            <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-1.5">Description</p>
-                            <div className="p-3 bg-background rounded-lg text-sm text-ink-soft leading-relaxed whitespace-pre-wrap">
-                              {ticket.description}
-                            </div>
-                          </div>
-
-                          {/* Subscription context */}
-                          {ticket.subscriptionContext && (
-                            <div className="flex items-center gap-4 text-xs text-ink-soft bg-background rounded-lg px-3 py-2">
-                              <span>Plan at submission: <strong className="text-ink capitalize">{ticket.subscriptionContext.plan}</strong></span>
-                              <span>Status: <strong className={`capitalize ${ticket.subscriptionContext.status === 'expired' ? 'text-red-600' : 'text-ink'}`}>{ticket.subscriptionContext.status}</strong></span>
-                            </div>
-                          )}
-
-                          {/* Existing resolution */}
-                          {ticket.resolution && (
-                            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
-                              <p className="text-xs font-semibold text-emerald-700 mb-1">Resolution</p>
-                              <p className="text-sm text-emerald-800">{ticket.resolution}</p>
-                              {ticket.resolvedByName && (
-                                <p className="text-xs text-emerald-600 mt-1">By {ticket.resolvedByName} · {formatDateDMY(ticket.resolvedAt)}</p>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Admin notes */}
-                          {ticket.adminNotes?.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-1.5">Internal Notes</p>
-                              <div className="space-y-2">
-                                {ticket.adminNotes.map(note => (
-                                  <div key={note._id} className="p-2.5 bg-amber-50 border border-amber-100 rounded-lg">
-                                    <p className="text-sm text-ink-soft">{note.content}</p>
-                                    <p className="text-xs text-ink-faint mt-1">{note.addedByName} · {formatDateDMY(note.addedAt)}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* ── Action Panel ── */}
-                          {ticket.status !== 'resolved' && ticket.status !== 'closed' && (
-                            <div className="border border-line rounded-xl p-4 space-y-4 bg-surface">
-                              <p className="text-sm font-semibold text-ink">Actions</p>
-
-                              {/* Status update */}
-                              <div className="flex flex-wrap gap-3 items-end">
-                                <div>
-                                  <Select
-                                    label="Change Status"
-                                    value={statusInput[ticket._id] || ticket.status}
-                                    onChange={e => setStatusInput(prev => ({ ...prev, [ticket._id]: e.target.value }))}
-                                    className="w-auto min-w-[160px]"
-                                  >
-                                    {STATUSES.filter(s => s.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                                  </Select>
-                                </div>
-                                <div className="flex-1 min-w-[200px]">
-                                  <Input
-                                    label="Resolution Note (optional)"
-                                    type="text"
-                                    value={resolutionInput[ticket._id] || ''}
-                                    onChange={e => setResolutionInput(prev => ({ ...prev, [ticket._id]: e.target.value }))}
-                                    placeholder="Optional resolution text…"
-                                  />
-                                </div>
-                                <Button
-                                  onClick={() => handleUpdateStatus(ticket)}
-                                  disabled={isLoading}
-                                  loading={isLoading}
-                                  leftIcon={CheckCircle2}
-                                >
-                                  Update
-                                </Button>
-                              </div>
-
-                              {/* Resolve & Reactivate (only for expired trial tickets) */}
-                              {isTrialExpired && !ticket.tenantReactivated && (
-                                <div className="flex flex-wrap gap-3 items-center p-3 bg-primary-soft border border-primary-surface rounded-lg">
-                                  <div className="flex-1 text-sm text-primary-dark">
-                                    <strong>Resolve & Reactivate</strong> — This will mark the ticket resolved and
-                                    reactivate <strong>{ticket.tenantName}</strong> on the free plan.
-                                  </div>
-                                  <Button
-                                    onClick={() => handleResolveReactivate(ticket)}
-                                    disabled={isLoading}
-                                    loading={isLoading}
-                                    leftIcon={Zap}
-                                  >
-                                    Resolve & Reactivate
-                                  </Button>
-                                </div>
-                              )}
-
-                              {/* Add Note */}
-                              <div className="flex gap-2 items-end">
-                                <div className="flex-1">
-                                  <Input
-                                    label={<span className="flex items-center gap-1"><StickyNote className="w-3 h-3" /> Internal Note</span>}
-                                    type="text"
-                                    value={noteInput[ticket._id] || ''}
-                                    onChange={e => setNoteInput(prev => ({ ...prev, [ticket._id]: e.target.value }))}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleAddNote(ticket._id); }}
-                                    placeholder="Add an internal note…"
-                                  />
-                                </div>
-                                <Button
-                                  onClick={() => handleAddNote(ticket._id)}
-                                  disabled={isLoading || !noteInput[ticket._id]?.trim()}
-                                  loading={isLoading}
-                                  leftIcon={Send}
-                                  className="!bg-amber-500 hover:!bg-amber-600"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <div className="flex items-center gap-3 self-end lg:self-center">
+                    <span className="text-xs font-bold text-primary inline-flex items-center gap-1">
+                      <span>{isExpanded ? "Collapse" : "Open Thread"}</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+
+                {/* Expanded Thread Drawer */}
+                {isExpanded && (
+                  <div className="p-5 bg-slate-50 border-t border-slate-100 space-y-5 text-xs">
+                    {/* Inquiry Description */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Inquiry Statement / Description
+                      </span>
+                      <p className="text-slate-800 leading-relaxed text-xs whitespace-pre-wrap">
+                        {t.description}
+                      </p>
+                    </div>
+
+                    {/* Previous Resolution */}
+                    {t.resolution && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1">
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          <span>Official Resolution Record</span>
+                        </span>
+                        <p className="text-emerald-900 text-xs leading-relaxed">
+                          {t.resolution}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Internal Notes History */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Internal Administrative Audit Notes ({t.notes?.length || 0})
+                      </span>
+                      {t.notes && t.notes.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {t.notes.map((note, idx) => (
+                            <div key={idx} className="p-3 bg-white border border-slate-200 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                                <span className="font-semibold text-slate-700">{note.addedBy?.name || "Super Administrator"}</span>
+                                <span>{formatDateTime(note.createdAt)}</span>
+                              </div>
+                              <p className="text-slate-700 text-xs">{note.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 text-xs italic">No internal notes appended yet.</p>
+                      )}
+
+                      {/* Add Note Input */}
+                      <div className="flex gap-2 pt-2">
+                        <input
+                          type="text"
+                          placeholder="Append internal investigation note..."
+                          value={noteInput[t._id] || ""}
+                          onChange={(e) => setNoteInput((prev) => ({ ...prev, [t._id]: e.target.value }))}
+                          className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
+                        />
+                        <button
+                          onClick={() => handleAddNote(t._id)}
+                          disabled={isLoading || !(noteInput[t._id] || "").trim()}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-semibold rounded-xl text-xs transition inline-flex items-center gap-1.5"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Add Note</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Status & Resolution Form */}
+                    <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3 items-end">
+                      <div className="w-full sm:w-48">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Update Status
+                        </label>
+                        <select
+                          value={statusInput[t._id] || t.status}
+                          onChange={(e) => setStatusInput((prev) => ({ ...prev, [t._id]: e.target.value }))}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none cursor-pointer"
+                        >
+                          <option value="open">Open</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+
+                      <div className="flex-1 w-full">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Resolution Summary Notes
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Summary of actions taken to resolve inquiry..."
+                          value={resolutionInput[t._id] || ""}
+                          onChange={(e) => setResolutionInput((prev) => ({ ...prev, [t._id]: e.target.value }))}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => handleUpdateStatus(t)}
+                        disabled={isLoading}
+                        className="px-5 py-2 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl text-xs shadow-xs transition disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {isLoading ? "Saving…" : "Save Changes"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

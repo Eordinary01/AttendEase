@@ -57,6 +57,15 @@ if (process.env.NODE_ENV !== 'test') {
       }
       logger.info(`Synced effective plan limits, modules, and stats for ${tenants.length} tenant(s)`);
       autoCompleteExams().catch(err => logger.error('Error auto-completing exams on connect', { error: err.message }));
+
+      try {
+        const { startPromotionWorker } = require('./queue/worker');
+        const { startPromotionScanner } = require('./promotionScanner');
+        startPromotionWorker();
+        startPromotionScanner();
+      } catch (promoErr) {
+        logger.error('Failed to initialize promotion background worker or scanner', { error: promoErr.message });
+      }
     } catch (e) {
       logger.error('Error syncing tenant limits & stats', { error: e.message });
     }

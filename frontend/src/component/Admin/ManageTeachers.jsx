@@ -464,10 +464,7 @@ const ManageTeachers = () => {
       cell: (row) => (
         <div className="flex items-center gap-3">
           <div 
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs text-white"
-            style={{ 
-              backgroundColor: themeColors.primary
-            }}
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs text-white bg-primary"
           >
             {row.name?.charAt(0)?.toUpperCase()}
           </div>
@@ -544,7 +541,7 @@ const ManageTeachers = () => {
                       Sec {cr.section}
                     </span>
                   ) : cr.branch ? (
-                    <span className="text-[10px] bg-indigo-500/20 text-indigo-600 px-1 rounded">
+                    <span className="text-[10px] bg-primary/20 text-primary px-1 rounded">
                       {cr.branch}
                     </span>
                   ) : (
@@ -623,7 +620,7 @@ const ManageTeachers = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
         greeting="Faculty Directory & Profiles"
         meta={`Add, update, and manage teacher profiles for ${tenantInfo?.name || "your campus"}`}
@@ -658,25 +655,25 @@ const ManageTeachers = () => {
       />
 
       {/* Filter Toolbar */}
-      <Card padding="md" bordered>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto flex-1">
             <div className="relative flex-1 sm:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by faculty name, email, roll no..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-primary/20"
               />
             </div>
             <div className="relative w-full sm:w-48">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-faint" />
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <select
                 value={filterSection}
                 onChange={(e) => setFilterSection(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-line/50 bg-background text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 cursor-pointer font-semibold"
               >
                 <option value="">All Sections</option>
                 {sections.map((s) => (
@@ -688,14 +685,14 @@ const ManageTeachers = () => {
             </div>
           </div>
 
-          <div className="text-xs text-ink-soft font-semibold self-end sm:self-center">
-            <span>{filteredTeachers.length} faculty registered</span>
+          <div className="text-xs font-mono font-bold text-primary-dark bg-primary-soft px-2.5 py-1 rounded-lg border border-primary/20 self-end sm:self-center">
+            <span>{filteredTeachers.length} Faculty Members</span>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Teachers Table Card */}
-      <Card padding="none" bordered className="overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           columns={columns}
           data={paginatedTeachers}
@@ -705,7 +702,7 @@ const ManageTeachers = () => {
           pagination={paginationInfo}
           onPageChange={setPage}
         />
-      </Card>
+      </div>
 
       {/* Add Teacher Modal */}
       <Modal
@@ -746,10 +743,7 @@ const ManageTeachers = () => {
           <div className="space-y-5">
             <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-background border border-line/50">
               <div 
-                className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-xs"
-                style={{ 
-                  backgroundColor: themeColors.primary,
-                }}
+                className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-xs bg-primary"
               >
                 {selectedTeacher.name?.charAt(0)?.toUpperCase()}
               </div>
@@ -831,7 +825,7 @@ const ManageTeachers = () => {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-xs font-bold text-ink">{tr.roleId?.name || "Role"}</p>
                           {tr.isPrimary && (
-                            <Badge tone="purple" size="sm">Primary</Badge>
+                            <Badge tone="secondary" size="sm">Primary</Badge>
                           )}
                           {tr.section && (
                             <Badge tone="primary" size="sm">Section {tr.section}</Badge>
@@ -989,7 +983,7 @@ const ManageTeachers = () => {
                         Sec {tr.section}
                       </span>
                     ) : tr.branch ? (
-                      <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 px-1 rounded">
+                      <span className="text-[10px] font-bold bg-primary/10 text-primary px-1 rounded">
                         {tr.branch}
                       </span>
                     ) : (
@@ -1042,7 +1036,7 @@ const ManageTeachers = () => {
               <div className="flex items-center gap-2">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                   isBeyondClass
-                    ? "bg-indigo-500/10 text-indigo-600 border border-indigo-500/20"
+                    ? "bg-primary/10 text-primary border border-primary/20"
                     : "bg-primary/10 text-primary border border-primary/20"
                 }`}>
                   {isBeyondClass ? "Department / Institution-wide Scope" : "Class / Section Scope"}

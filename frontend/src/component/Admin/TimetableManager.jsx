@@ -1107,18 +1107,18 @@ const TimetableManager = ({ role = "admin", userId, userName }) => {
 
                   {/* Auto-filled Summary Card */}
                   {formData.subjectId && (
-                    <div className="col-span-2 p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs space-y-1.5">
+                    <div className="col-span-2 p-3.5 rounded-xl bg-primary-soft border border-primary/20 text-ink text-xs space-y-1.5">
                       <div className="flex items-center justify-between font-semibold">
-                        <span className="flex items-center gap-2 text-indigo-700">
+                        <span className="flex items-center gap-2 text-primary-dark">
                           <GraduationCap className="w-4 h-4" />
                           Course: {formData.courseCode || selectedCourseObj?.code || "Generic"}
                           {formData.branch ? ` • ${formData.branch}` : ""}
                         </span>
-                        <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold">
+                        <span className="bg-primary/10 text-primary-dark px-2 py-0.5 rounded font-bold">
                           Semester {formData.semester || "1"}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-indigo-700 text-[11px] border-t border-indigo-200/60 pt-1.5 mt-1.5">
+                      <div className="flex items-center justify-between text-primary-dark text-[11px] border-t border-primary/20 pt-1.5 mt-1.5">
                         <span>Teacher: <strong>{selectedTeacherObj ? selectedTeacherObj.name : "Not auto-assigned"}</strong></span>
                         <span className="text-emerald-700 font-bold flex items-center gap-1">
                           <Check className="w-3 h-3" /> Auto-Configured

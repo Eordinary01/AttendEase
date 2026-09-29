@@ -9,7 +9,7 @@ import {
 import Header from "./component/header";
 import PlanGate from "./component/common/PlanGate";
 import AppShell from "./component/common/AppShell";
-import { onAuthError } from "./utils/api";
+import { onAuthError, onUpgradeError } from "./utils/api";
 import { ThemeProvider } from "./contexts/ThemeContexts";
 import { PermissionsProvider, usePermissions } from "./contexts/PermissionsContext";
 import { ToastProvider } from "./contexts/ToastContext";
@@ -18,6 +18,7 @@ import { DemoProvider } from "./contexts/DemoContext";
 import { isDemoActive, getDemoSession } from "./utils/demoSandbox";
 import ErrorBoundary from "./component/common/ErrorBoundary";
 import { getPostLogoutPath } from "./utils/loginPath";
+import PricingModal from "./component/common/PricingModal";
 
 // Dynamic component imports for optimal code splitting
 const NewLogin = lazy(() => import("./component/newLogin"));
@@ -68,6 +69,7 @@ const ExamSeatingEngine = lazy(() => import("./component/Admin/ExamSeatingEngine
 const StudentHallTicket = lazy(() => import("./component/exam/StudentHallTicket"));
 const InvigilatorQRScanner = lazy(() => import("./component/exam/InvigilatorQRScanner"));
 const Announcements = lazy(() => import("./component/Admin/Announcements"));
+const AutomatedNotifications = lazy(() => import("./component/Admin/AutomatedNotifications"));
 const StudentsManager = lazy(() => import("./component/Admin/StudentsManager"));
 const ReportsManager = lazy(() => import("./component/Admin/ReportsManager"));
 const AcademicStructure = lazy(() => import("./component/Admin/AcademicStructure"));
@@ -240,16 +242,27 @@ const App = () => {
   }, []);
 
   // Listen for 401 token expiry → auto-logout
-  useEffect(() => {
-    const unsubAuthError = onAuthError(() => {
-      setIsAuthenticated(false);
-      setRole("");
-      setUserId(null);
-      setUserName("");
-      setUserEmail("");
-    });
-    return unsubAuthError;
-  }, []);
+    useEffect(() => {
+      const unsubAuthError = onAuthError(() => {
+        setIsAuthenticated(false);
+        setRole("");
+        setUserId(null);
+        setUserName("");
+        setUserEmail("");
+      });
+      return unsubAuthError;
+    }, []);
+
+    // Listen for upgradeRequired / expired trial → open global PricingModal
+    const [upgradeModal, setUpgradeModal] = useState({ isOpen: false, context: null });
+
+    useEffect(() => {
+      const handleUpgradeError = (context) => {
+        setUpgradeModal({ isOpen: true, context: context || null });
+      };
+      const unsubUpgradeError = onUpgradeError(handleUpgradeError);
+      return unsubUpgradeError;
+    }, []);
 
   const handleLogin = (token, role, userId, userName, userEmail) => {
     if (token) {
@@ -361,7 +374,7 @@ const App = () => {
     <ThemeProvider>
     <ToastProvider>
     <DemoProvider>
-    <NotificationProvider isAuthenticated={isAuthenticated} role={role}>
+    <NotificationProvider isAuthenticated={isAuthenticated} role={role} userId={userId}>
     <PermissionsProvider role={role}>
     <Router>
       <PublicHeader
@@ -870,6 +883,16 @@ const App = () => {
           }
         />
         <Route
+          path="/admin/automated-notifications"
+          element={
+            <Protected requiredRole="admin">
+              <PlanGate requiredModule="alerts">
+                <AutomatedNotifications />
+              </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
           path="/exams/grades"
           element={
             <Protected>
@@ -994,13 +1017,17 @@ const App = () => {
       </Routes>
       </Suspense>
     </Router>
-    </PermissionsProvider>
-    </NotificationProvider>
-    </DemoProvider>
-    </ToastProvider>
-    </ThemeProvider>
-    </ErrorBoundary>
-  );
+        </PermissionsProvider>
+        </NotificationProvider>
+        </DemoProvider>
+        </ToastProvider>
+            <PricingModal
+              {...upgradeModal}
+              onClose={() => setUpgradeModal({ isOpen: false, context: null })}
+            />
+            </ThemeProvider>
+            </ErrorBoundary>
+      );
 };
 
 export default App;

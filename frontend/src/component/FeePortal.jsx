@@ -67,7 +67,7 @@ const FeePortal = () => {
     {
       header: "Receipt #",
       cell: (row) => (
-        <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-md border border-primary/20">
+        <span className="font-mono text-xs font-bold text-primary bg-primary-soft px-2.5 py-1 rounded-lg border border-primary-surface">
           {row.receiptNumber}
         </span>
       )
@@ -76,32 +76,32 @@ const FeePortal = () => {
       header: "For Fee / Item",
       cell: (row) => (
         <div>
-          <p className="font-semibold text-ink text-sm">
+          <p className="font-bold text-slate-900 text-sm">
             {row.feeId?.description || (row.feeId?.semester ? `Semester ${row.feeId.semester} Tuition Fee` : "Tuition Fee")}
           </p>
-          {row.notes && <p className="text-xs text-ink-soft mt-0.5">{row.notes}</p>}
+          {row.notes && <p className="text-xs text-slate-500 mt-0.5">{row.notes}</p>}
         </div>
       )
     },
     {
       header: "Amount Paid",
-      cell: (row) => <span className="font-bold text-emerald-600 text-sm">{formatCurrency(row.amount)}</span>
+      cell: (row) => <span className="font-bold text-emerald-600 text-sm font-mono">{formatCurrency(row.amount)}</span>
     },
     {
       header: "Payment Mode",
-      cell: (row) => <span className="capitalize text-xs font-medium px-2 py-0.5 rounded-md bg-background border border-line/60">{row.mode?.replace("_", " ")}</span>
+      cell: (row) => <span className="capitalize text-xs font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80">{row.mode?.replace("_", " ")}</span>
     },
     {
       header: "Collected By",
-      cell: (row) => <span className="text-xs text-ink-soft">{row.collectedBy?.name || "Institution Admin"}</span>
+      cell: (row) => <span className="text-xs text-slate-600 font-medium">{row.collectedBy?.name || "Institution Admin"}</span>
     },
     {
       header: "Date",
-      cell: (row) => <span className="text-ink-soft text-xs">{formatDateReadable(row.transactionDate, false)}</span>
+      cell: (row) => <span className="text-slate-500 text-xs font-medium">{formatDateReadable(row.transactionDate, false)}</span>
     },
     {
       header: "Status",
-      cell: (row) => <Badge tone={row.status === "completed" ? "success" : "neutral"} size="sm" className="capitalize font-medium">{row.status}</Badge>
+      cell: (row) => <Badge tone={row.status === "completed" ? "success" : "neutral"} size="sm" className="capitalize font-semibold">{row.status}</Badge>
     },
   ];
 
@@ -117,11 +117,11 @@ const FeePortal = () => {
     return (
       <div className="flex items-center justify-center py-16">
         <Card padding="lg" bordered className="max-w-lg w-full text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 text-primary">
-            <Lock className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-2xl bg-primary-soft border border-primary-surface flex items-center justify-center mx-auto mb-4 text-primary shadow-xs">
+            <Lock className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-ink mb-2">Institutional Fee Portal</h2>
-          <p className="text-ink-soft text-xs mb-4">Fee management is not active on your current institution plan tier.</p>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Institutional Fee Portal</h2>
+          <p className="text-slate-500 text-xs mb-4">Fee management is not active on your current institution plan tier.</p>
         </Card>
       </div>
     );
@@ -132,17 +132,22 @@ const FeePortal = () => {
   const pastFees = fees.filter(f => f.isPastSemester);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting="My Fees & Payment Ledger"
-        meta="Track semester fee schedules, payment milestones, and official transaction receipts"
+        title="My Fees & Payment Ledger"
+        subtitle="Track semester fee schedules, payment milestones, and official transaction receipts"
+        badge={
+          <Badge tone={totalDue > 0 ? "warning" : "success"}>
+            {totalDue > 0 ? "Outstanding Balance" : "Fully Cleared"}
+          </Badge>
+        }
         actions={
           <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-ink-soft hidden sm:inline">Filter Semester:</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Filter Semester:</label>
             <select
               value={semesterFilter}
               onChange={e => setSemesterFilter(e.target.value)}
-              className="rounded-xl border border-line/60 bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:ring-2 focus:ring-primary/20 font-medium cursor-pointer"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium cursor-pointer"
             >
               <option value="">All Semesters</option>
               {Array.from({ length: totalSemesters || 8 }, (_, i) => i + 1).map(s => (

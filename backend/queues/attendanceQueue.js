@@ -17,9 +17,18 @@ const { createBullRedisClient } = require('../utils/redisClient');
 async function processAbsenceEscalation({ studentId, tenantId, streakLength, lastAbsenceDate, subjectId, section }) {
   const User = require('../models/User');
   const Alert = require('../models/Alert');
+  const Tenant = require('../models/Tenant');
   const { sendMail } = require('../utils/emailService');
 
   try {
+    const tenant = await Tenant.findById(tenantId).select('settings.automatedNotifications').lean();
+    const autoSettings = tenant?.settings?.automatedNotifications || {};
+
+    if (autoSettings.enableAbsenceEscalations === false) {
+      logger.info('Absence escalations disabled by tenant settings', { tenantId });
+      return;
+    }
+
     const student = await User.findById(studentId).lean();
     if (!student) {
       logger.warn('Student not found for absence escalation', { studentId });
@@ -50,9 +59,10 @@ async function processAbsenceEscalation({ studentId, tenantId, streakLength, las
     const formattedAbsenceDate = formatDateDMY(absenceDate);
 
     // ── Tier 1: In-App Alert for Student & Teacher ───────────────────────────
+    const currentStreak = streakLength || autoSettings.consecutiveAbsenceStreak || 3;
     const tier1Alert = await Alert.create({
-      title: 'Attendance Warning: 3 Consecutive Absences',
-      message: `${studentName}${studentRollNo} has missed ${streakLength || 3} consecutive scheduled classes as of ${formattedAbsenceDate}. Immediate counseling and attendance recovery required.`,
+      title: `Attendance Warning: ${currentStreak} Consecutive Absences`,
+      message: `${studentName}${studentRollNo} has missed ${currentStreak} consecutive scheduled classes as of ${formattedAbsenceDate}. Immediate counseling and attendance recovery required.`,
       type: 'absence_escalation',
       priority: 'high',
       isActive: true,
@@ -65,7 +75,7 @@ async function processAbsenceEscalation({ studentId, tenantId, streakLength, las
         studentName,
         rollNo: student.rollNo,
         section: resolvedSection,
-        streakLength: streakLength || 3,
+        streakLength: currentStreak,
         lastAbsenceDate: absenceDate,
         tier: 1,
         severity: 'warning',
@@ -74,14 +84,14 @@ async function processAbsenceEscalation({ studentId, tenantId, streakLength, las
     publishAlertCreated(tenantId, tier1Alert);
 
     // ── Tier 2: Parent Email Notification ────────────────────────────────────
-    if (student.parentEmail) {
+    if (autoSettings.enableParentEmailNotifications !== false && student.parentEmail) {
       const emailSubject = `Attendance Warning: Consecutive Absences for ${studentName}`;
       const html = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <h2 style="color: #dc2626; margin-top: 0; font-size: 20px;">⚠️ Attendance Warning Notification</h2>
           <p style="color: #334155; font-size: 15px; line-height: 1.5;">Dear Parent / Guardian of <strong>${studentName}</strong> (Roll No: ${student.rollNo || 'N/A'}),</p>
           <p style="color: #334155; font-size: 14px; line-height: 1.6;">
-            Our academic records show that your ward has missed <strong>${streakLength || 3} consecutive scheduled classes</strong> up to <strong>${formattedAbsenceDate}</strong>.
+            Our academic records show that your ward has missed <strong>${currentStreak} consecutive scheduled classes</strong> up to <strong>${formattedAbsenceDate}</strong>.
           </p>
           <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 14px; margin: 16px 0; border-radius: 4px; color: #991b1b; font-size: 13px;">
             <strong>Notice:</strong> As per institutional regulations, maintaining a minimum of 75% attendance is required to be eligible for end-semester examinations.
@@ -107,27 +117,29 @@ async function processAbsenceEscalation({ studentId, tenantId, streakLength, las
     }
 
     // ── Tier 3: High-Priority Flag for HOD / Dean / Admins ───────────────────
-    const tier3Alert = await Alert.create({
-      title: 'Dean/HOD Action: Critical Consecutive Absence Streak',
-      message: `Student ${studentName}${studentRollNo} (Section: ${resolvedSection || 'N/A'}) has accrued ${streakLength || 3} consecutive absences. Flagged for administrative intervention.`,
-      type: 'absence_escalation',
-      priority: 'urgent',
-      isActive: true,
-      tenantId,
-      targetRoles: ['admin'],
-      targetSections: resolvedSection ? [resolvedSection.toUpperCase()] : [],
-      metadata: {
-        studentId,
-        studentName,
-        rollNo: student.rollNo,
-        section: resolvedSection,
-        streakLength: streakLength || 3,
-        lastAbsenceDate: absenceDate,
-        tier: 3,
-        severity: 'critical',
-      },
-    });
-    publishAlertCreated(tenantId, tier3Alert);
+    if (autoSettings.enableAdminEscalations !== false) {
+      const tier3Alert = await Alert.create({
+        title: 'Dean/HOD Action: Critical Consecutive Absence Streak',
+        message: `Student ${studentName}${studentRollNo} (Section: ${resolvedSection || 'N/A'}) has accrued ${currentStreak} consecutive absences. Flagged for administrative intervention.`,
+        type: 'absence_escalation',
+        priority: 'urgent',
+        isActive: true,
+        tenantId,
+        targetRoles: ['admin'],
+        targetSections: resolvedSection ? [resolvedSection.toUpperCase()] : [],
+        metadata: {
+          studentId,
+          studentName,
+          rollNo: student.rollNo,
+          section: resolvedSection,
+          streakLength: currentStreak,
+          lastAbsenceDate: absenceDate,
+          tier: 3,
+          severity: 'critical',
+        },
+      });
+      publishAlertCreated(tenantId, tier3Alert);
+    }
 
     publishAtRiskAlert(tenantId, {
       studentId,

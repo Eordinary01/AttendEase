@@ -23,7 +23,7 @@ const NotificationContext = createContext({
 
 export const useNotifications = () => useContext(NotificationContext);
 
-export const NotificationProvider = ({ children, isAuthenticated, role }) => {
+export const NotificationProvider = ({ children, isAuthenticated, role, userId }) => {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -94,7 +94,22 @@ export const NotificationProvider = ({ children, isAuthenticated, role }) => {
     }
   }, [isAuthenticated, fetchAlerts]);
 
-  const currentUserId = typeof window !== 'undefined' ? (localStorage.getItem('userId') || '') : '';
+  const resolveCurrentUserId = () => {
+    if (userId) return String(userId);
+    if (typeof window === 'undefined') return '';
+    const stored = localStorage.getItem('userId');
+    if (stored && stored !== 'undefined' && stored !== 'null') return String(stored);
+    try {
+      const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+      const candidate = userObj.id || userObj._id || '';
+      if (candidate) return String(candidate);
+    } catch {
+      // ignore
+    }
+    return '';
+  };
+
+  const currentUserId = resolveCurrentUserId();
   const currentRole = role || (typeof window !== 'undefined' ? (localStorage.getItem('role') || '') : '');
   const currentSection = typeof window !== 'undefined' ? (localStorage.getItem('userSection') || '') : '';
   const currentCourse = typeof window !== 'undefined' ? (localStorage.getItem('userCourse') || '') : '';
@@ -114,14 +129,28 @@ export const NotificationProvider = ({ children, isAuthenticated, role }) => {
       // 1. Sender exclusion: do not show live push for user's own action
       //    For alert.created, the actor is createdBy.
       //    For alert.updated, the actor is updatedBy.
-      const senderId =
-        (currentUserId && payload.eventName === 'alert.updated' && payload.updatedBy)
+      const extractActorId = (val) => {
+        if (!val) return null;
+        if (typeof val === 'object' && val._id) return String(val._id);
+        if (typeof val === 'object' && val.id) return String(val.id);
+        return String(val);
+      };
+
+      const rawSender =
+        (payload.eventName === 'alert.updated' && payload.updatedBy)
           ? payload.updatedBy
-          : payload.createdBy;
+          : (payload.createdBy || payload.metadata?.createdBy);
+      const senderId = extractActorId(rawSender);
+
       if (currentUserId && senderId && String(senderId) === String(currentUserId)) {
         return false;
       }
       // 2. Role targeting
+      if (currentRole === 'super_admin') {
+        if (!payload.isPlatformAlert && !(Array.isArray(payload.targetRoles) && payload.targetRoles.includes('super_admin'))) {
+          return false;
+        }
+      }
       if (Array.isArray(payload.targetRoles) && payload.targetRoles.length > 0) {
         if (currentRole && !payload.targetRoles.includes(currentRole)) {
           return false;
@@ -298,6 +327,43 @@ export const NotificationProvider = ({ children, isAuthenticated, role }) => {
       fetchAlerts();
     });
 
+    const unsubPromotionCompleted = eventSourceManager.on('promotion.completed', (payload) => {
+      playNotificationChime();
+      fetchAlerts();
+
+      if (currentRole === 'admin' || currentRole === 'super_admin') {
+        if (toast?.success) {
+          toast.success(
+            payload?.message ||
+              `Semester promotion complete — ${payload?.promoted ?? 0} promoted, ${payload?.graduated ?? 0} graduated`
+          );
+        }
+      } else if (currentRole === 'student') {
+        const studentDetail = payload?.details?.find(
+          (d) => String(d.id) === String(currentUserId) || (d.rollNo && d.rollNo === localStorage.getItem('userRollNo'))
+        );
+        if (studentDetail) {
+          if (studentDetail.graduated && toast?.success) {
+            toast.success('Congratulations! You have completed your program and graduated.');
+          } else if (toast?.success) {
+            toast.success(`You have been promoted to Semester ${studentDetail.to}!`);
+          }
+        }
+      } else if (currentRole === 'parent') {
+        const wardRollNo = localStorage.getItem('wardRollNo');
+        const wardDetail = payload?.details?.find(
+          (d) => (wardRollNo && d.rollNo === wardRollNo) || (d.id && d.id === localStorage.getItem('wardId'))
+        );
+        if (wardDetail && toast?.info) {
+          if (wardDetail.graduated) {
+            toast.info(`Congratulations! Your ward ${wardDetail.name} has graduated.`);
+          } else {
+            toast.info(`Academic Update: Your ward ${wardDetail.name} has been promoted to Semester ${wardDetail.to}.`);
+          }
+        }
+      }
+    });
+
     return () => {
       unsubStatus();
       unsubAlertCreated();
@@ -312,6 +378,7 @@ export const NotificationProvider = ({ children, isAuthenticated, role }) => {
       unsubExamResults();
       unsubExamSeating();
       unsubRiskCritical();
+      unsubPromotionCompleted();
       eventSourceManager.disconnect();
     };
   }, [isAuthenticated, fetchAlerts, toast]);
@@ -344,7 +411,14 @@ export const NotificationProvider = ({ children, isAuthenticated, role }) => {
     };
   }, [isAuthenticated, connectionStatus, fetchAlerts]);
 
-  const unreadAlerts = alerts.filter((a) => !a.isRead);
+  const unreadAlerts = alerts.filter((a) => {
+    if (a.isRead) return false;
+    const authorId = a.createdBy?.id || a.createdBy?._id || a.createdBy;
+    if (currentUserId && authorId && String(authorId) === String(currentUserId)) {
+      return false;
+    }
+    return true;
+  });
 
   const value = {
     alerts,

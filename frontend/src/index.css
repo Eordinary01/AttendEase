@@ -27,47 +27,142 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
+
   body {
     @apply bg-background text-ink;
   }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     @apply bg-line;
     border-radius: 8px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-ink-faint;
   }
 }
 
-/* Add this to your CSS file */
-.blur-background {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
-    z-index: 49;
+/* ========================================
+   LANDING PAGE — ATMOSPHERIC EFFECTS
+   ======================================== */
+
+/* Gradient mesh: slow-moving ambient background for hero */
+@keyframes gradientMesh {
+  0% {
+    background-position: 0% 50%;
   }
 
-  .loader {
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #3498db;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    animation: spin 1s linear infinite;
+  50% {
+    background-position: 100% 50%;
   }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+
+  100% {
+    background-position: 0% 50%;
   }
+}
+
+.landing-gradient-mesh {
+  background: linear-gradient(135deg,
+      #0f172a 0%,
+      #1e1b4b 25%,
+      #312e81 50%,
+      #1e1b4b 75%,
+      #0f172a 100%);
+  background-size: 400% 400%;
+  animation: gradientMesh 12s ease infinite;
+}
+
+/* Subtle noise texture overlay for premium feel */
+.landing-noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 256px;
+}
+
+/* Glow pulse for primary CTA buttons */
+@keyframes glowPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), 0 0 60px rgba(99, 102, 241, 0.1);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5), 0 0 80px rgba(99, 102, 241, 0.15);
+  }
+}
+
+.landing-glow-pulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+/* Divider line draw animation */
+@keyframes drawLine {
+  from {
+    transform: scaleY(0);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* Grid dot pattern for dark sections */
+.landing-grid-pattern {
+  background-image: radial-gradient(circle, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Subtle dot pattern for light sections */
+.landing-dots-light {
+  background-image: radial-gradient(circle, rgba(67, 56, 202, 0.035) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+}
+
+/* ========================================
+   EXISTING UTILITIES
+   ======================================== */
+
+.blur-background {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  z-index: 49;
+}
+
+.loader {
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #3498db;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}

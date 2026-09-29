@@ -191,13 +191,20 @@ const ResultsView = ({ role }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans antialiased text-slate-800">
       <DashboardHeader
-        greeting={isParent ? "Academic Grade Sheet & Results" : "My Grade Card & Assessment Results"}
-        meta={isParent ? "SGPA / CGPA analysis and published exam performance" : "Cumulative grade point averages, transcript marks, and semester results"}
+        title={isParent ? "Academic Grade Sheet & Results" : "My Grade Card & Assessment Results"}
+        subtitle={isParent ? "SGPA / CGPA analysis and published exam performance" : "Cumulative grade point averages, transcript marks, and semester results"}
+        badge={
+          gradeReport.cgpa != null ? (
+            <Badge tone="primary">
+              CGPA {gradeReport.cgpa.toFixed(2)}
+            </Badge>
+          ) : null
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-xl border border-line/60 overflow-hidden shadow-sm bg-surface p-0.5">
+            <div className="flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1">
               {[
                 { key: "report", label: "Grade Report", icon: TrendingUp },
                 { key: "results", label: "All Results", icon: FileText },
@@ -205,7 +212,7 @@ const ResultsView = ({ role }) => {
                 <button
                   key={tab.key}
                   onClick={() => setViewMode(tab.key)}
-                  className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${viewMode === tab.key ? "bg-primary text-white" : "text-ink-soft hover:text-ink"}`}
+                  className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${viewMode === tab.key ? "bg-white text-primary shadow-xs border border-slate-200/80" : "text-slate-600 hover:text-slate-900"}`}
                 >
                   <tab.icon className="w-3.5 h-3.5" />
                   {tab.label}
@@ -216,7 +223,7 @@ const ResultsView = ({ role }) => {
               <select
                 value={semesterFilter}
                 onChange={e => setSemesterFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs rounded-xl border border-line/60 bg-surface text-ink outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+                className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer font-medium"
               >
                 <option value="all">All Semesters</option>
                 {semesterOptions.map(s => <option key={s} value={s}>Semester {s}</option>)}
