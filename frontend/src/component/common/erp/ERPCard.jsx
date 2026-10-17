@@ -17,11 +17,11 @@ export default function ERPCard({
 }) {
   return (
     <div
-      className={`bg-surface border border-line/50 rounded-2xl transition-all duration-200 flex flex-col overflow-hidden ${minHeight} ${className}`}
+      className={`bg-surface border border-line hover:border-primary/35 rounded-panel transition-all duration-200 flex flex-col overflow-hidden shadow-xs hover:shadow-sm ${minHeight} ${className}`}
     >
       {/* ERP Card Header */}
       <div
-        className={`px-4 py-3 border-b border-line/50 flex items-center justify-between ${headerClassName}`}
+        className={`px-4 py-3 border-b border-line flex items-center justify-between bg-surface-subtle/80 ${headerClassName}`}
       >
         <div className="flex items-center gap-2 min-w-0">
           {Icon && <Icon className="w-4 h-4 text-primary shrink-0" />}
@@ -29,7 +29,7 @@ export default function ERPCard({
             {title}
           </h3>
           {badge && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/20 shrink-0">
               {badge}
             </span>
           )}
@@ -43,7 +43,7 @@ export default function ERPCard({
               onClick={onRefresh}
               disabled={isRefreshing}
               title="Refresh data"
-              className="p-1 rounded-lg text-ink-faint hover:text-primary hover:bg-background border border-line/60 transition disabled:opacity-50 cursor-pointer"
+              className="p-1 rounded text-ink-muted hover:text-ink hover:bg-surface border border-line transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-primary" : ""}`}
@@ -54,7 +54,7 @@ export default function ERPCard({
       </div>
 
       {/* ERP Card Body */}
-      <div className={`flex-1 flex flex-col ${bodyClassName}`}>
+      <div className={`flex-1 flex flex-col bg-surface ${bodyClassName}`}>
         {children}
       </div>
     </div>

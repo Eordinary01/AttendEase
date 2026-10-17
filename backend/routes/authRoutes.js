@@ -85,7 +85,23 @@ authRoute.post('/reset-password', authLimiter, resetPassword);
 authRoute.get('/tenant-info', async (req, res) => {
   try {
     const Tenant = require('../models/Tenant');
+    const Plan = require('../models/Plan');
     const { subdomain } = req.query;
+
+    const buildTenantPayload = async (tenantDoc) => {
+      const planCode = tenantDoc.subscription?.plan || 'free';
+      const plan = await Plan.findOne({ code: planCode }).lean();
+      const planAllowsCustomBranding = plan?.modules?.customBranding ?? (['professional', 'enterprise'].includes(planCode));
+
+      return {
+        id: tenantDoc._id,
+        name: tenantDoc.branding?.institutionName || tenantDoc.name,
+        subdomain: tenantDoc.subdomain,
+        branding: tenantDoc.branding || {},
+        plan: planCode,
+        hasCustomBranding: Boolean(planAllowsCustomBranding),
+      };
+    };
     
     // If subdomain is provided, find by subdomain
     if (subdomain) {
@@ -100,13 +116,7 @@ authRoute.get('/tenant-info', async (req, res) => {
       if (tenant) {
         return res.json({
           success: true,
-          tenant: {
-            id: tenant._id,
-            name: tenant.branding?.institutionName || tenant.name,
-            subdomain: tenant.subdomain,
-            branding: tenant.branding,
-            plan: tenant.subscription?.plan
-          }
+          tenant: await buildTenantPayload(tenant)
         });
       }
     }
@@ -124,13 +134,7 @@ authRoute.get('/tenant-info', async (req, res) => {
       if (tenant) {
         return res.json({
           success: true,
-          tenant: {
-            id: tenant._id,
-            name: tenant.branding?.institutionName || tenant.name,
-            subdomain: tenant.subdomain,
-            branding: tenant.branding,
-            plan: tenant.subscription?.plan
-          }
+          tenant: await buildTenantPayload(tenant)
         });
       }
     }

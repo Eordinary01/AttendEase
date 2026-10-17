@@ -53,6 +53,7 @@ export const roleNav = {
     { group: 'Platform', items: [
       { to: '/super-admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/super-admin/tenants', label: 'Tenants', icon: Building2 },
+      { to: '/super-admin/leads', label: 'Inbound Inquiries', icon: Ticket },
       { to: '/super-admin/plans', label: 'Plans', icon: Package },
       { to: '/super-admin/support', label: 'Support', icon: LifeBuoy },
       { to: '/super-admin/monitoring', label: 'System Logs', icon: Activity },
@@ -347,7 +348,7 @@ export const AppShell = ({ role, userName, userId, onLogout, children }) => {
   const roleLabel = roleLabels[role] || role;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background text-ink flex flex-col lg:flex-row">
       <SkipLink targetId="main-content" />
 
       {/* Responsive Sidebar (Desktop Collapse & Mobile Drawer) */}

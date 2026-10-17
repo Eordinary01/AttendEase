@@ -107,8 +107,8 @@ const PlanGate = ({ requiredModule, children }) => {
           <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
             <Lock className="w-10 h-10 text-gray-400" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">{label}</h2>
-          <p className="text-gray-500 mb-6">
+          <h2 className="text-2xl font-bold text-ink mb-3">{label}</h2>
+          <p className="text-ink-muted mb-6">
             This feature is not included in your current plan. Upgrade to unlock it.
           </p>
           <button
@@ -118,7 +118,7 @@ const PlanGate = ({ requiredModule, children }) => {
                 message: `Upgrade to unlock ${label}.`,
               })
             }
-            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition text-sm font-medium shadow-lg shadow-indigo-200"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-xl hover:bg-primary-hover transition text-sm font-medium shadow-md shadow-primary/20 cursor-pointer"
           >
             <Crown className="w-5 h-5" /> Upgrade to Unlock
           </button>

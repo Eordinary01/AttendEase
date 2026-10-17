@@ -2,46 +2,43 @@ import React from 'react';
 
 export default function DashboardHeader({
   greeting,
-  title,
   meta,
-  subtitle,
-  badge,
   actions,
   highlightAction,
   className = '',
 }) {
-  const displayTitle = title || greeting;
-  const displayMeta = subtitle || meta;
-
   return (
-    <section className={`bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 font-sans ${className}`}>
-      <div className="space-y-1.5 min-w-0">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            {displayTitle}
-          </h1>
-          {badge && (
-            typeof badge === 'string' ? (
-              <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-slate-200/80">
-                {badge}
-              </span>
-            ) : badge
+    <div className={`w-full ${className}`}>
+      {/* Top Brand 3px Accent Line */}
+      <div className="w-full h-[3px] bg-gradient-to-r from-primary via-primary-light to-secondary" />
+
+      {/* Main Header Strip with Subtle Brand Atmosphere */}
+      <div className="bg-surface border-b border-line px-6 py-5 shadow-xs relative overflow-hidden">
+        {/* Ambient Top-Right Brand Wash */}
+        <div className="absolute top-0 right-0 w-96 h-full pointer-events-none bg-[radial-gradient(ellipse_at_top_right,rgba(var(--color-primary),0.06),transparent_70%)]" />
+
+        <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          {/* Identity & Meta */}
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold tracking-tight text-ink font-headline">
+              {greeting}
+            </h1>
+            {meta && (
+              <p className="text-xs font-medium text-ink-muted">
+                {meta}
+              </p>
+            )}
+          </div>
+
+          {/* Action CTAs */}
+          {(highlightAction || actions) && (
+            <div className="flex items-center flex-wrap gap-2.5">
+              {highlightAction}
+              {actions}
+            </div>
           )}
         </div>
-
-        {displayMeta && (
-          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium flex-wrap">
-            {displayMeta}
-          </div>
-        )}
       </div>
-
-      {(highlightAction || actions) && (
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          {highlightAction}
-          {actions}
-        </div>
-      )}
-    </section>
+    </div>
   );
 }

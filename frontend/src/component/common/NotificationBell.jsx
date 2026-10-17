@@ -106,9 +106,12 @@ export const NotificationBell = ({ role = '' }) => {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute right-0 mt-2 w-80 sm:w-96 origin-top-right rounded-2xl bg-surface border border-line shadow-xl focus:outline-none z-50 overflow-hidden">
+          <Menu.Items className="absolute right-0 mt-2 w-80 sm:w-96 origin-top-right rounded-lg bg-surface border border-line shadow-level4 focus:outline-none z-50 overflow-hidden">
+            {/* Institutional Roofline Strip */}
+            <div className="h-[2px] w-full bg-gradient-to-r from-primary via-primary-light to-secondary shrink-0" />
+
             {/* Header */}
-            <div className="px-4 py-3 border-b border-line flex items-center justify-between bg-background/50">
+            <div className="px-4 py-3 border-b border-line flex items-center justify-between bg-surface-subtle">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-xs text-ink uppercase tracking-wider">
                   Notifications
@@ -271,31 +274,21 @@ export const NotificationBell = ({ role = '' }) => {
             </div>
 
             {/* Footer Navigation */}
-            <div className="p-2 border-t border-line bg-background/30 flex items-center gap-2">
+            <div className="p-2 border-t border-line bg-background/30 text-center">
               <button
                 type="button"
                 onClick={handleViewAll}
-                className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1"
+                className="w-full py-1.5 px-3 rounded-xl text-xs font-bold text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1"
               >
                 <span>
                   {role === 'teacher'
                     ? 'View All Broadcasts'
                     : role === 'student'
                     ? 'View All Announcements'
-                    : 'Announcements'}
+                    : 'Manage Announcements'}
                 </span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
-              {role === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/automated-notifications')}
-                  className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold text-ink-soft hover:text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1 border border-line/60"
-                >
-                  <span>Auto Alerts</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
           </Menu.Items>
         </Transition>
@@ -335,22 +328,6 @@ export const NotificationBell = ({ role = '' }) => {
             {selectedAlert.createdBy && (
               <div className="text-[11px] text-ink-faint">
                 Published by: <span className="font-semibold text-ink">{selectedAlert.createdBy.name}</span> ({selectedAlert.createdBy.role})
-              </div>
-            )}
-
-            {role === 'admin' && (selectedAlert.type === 'absence_escalation' || selectedAlert.type === 'system' || selectedAlert.type === 'attendance_warning') && (
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedAlert(null);
-                    navigate('/admin/automated-notifications');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-primary text-white font-medium text-xs hover:opacity-90 transition flex items-center gap-1.5"
-                >
-                  <span>Manage in Automated Alerts Hub</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
               </div>
             )}
           </div>

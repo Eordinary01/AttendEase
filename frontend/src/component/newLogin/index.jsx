@@ -10,6 +10,8 @@ import {
 import axios from "axios";
 import { logError } from "../../utils/logger";
 import { getApiBaseUrl } from "../../utils/api";
+import { DEFAULT_PRIMARY, DEFAULT_SECONDARY } from "../../utils/theme";
+import { useTheme } from "../../contexts/ThemeContexts";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -18,6 +20,7 @@ const fadeIn = {
 
 const NewLogin = ({ onLogin }) => {
   const { subdomain: urlSubdomain } = useParams();
+  const { applyThemeColors } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -78,6 +81,14 @@ const NewLogin = ({ onLogin }) => {
 
   // Fetch tenant branding and custom message from subdomain on mount
   useEffect(() => {
+    // If on master platform super admin route, ensure default colors
+    if (isSuperAdminLoginRoute) {
+      if (applyThemeColors) {
+        applyThemeColors({ primary: DEFAULT_PRIMARY, secondary: DEFAULT_SECONDARY });
+      }
+      return;
+    }
+
     const subdomain = resolveSubdomain();
     if (!subdomain) return;
     if (subdomain === 'demo') {
@@ -94,21 +105,52 @@ const NewLogin = ({ onLogin }) => {
           const t = res.data.tenant;
           const b = t.branding || {};
           const customMsg = b.customMessage || b.welcomeMessage || null;
+
+          // Check if tenant's plan allows custom branding AND custom colors were specified
+          const planAllowsBranding = t.hasCustomBranding ?? (['professional', 'enterprise'].includes(t.plan));
+          const hasCustomColors = planAllowsBranding && b.primaryColor && b.primaryColor.trim() !== '';
+
+          const effectivePrimary = hasCustomColors ? b.primaryColor.trim() : DEFAULT_PRIMARY;
+          const effectiveSecondary = (hasCustomColors && b.secondaryColor && b.secondaryColor.trim() !== '')
+            ? b.secondaryColor.trim()
+            : DEFAULT_SECONDARY;
+
           setTenantBranding({
             name: b.institutionName || t.name,
-            primaryColor: b.primaryColor || '#7c3aed',
-            secondaryColor: b.secondaryColor || '#6366f1',
-            accentColor: b.accentColor || b.primaryColor || '#7c3aed',
+            primaryColor: effectivePrimary,
+            secondaryColor: effectiveSecondary,
+            accentColor: effectivePrimary,
             logo: b.logo || null,
             customMessage: customMsg ? customMsg.trim() : null,
             subdomain: t.subdomain || subdomain,
+            hasCustomBranding: planAllowsBranding,
           });
+
+          // Apply tenant's custom theme to document root CSS variables
+          if (applyThemeColors) {
+            applyThemeColors({
+              primary: effectivePrimary,
+              secondary: effectiveSecondary,
+            });
+          }
         }
       })
       .catch((err) => {
         logError("Fetch Tenant Info", err);
       });
-  }, [resolveSubdomain, API_URL]);
+  }, [resolveSubdomain, API_URL, isSuperAdminLoginRoute, applyThemeColors, navigate]);
+
+  // Clean up and restore default institutional theme when navigating away
+  useEffect(() => {
+    return () => {
+      if (applyThemeColors) {
+        applyThemeColors({
+          primary: DEFAULT_PRIMARY,
+          secondary: DEFAULT_SECONDARY,
+        });
+      }
+    };
+  }, [applyThemeColors]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -116,8 +158,8 @@ const NewLogin = ({ onLogin }) => {
   };
 
   // Dynamic theme colors
-  const primaryColor = tenantBranding?.primaryColor || '#7c3aed';
-  const secondaryColor = tenantBranding?.secondaryColor || '#6366f1';
+  const primaryColor = tenantBranding?.primaryColor || DEFAULT_PRIMARY;
+  const secondaryColor = tenantBranding?.secondaryColor || DEFAULT_SECONDARY;
 
   // Super Admin Login
   const handleSuperAdminLogin = async (e) => {
@@ -343,186 +385,177 @@ const NewLogin = ({ onLogin }) => {
 
   return (
     <div 
-      className="min-h-screen bg-background text-ink relative overflow-hidden flex flex-col justify-between p-4 sm:p-6 lg:p-8"
+      className="min-h-screen bg-background text-ink relative overflow-hidden flex flex-col justify-between"
       style={{
         "--theme-primary": primaryColor,
         "--theme-secondary": secondaryColor,
       }}
     >
-      {/* Background Ambient Glows & Grid */}
-      <div className="absolute inset-0 pointer-events-none -z-10">
-        <div 
-          className="absolute -top-40 -left-40 w-96 h-96 rounded-full blur-3xl opacity-20"
-          style={{ backgroundColor: primaryColor }}
-        />
-        <div 
-          className="absolute top-1/2 -right-40 w-96 h-96 rounded-full blur-3xl opacity-20"
-          style={{ backgroundColor: secondaryColor }}
-        />
-        <div 
-          className="absolute -bottom-40 left-1/3 w-96 h-96 rounded-full blur-3xl opacity-10"
-          style={{ backgroundColor: primaryColor }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] opacity-40 dark:opacity-10" />
-      </div>
+      {/* Top 3px Architectural Institutional Roofline Strip */}
+      <div className="w-full h-[3px] bg-gradient-to-r from-primary via-primary-light to-secondary shrink-0" />
 
-      {/* Top Navigation Bar */}
-      <header className="max-w-6xl w-full mx-auto flex items-center justify-between py-2">
-        <div 
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2.5 cursor-pointer group"
-        >
-          {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.logo ? (
-            <img
-              src={tenantBranding.logo}
-              alt={tenantBranding.name || "Logo"}
-              className="h-10 w-10 rounded-xl object-contain border border-line/60 p-1 bg-surface shadow-xs group-hover:scale-105 transition-transform"
-            />
-          ) : (
-            <div 
-              className="w-9 h-9 rounded-xl text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform"
-              style={{ backgroundColor: primaryColor }}
-            >
-              {isSuperAdminLoginRoute ? <Building2 className="w-5 h-5" /> : <GraduationCap className="w-5 h-5" />}
-            </div>
-          )}
-          <div>
-            <span className="text-base font-black tracking-tight text-ink">
-              {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.name
-                ? tenantBranding.name
-                : "AttendEase"}
-            </span>
-            <span 
-              className="text-[10px] uppercase font-bold ml-1.5 px-1.5 py-0.5 rounded border"
-              style={{
-                color: primaryColor,
-                backgroundColor: `${primaryColor}15`,
-                borderColor: `${primaryColor}30`,
-              }}
-            >
-              {isSuperAdminLoginRoute
-                ? "Super Admin"
-                : hasTenantContext && tenantBranding?.subdomain
-                ? `${tenantBranding.subdomain}.attendease.com`
-                : "ERP Cloud"}
-            </span>
-          </div>
-        </div>
+      {/* Atmospheric Subtle Ambient Brand Wash & Graph Grid */}
+      <div className="absolute inset-0 pointer-events-none -z-10 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(var(--color-primary),0.07),transparent_70%)]" />
+      <div className="absolute inset-0 pointer-events-none -z-10 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:24px_24px] opacity-60 dark:opacity-10" />
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-ink-soft bg-surface border border-line/50 px-3 py-1.5 rounded-full shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-ink">System Online</span>
-          </div>
-          <button
+      <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col justify-between">
+        {/* Top Navigation Bar */}
+        <header className="max-w-6xl w-full mx-auto flex items-center justify-between py-2 border-b border-line mb-4">
+          <div 
             onClick={() => navigate('/')}
-            className="text-xs font-bold text-ink-soft hover:text-ink hover:underline transition"
+            className="flex items-center gap-2.5 cursor-pointer group"
           >
-            Platform Overview
-          </button>
-        </div>
-      </header>
+            {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.logo ? (
+              <img
+                src={tenantBranding.logo}
+                alt={tenantBranding.name || "Logo"}
+                className="h-9 w-9 rounded object-contain border border-primary/30 ring-2 ring-primary/15 p-1 bg-surface shadow-xs transition-transform group-hover:scale-105"
+              />
+            ) : (
+              <div 
+                className="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-xs transition-transform group-hover:scale-105"
+              >
+                {isSuperAdminLoginRoute ? <Building2 className="w-4 h-4" /> : <GraduationCap className="w-4 h-4" />}
+              </div>
+            )}
+            <div>
+              <span className="text-sm font-bold tracking-tight text-ink group-hover:text-primary transition-colors">
+                {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.name
+                  ? tenantBranding.name
+                  : "AttendEase"}
+              </span>
+              <span 
+                className="text-[10px] uppercase font-mono font-medium ml-2 px-2 py-0.5 rounded border border-primary/25 bg-primary-soft text-primary-ink shadow-xs"
+              >
+                {isSuperAdminLoginRoute
+                  ? "Super Admin"
+                  : hasTenantContext && tenantBranding?.subdomain
+                  ? `${tenantBranding.subdomain}.attendease.app`
+                  : "Academic ERP"}
+              </span>
+            </div>
+          </div>
 
-      {/* Main 2-Column Hero & Login Section */}
-      <main className="max-w-6xl w-full mx-auto grid lg:grid-cols-12 gap-8 lg:gap-12 items-center my-auto py-8">
-        {/* Left Column: Brand & Value Prop */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="space-y-3">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-ink tracking-tight leading-tight">
-              {isSuperAdminLoginRoute ? (
-                <>
-                  AttendEase Platform <br className="hidden sm:inline" />
-                  <span style={{ color: primaryColor }}>Super Admin Portal</span>
-                </>
-              ) : hasTenantContext && tenantBranding?.name ? (
-                <>
-                  Welcome to <span style={{ color: primaryColor }}>{tenantBranding.name}</span>
-                </>
-              ) : (
-                <>
-                  Smart Attendance & <br className="hidden sm:inline" />
-                  <span style={{ color: primaryColor }}>Campus ERP Engine</span>
-                </>
-              )}
-            </h1>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-line px-2.5 py-1 rounded shadow-xs font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-status-success-text" />
+              <span>OPERATIONAL</span>
+            </div>
+            <button
+              onClick={() => navigate('/')}
+              className="text-xs font-medium text-ink-muted hover:text-primary transition-colors cursor-pointer"
+            >
+              &larr; Platform Overview
+            </button>
+          </div>
+        </header>
 
-            {/* Custom Notice Message from Tenant Admin (if configured) or Default Description */}
-            {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.customMessage ? (
-              <div className="p-4 rounded-2xl bg-surface/90 border border-line/70 shadow-sm relative overflow-hidden backdrop-blur-sm space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider" style={{ color: primaryColor }}>
-                  <MessageSquareQuote className="w-4 h-4" />
-                  <span>Administrative Message</span>
+        {/* Main 2-Column Hero & Login Section */}
+        <main className="max-w-6xl w-full mx-auto grid lg:grid-cols-12 gap-8 lg:gap-12 items-center my-auto py-4">
+          {/* Left Column: Brand & Value Prop */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-primary-soft/80 border border-primary/25 text-xs text-primary-ink w-fit shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                <span className="font-mono uppercase tracking-wider text-[11px] font-semibold">
+                  {isSuperAdminLoginRoute ? "Platform Management" : "Institutional Access"}
+                </span>
+              </div>
+
+              <h1 className="font-headline text-3xl sm:text-4xl lg:text-5xl font-bold text-ink tracking-tight leading-tight">
+                {isSuperAdminLoginRoute ? (
+                  <>
+                    AttendEase Platform <br className="hidden sm:inline" />
+                    <span className="text-primary font-extrabold">Super Admin Portal</span>
+                  </>
+                ) : hasTenantContext && tenantBranding?.name ? (
+                  <>
+                    Welcome to <br className="hidden sm:inline" />
+                    <span className="text-primary font-extrabold">{tenantBranding.name}</span>
+                  </>
+                ) : (
+                  <>
+                    Unified Academic ERP & <br className="hidden sm:inline" />
+                    <span className="text-primary font-extrabold">Registrar Engine</span>
+                  </>
+                )}
+              </h1>
+
+              {/* Custom Notice Message from Tenant Admin (if configured) or Default Description */}
+              {!isSuperAdminLoginRoute && hasTenantContext && tenantBranding?.customMessage ? (
+                <div className="p-4 rounded-panel bg-primary-soft/30 border border-primary/20 border-l-4 border-l-primary shadow-xs space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary font-mono">
+                    <MessageSquareQuote className="w-3.5 h-3.5" />
+                    <span>Administrative Notice</span>
+                  </div>
+                  <p className="text-xs text-ink leading-relaxed">
+                    {tenantBranding.customMessage}
+                  </p>
                 </div>
-                <p className="text-sm text-ink leading-relaxed font-medium">
-                  {tenantBranding.customMessage}
+              ) : (
+                <p className="text-sm text-ink-muted max-w-xl leading-relaxed">
+                  {isSuperAdminLoginRoute
+                    ? "Centralized multi-tenant infrastructure control, tenant provisioning, global telemetry monitoring, and institutional plan licensing."
+                    : hasTenantContext && tenantBranding?.name
+                    ? `Sign in to access official course rosters, timetables, academic proof registers, and verified attendance audits.`
+                    : `Deterministic academic administration with verified biometric attendance, timetable clash auditing, fee ledger records, and multi-tenant data isolation.`}
+                </p>
+              )}
+            </div>
+
+            {/* Feature Highlights Bento */}
+            <div className="grid sm:grid-cols-2 gap-3 pt-1">
+              <div className="p-3.5 rounded-panel bg-surface border border-line hover:border-primary/40 transition-colors shadow-xs space-y-1.5 group">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded bg-primary-soft border border-primary/25 text-primary flex items-center justify-center transition-transform group-hover:scale-105">
+                    {isSuperAdminLoginRoute ? <Building2 className="w-3.5 h-3.5" /> : <ScanFace className="w-3.5 h-3.5" />}
+                  </div>
+                  <h3 className="text-xs font-semibold text-ink group-hover:text-primary transition-colors uppercase tracking-wide">
+                    {isSuperAdminLoginRoute ? "Multi-Tenant Cloud" : "Local Vector Auth"}
+                  </h3>
+                </div>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  {isSuperAdminLoginRoute
+                    ? "Tenant lifecycle provisioning, subscription controls, and strict database isolation."
+                    : "Continuous automated verification with client-side biometric vector matching."}
                 </p>
               </div>
-            ) : (
-              <p className="text-sm sm:text-base text-ink-soft max-w-xl leading-relaxed">
-                {isSuperAdminLoginRoute
-                  ? "Centralized multi-tenant infrastructure control, institution provisioning, global tenant monitoring, and platform licensing management."
-                  : hasTenantContext && tenantBranding?.name
-                  ? `Sign in to access your course attendance, timetables, academic proofs, and real-time class notifications.`
-                  : `Empower your institution with continuous AI face recognition attendance, timetable scheduling, fee tracking, and multi-tenant administrative control.`}
-              </p>
-            )}
-          </div>
 
-          {/* Feature Highlights Bento */}
-          <div className="grid sm:grid-cols-2 gap-3 pt-2">
-            <div className="p-4 rounded-2xl bg-surface/80 border border-line/50 shadow-xs space-y-2 backdrop-blur-sm">
-              <div 
-                className="w-8 h-8 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
-              >
-                {isSuperAdminLoginRoute ? <Building2 className="w-4 h-4" /> : <ScanFace className="w-4 h-4" />}
+              <div className="p-3.5 rounded-panel bg-surface border border-line hover:border-secondary/40 transition-colors shadow-xs space-y-1.5 group">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded bg-secondary-soft border border-secondary/25 text-secondary flex items-center justify-center transition-transform group-hover:scale-105">
+                    {isSuperAdminLoginRoute ? <Globe className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                  </div>
+                  <h3 className="text-xs font-semibold text-ink group-hover:text-secondary transition-colors uppercase tracking-wide">
+                    {isSuperAdminLoginRoute ? "System Observability" : "Timetable & Roster"}
+                  </h3>
+                </div>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  {isSuperAdminLoginRoute
+                    ? "Real-time error traces, platform telemetry, and global tenant activity inspection."
+                    : "Automated schedule clash auditing, room allocation checks, and session registers."}
+                </p>
               </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
-                {isSuperAdminLoginRoute ? "Multi-Tenant Cloud" : "AI Face Biometrics"}
-              </h3>
-              <p className="text-xs text-ink-soft">
-                {isSuperAdminLoginRoute
-                  ? "Tenant lifecycle provisioning, subscription controls, and strict database isolation."
-                  : "Continuous 5-second auto-marking with anti-spoof liveness detection."}
-              </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-surface/80 border border-line/50 shadow-xs space-y-2 backdrop-blur-sm">
-              <div 
-                className="w-8 h-8 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
-              >
-                {isSuperAdminLoginRoute ? <Globe className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+            {/* Trust Metric Row */}
+            <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-ink-muted pt-1">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-status-success-text" />
+                <span>Tenant Data Isolation</span>
               </div>
-              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
-                {isSuperAdminLoginRoute ? "System Observability" : "Timetables & Roster"}
-              </h3>
-              <p className="text-xs text-ink-soft">
-                {isSuperAdminLoginRoute
-                  ? "Real-time error logs, system telemetry, and global tenant activity monitoring."
-                  : "Live faculty queue, automated schedule conflict detection & proof verification."}
-              </p>
+              <span className="text-line">&bull;</span>
+              <div className="flex items-center gap-1.5">
+                <BadgeCheck className="w-3.5 h-3.5 text-primary" />
+                <span>RBAC Permissions</span>
+              </div>
+              <span className="text-line">&bull;</span>
+              <div className="flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-secondary" />
+                <span>WCAG AA Certified</span>
+              </div>
             </div>
           </div>
-
-          {/* Trust Metric Row */}
-          <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-ink-soft pt-2">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Multi-Tenant Data Isolation</span>
-            </div>
-            <span>•</span>
-            <div className="flex items-center gap-1.5">
-              <BadgeCheck className="w-4 h-4" style={{ color: primaryColor }} />
-              <span>Role-Based Permissions</span>
-            </div>
-            <span>•</span>
-            <div className="flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-sky-600" />
-              <span>Instant Cloud Sync</span>
-            </div>
-          </div>
-        </div>
 
         {/* Right Column: Interactive Login Card */}
         <div className="lg:col-span-5 w-full">
@@ -530,37 +563,25 @@ const NewLogin = ({ onLogin }) => {
             initial="hidden"
             animate="visible"
             variants={fadeIn}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.3 }}
             className="w-full"
           >
-            <div className="bg-surface rounded-3xl overflow-hidden border border-line/60 shadow-xl relative backdrop-blur-md">
-              {/* Accent Top Bar */}
-              <div
-                className="h-1.5 w-full"
-                style={{
-                  background: `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`
-                }}
-              />
+            <div className="bg-surface rounded-panel overflow-hidden border border-line hover:border-primary/30 transition-colors shadow-level2 relative">
+              {/* Institutional Accent Top Roofline Strip */}
+              <div className="h-[3px] w-full bg-gradient-to-r from-primary via-primary-light to-secondary" />
 
               {/* Card Header & Branding */}
-              <div className="p-6 sm:p-7 pb-4 space-y-4">
+              <div className="p-5 sm:p-6 pb-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {!isSuperAdminLoginRoute && tenantBranding?.logo ? (
                       <img
                         src={tenantBranding.logo}
                         alt={tenantBranding.name || "Logo"}
-                        className="h-11 w-11 rounded-xl object-contain border border-line/50 p-1.5 bg-background shadow-xs"
+                        className="h-10 w-10 rounded object-contain border border-primary/30 ring-2 ring-primary/20 p-1 bg-background shadow-xs"
                       />
                     ) : (
-                      <div 
-                        className="w-11 h-11 rounded-xl border flex items-center justify-center shadow-xs"
-                        style={{
-                          backgroundColor: `${primaryColor}15`,
-                          borderColor: `${primaryColor}30`,
-                          color: primaryColor,
-                        }}
-                      >
+                      <div className="w-10 h-10 rounded border border-primary/25 bg-primary-soft text-primary flex items-center justify-center shadow-xs">
                         {isSuperAdminLoginRoute ? (
                           <Building2 className="w-5 h-5" />
                         ) : loginType === "parent" ? (
@@ -571,27 +592,32 @@ const NewLogin = ({ onLogin }) => {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <h2 className="text-base font-bold text-ink tracking-tight truncate">
-                        {isSuperAdminLoginRoute
-                          ? "Super Admin Portal"
-                          : tenantBranding?.name || "Campus Portal Access"}
-                      </h2>
-                      <p className="text-xs text-ink-soft truncate">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-bold text-ink tracking-tight truncate">
+                          {isSuperAdminLoginRoute
+                            ? "Super Admin Portal"
+                            : tenantBranding?.name || "Campus Portal Access"}
+                        </h2>
+                      </div>
+                      <p className="text-xs text-ink-muted truncate">
                         {isSuperAdminLoginRoute
                           ? "Master infrastructure authentication"
                           : loginType === "parent"
                           ? "Parent progress & attendance access"
-                          : tenantBranding?.customMessage
-                          ? tenantBranding.customMessage
-                          : "Enter your credentials to continue"}
+                          : "Enter institutional credentials to continue"}
                       </p>
+                      {!isSuperAdminLoginRoute && hasTenantContext && (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-primary-soft text-primary-ink font-mono text-[10px] font-semibold border border-primary/20">
+                          Verified Campus Portal
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Login Type Segmented Toggle */}
                 {!isSuperAdminLoginRoute ? (
-                  <div className="flex p-1 rounded-xl bg-background border border-line/50">
+                  <div className="flex p-0.5 rounded bg-surface-subtle border border-line">
                     {loginTabs.map((tab) => {
                       const TabIcon = tab.icon;
                       const isActive = loginType === tab.key;
@@ -600,12 +626,11 @@ const NewLogin = ({ onLogin }) => {
                           key={tab.key}
                           type="button"
                           onClick={() => setLoginType(tab.key)}
-                          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          className={`flex-1 py-1.5 text-center text-xs font-medium rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                             isActive
-                              ? "bg-surface shadow-xs border border-line/60"
-                              : "text-ink-soft hover:text-ink"
+                              ? "bg-surface shadow-xs border border-primary/30 text-primary-ink font-semibold border-b-2 border-b-primary"
+                              : "text-ink-muted hover:text-ink hover:bg-surface/50"
                           }`}
-                          style={isActive ? { color: primaryColor } : undefined}
                         >
                           <TabIcon className="w-3.5 h-3.5" />
                           <span>{tab.label}</span>
@@ -614,69 +639,62 @@ const NewLogin = ({ onLogin }) => {
                     })}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs font-bold text-primary w-fit">
-                    <Building2 className="w-4 h-4" />
-                    <span>Master Control Plane</span>
+                  <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-primary-soft border border-primary/25 text-xs font-mono font-semibold text-primary-ink w-fit">
+                    <Building2 className="w-3.5 h-3.5 text-primary" />
+                    <span>MASTER_CONTROL_PLANE</span>
                   </div>
                 )}
               </div>
 
               {/* Card Body / Form */}
-              <div className="px-6 sm:px-7 pb-6 space-y-4">
+              <div className="px-5 sm:px-6 pb-5 space-y-3">
                 {/* Status Message */}
                 {message && (
                   <motion.div
-                    initial={{ opacity: 0, y: -6 }}
+                    initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`p-3.5 rounded-xl text-xs flex items-center gap-2.5 font-medium ${
+                    className={`p-2.5 rounded text-xs flex items-center gap-2 font-medium border ${
                       message.type === "success"
-                        ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600"
-                        : "bg-rose-500/10 border border-rose-500/20 text-rose-600"
+                        ? "bg-status-success-bg border-status-success-border text-status-success-text"
+                        : "bg-status-error-bg border-status-error-border text-status-error-text"
                     }`}
                   >
                     <span>{message.text}</span>
                   </motion.div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-3.5">
+                <form onSubmit={handleSubmit} className="space-y-3">
                   {/* Subdomain Input */}
                   {!isSuperAdminLoginRoute && (
                     subdomainLocked ? (
-                      <div 
-                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs"
-                        style={{
-                          backgroundColor: `${primaryColor}0c`,
-                          borderColor: `${primaryColor}30`,
-                          color: primaryColor,
-                        }}
-                      >
+                      <div className="flex items-center justify-between px-3 py-2 rounded border border-primary/25 bg-primary-soft/40 text-xs">
                         <div className="flex items-center gap-2">
-                          <Link2 className="h-4 w-4 shrink-0" />
-                          <span className="font-bold font-mono">{formData.subdomain}</span>
+                          <Link2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="font-mono font-semibold text-ink">{formData.subdomain}</span>
                         </div>
-                        <span className="text-[11px] font-semibold text-emerald-600">✓ Connected</span>
+                        <span className="text-[11px] font-mono text-primary font-semibold">Verified</span>
                       </div>
                     ) : (
                       loginType === "tenant" && (
                         <div className="space-y-1">
-                          <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                          <label className="block text-xs font-medium text-ink uppercase tracking-wide">
                             Institution Subdomain
                           </label>
                           <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
-                              <Building2 className="h-4 w-4" />
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-muted">
+                              <Building2 className="h-3.5 w-3.5" />
                             </div>
                             <input
                               type="text"
                               name="subdomain"
                               value={formData.subdomain}
                               onChange={handleChange}
-                              placeholder="e.g., apex-univ"
-                              className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                              placeholder="e.g., oxford"
+                              className="w-full pl-9 pr-3 h-9 border border-line rounded bg-surface text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition font-mono"
                             />
                           </div>
-                          <p className="text-[11px] text-ink-faint">
-                            Or sign in directly using your institution's custom link
+                          <p className="text-[11px] text-ink-muted">
+                            Or sign in directly using your institution's custom portal link
                           </p>
                         </div>
                       )
@@ -685,33 +703,33 @@ const NewLogin = ({ onLogin }) => {
 
                   {/* Email Input */}
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                    <label className="block text-xs font-medium text-ink uppercase tracking-wide">
                       Email Address
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
-                        <Mail className="h-4 w-4" />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-muted">
+                        <Mail className="h-3.5 w-3.5" />
                       </div>
                       <input
                         type="email"
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
-                        placeholder={isSuperAdminLoginRoute ? "superadmin@attendease.com" : loginType === "parent" ? "parent@example.com" : "admin@institution.edu"}
+                        placeholder={isSuperAdminLoginRoute ? "superadmin@attendease.com" : loginType === "parent" ? "parent@example.com" : "user@institution.edu"}
                         required
-                        className="w-full pl-10 pr-4 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                        className="w-full pl-9 pr-3 h-9 border border-line rounded bg-surface text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
                     </div>
                   </div>
 
                   {/* Password Input */}
                   <div className="space-y-1">
-                    <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider">
+                    <label className="block text-xs font-medium text-ink uppercase tracking-wide">
                       Password
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-faint">
-                        <Lock className="h-4 w-4" />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-muted">
+                        <Lock className="h-3.5 w-3.5" />
                       </div>
                       <input
                         type={showPassword ? "text" : "password"}
@@ -720,15 +738,15 @@ const NewLogin = ({ onLogin }) => {
                         onChange={handleChange}
                         placeholder="••••••••"
                         required
-                        className="w-full pl-10 pr-10 py-2.5 border border-line/50 rounded-xl bg-background text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
+                        className="w-full pl-9 pr-9 h-9 border border-line rounded bg-surface text-ink text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-faint hover:text-ink transition cursor-pointer"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-ink-muted hover:text-ink transition cursor-pointer"
                         title={showPassword ? "Hide password" : "Show password"}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   </div>
@@ -747,8 +765,7 @@ const NewLogin = ({ onLogin }) => {
                           },
                         })
                       }
-                      className="text-xs font-bold hover:underline transition cursor-pointer"
-                      style={{ color: primaryColor }}
+                      className="text-xs font-medium text-primary hover:text-primary-hover hover:underline transition cursor-pointer"
                     >
                       Forgot password?
                     </button>
@@ -758,13 +775,10 @@ const NewLogin = ({ onLogin }) => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 px-4 rounded-xl text-white text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-md hover:shadow-lg cursor-pointer mt-2"
-                    style={{
-                      background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`
-                    }}
+                    className="w-full h-10 px-4 rounded bg-primary hover:bg-primary-hover text-on-primary text-xs font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-xs hover:shadow cursor-pointer mt-2 active:scale-[0.99]"
                   >
                     {isLoading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded animate-spin" />
                     ) : (
                       <>
                         <span>
@@ -774,9 +788,9 @@ const NewLogin = ({ onLogin }) => {
                             ? "Access Parent Portal"
                             : hasTenantContext
                             ? `Sign In to ${tenantBranding?.name ? tenantBranding.name : "Portal"}`
-                            : "Sign In as Tenant Admin"}
+                            : "Sign In to Portal"}
                         </span>
-                        <ArrowRight className="w-4 h-4" />
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </button>
@@ -784,21 +798,20 @@ const NewLogin = ({ onLogin }) => {
 
                 {/* Notice for non-super admins landing on /login */}
                 {isSuperAdminLoginRoute && (
-                  <div className="mt-4 p-4 rounded-2xl bg-background/80 border border-line/60 space-y-2 text-xs">
-                    <div className="flex items-center gap-2 font-bold text-ink">
-                      <School className="w-4 h-4 text-primary shrink-0" />
+                  <div className="mt-3 p-3 rounded bg-surface-subtle border border-line space-y-1.5 text-xs">
+                    <div className="flex items-center gap-1.5 font-semibold text-ink">
+                      <School className="w-3.5 h-3.5 text-primary shrink-0" />
                       <span>Looking for your institution's portal?</span>
                     </div>
-                    <p className="text-ink-soft leading-relaxed text-[11px]">
-                      Campus administrators, faculty, students, and parents must sign in via their institution's unique login link (e.g. <span className="font-mono font-semibold text-ink">/login/your-institution</span>).
+                    <p className="text-ink-muted leading-relaxed text-[11px]">
+                      Campus administrators, faculty, students, and parents must sign in via their institution's unique login link (e.g. <span className="font-mono font-medium text-ink">/login/your-institution</span>).
                     </p>
                     <button
                       type="button"
                       onClick={() => navigate('/')}
-                      className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 pt-0.5 cursor-pointer"
+                      className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1 pt-0.5 cursor-pointer"
                     >
-                      <span>Return to Home Overview</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <span>Return to Home Overview &rarr;</span>
                     </button>
                   </div>
                 )}
@@ -806,30 +819,30 @@ const NewLogin = ({ onLogin }) => {
                 {/* Direct Registration Shortcuts (For Tenant Context) */}
                 {!isSuperAdminLoginRoute && hasTenantContext && loginType === "tenant" && (
                   <>
-                    <div className="flex items-center gap-3 my-3">
-                      <div className="flex-1 border-t border-line/50"></div>
-                      <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">
+                    <div className="flex items-center gap-3 my-2">
+                      <div className="flex-1 border-t border-line"></div>
+                      <span className="text-[10px] font-mono text-ink-muted uppercase tracking-wider">
                         New Campus Member?
                       </span>
-                      <div className="flex-1 border-t border-line/50"></div>
+                      <div className="flex-1 border-t border-line"></div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => navigate("/register", { state: { userType: "student", subdomain: formData.subdomain || resolvedSubdomain } })}
-                        className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="h-8 px-2.5 border border-line hover:border-primary/40 bg-surface hover:bg-primary-soft/30 rounded text-xs font-medium text-ink hover:text-primary transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <GraduationCap className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                        <GraduationCap className="w-3.5 h-3.5 text-primary" />
                         <span>Student Register</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => navigate("/register", { state: { userType: "teacher", subdomain: formData.subdomain || resolvedSubdomain } })}
-                        className="py-2.5 px-3 border border-line/50 hover:border-primary/40 rounded-xl text-xs font-bold text-ink hover:bg-background transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="h-8 px-2.5 border border-line hover:border-secondary/40 bg-surface hover:bg-secondary-soft/30 rounded text-xs font-medium text-ink hover:text-secondary transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <School className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                        <School className="w-3.5 h-3.5 text-secondary" />
                         <span>Teacher Activate</span>
                       </button>
                     </div>
@@ -838,17 +851,17 @@ const NewLogin = ({ onLogin }) => {
               </div>
 
               {/* Card Footer */}
-              <div className="bg-background/60 px-6 sm:px-7 py-3 border-t border-line/50 flex justify-between items-center text-[11px] text-ink-faint">
+              <div className="bg-surface-subtle px-5 py-2.5 border-t border-line flex justify-between items-center text-[11px] text-ink-muted font-mono">
                 <span className="flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <ShieldCheck className="w-3 h-3 text-status-success-text" />
                   <span>256-Bit TLS Secured</span>
                 </span>
-                <span className="font-mono">
+                <span className="text-primary font-medium">
                   {isSuperAdminLoginRoute
-                    ? "Master Control Plane"
+                    ? "MASTER_PLANE"
                     : tenantBranding?.subdomain
                     ? `${tenantBranding.subdomain}.attendease`
-                    : "AttendEase Cloud"}
+                    : "ATTENDEASE_CLOUD"}
                 </span>
               </div>
             </div>
@@ -860,14 +873,15 @@ const NewLogin = ({ onLogin }) => {
       <footer className="max-w-6xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-ink-soft py-2 border-t border-line/40 gap-2">
         <p>&copy; {new Date().getFullYear()} {tenantBranding?.name || "AttendEase Technologies Inc."}. All rights reserved.</p>
         <div className="flex items-center gap-4 text-xs">
-          <span className="text-ink-faint">Privacy Policy</span>
+          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Privacy Policy</span>
           <span>•</span>
-          <span className="text-ink-faint">Terms of Service</span>
+          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Terms of Service</span>
           <span>•</span>
-          <span className="text-ink-faint">Support</span>
+          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Support</span>
         </div>
       </footer>
     </div>
+  </div>
   );
 };
 

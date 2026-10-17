@@ -237,6 +237,9 @@ const PricingModal = ({
 
         {/* Modal Panel */}
         <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle max-w-6xl w-full relative">
+          {/* Institutional Roofline Strip */}
+          <div className="h-[2.5px] w-full bg-gradient-to-r from-primary via-primary-light to-secondary shrink-0" />
+
           {/* Header */}
           <div
             className="px-6 py-5 border-b border-gray-100 flex items-start justify-between"
@@ -347,7 +350,7 @@ const PricingModal = ({
                 </p>
                 <button
                   onClick={fetchPlans}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
+                  className="px-4 py-2 bg-primary text-on-primary rounded-lg hover:bg-primary-hover transition text-sm cursor-pointer shadow-xs"
                 >
                   Retry
                 </button>
@@ -426,7 +429,7 @@ const PricingModal = ({
                       logError("Continue Free Tier", err);
                     }
                   }}
-                  className="px-4 py-2 text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-500 rounded-lg transition font-medium"
+                  className="px-4 py-2 text-sm text-primary hover:text-primary-hover hover:bg-primary-soft/50 rounded-lg transition font-medium cursor-pointer"
                 >
                   Continue with Free Tier
                 </button>

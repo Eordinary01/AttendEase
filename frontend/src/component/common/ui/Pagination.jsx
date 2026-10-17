@@ -12,10 +12,10 @@ const Pagination = ({ pagination, onPageChange, className = "" }) => {
 
   return (
     <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2 ${className}`}>
-      <p className="text-sm text-ink-soft">
-        Showing <span className="font-semibold text-ink">{startItem}</span> to{' '}
-        <span className="font-semibold text-ink">{endItem}</span> of{' '}
-        <span className="font-semibold text-ink">{total}</span> items
+      <p className="text-sm text-ink-muted">
+        Showing <span className="font-semibold font-mono tnum text-ink">{startItem}</span> to{' '}
+        <span className="font-semibold font-mono tnum text-ink">{endItem}</span> of{' '}
+        <span className="font-semibold font-mono tnum text-ink">{total}</span> items
       </p>
 
       <div className="flex items-center gap-2">
@@ -29,7 +29,7 @@ const Pagination = ({ pagination, onPageChange, className = "" }) => {
           Previous
         </Button>
 
-        <span className="text-sm text-ink-soft font-medium px-2">
+        <span className="text-sm text-ink-muted font-mono tnum font-medium px-2">
           Page {page} of {pages}
         </span>
 

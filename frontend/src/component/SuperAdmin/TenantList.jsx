@@ -1,32 +1,30 @@
 // src/components/SuperAdmin/TenantList.jsx
-// Redesigned with Academic Precision System (redesign/DESIGN.md)
-// Multi-Tenant Campus Isolation, Schema State, and Directory Orchestration
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../../utils/api";
-import { formatDateDMY } from "../../utils/dateUtils";
-import { logError } from "../../utils/logger";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../../utils/api';
+import { formatDateDMY } from '../../utils/dateUtils';
+import { logError } from '../../utils/logger';
 import {
   Building2,
-  Search,
   RefreshCw,
   Eye,
   Ban,
   CheckCircle,
   Trash2,
-  AlertCircle,
-  Filter,
+  ShieldAlert,
   Users,
-  X,
-  ExternalLink,
-  ShieldCheck,
+  GraduationCap,
+  Clock,
   ChevronRight,
-  Plus,
-} from "lucide-react";
-import Button from "../common/ui/Button";
-import Modal from "../common/ui/Modal";
-import EmptyState from "../common/ui/EmptyState";
+} from 'lucide-react';
+import Button from '../common/ui/Button';
+import Badge from '../common/ui/Badge';
+import Panel from '../common/ui/Panel';
+import Table from '../common/ui/Table';
+import StatTile from '../common/ui/StatTile';
+import FilterBar from '../common/ui/FilterBar';
+import Modal from '../common/ui/Modal';
+import ErrorState from '../common/ui/ErrorState';
 
 const TenantList = () => {
   const navigate = useNavigate();
@@ -34,50 +32,47 @@ const TenantList = () => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterPlan, setFilterPlan] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPlan, setFilterPlan] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [actionLoading, setActionLoading] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null); // { type, tenantId, tenantName }
 
-  useEffect(() => {
-    fetchTenants();
-  }, []);
-
-  const fetchTenants = async () => {
+  const fetchTenants = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/admin/super/tenants`);
-      if (response.data.success) {
+      const response = await api.get('/admin/super/tenants');
+      if (response.data?.success) {
         setTenants(response.data.data || []);
       }
     } catch (err) {
-      logError("Fetch Tenants", err);
-      setError(err.response?.data?.message || "Failed to load tenants");
+      logError('Fetch Tenants', err);
+      setError(err.response?.data?.message || 'Failed to retrieve institution tenants roster');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchTenants();
+  }, [fetchTenants]);
 
   const handleSuspendTenant = async (tenantId) => {
     try {
       setActionLoading(tenantId);
-      const response = await api.post(
-        `/admin/super/tenants/${tenantId}/suspend`,
-        {}
-      );
-      if (response.data.success) {
+      const response = await api.post(`/admin/super/tenants/${tenantId}/suspend`, {});
+      if (response.data?.success) {
         setTenants((prev) =>
           prev.map((t) =>
             t._id === tenantId
-              ? { ...t, subscription: { ...t.subscription, status: "suspended" } }
+              ? { ...t, subscription: { ...t.subscription, status: 'suspended' } }
               : t
           )
         );
       }
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to suspend tenant");
+      alert(err.response?.data?.message || 'Failed to suspend tenant');
     } finally {
       setActionLoading(null);
       setConfirmModal(null);
@@ -87,21 +82,18 @@ const TenantList = () => {
   const handleActivateTenant = async (tenantId) => {
     try {
       setActionLoading(tenantId);
-      const response = await api.post(
-        `/admin/super/tenants/${tenantId}/activate`,
-        {}
-      );
-      if (response.data.success) {
+      const response = await api.post(`/admin/super/tenants/${tenantId}/activate`, {});
+      if (response.data?.success) {
         setTenants((prev) =>
           prev.map((t) =>
             t._id === tenantId
-              ? { ...t, subscription: { ...t.subscription, status: "active" } }
+              ? { ...t, subscription: { ...t.subscription, status: 'active' } }
               : t
           )
         );
       }
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to activate tenant");
+      alert(err.response?.data?.message || 'Failed to activate tenant');
     } finally {
       setActionLoading(null);
       setConfirmModal(null);
@@ -111,401 +103,380 @@ const TenantList = () => {
   const handleDeleteTenant = async (tenantId) => {
     try {
       setActionLoading(tenantId);
-      const response = await api.delete(
-        `/admin/super/tenants/${tenantId}`
-      );
-      if (response.data.success) {
+      const response = await api.delete(`/admin/super/tenants/${tenantId}`);
+      if (response.data?.success) {
         setTenants((prev) => prev.filter((t) => t._id !== tenantId));
       }
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete tenant");
+      alert(err.response?.data?.message || 'Failed to delete tenant');
     } finally {
       setActionLoading(null);
       setConfirmModal(null);
     }
   };
 
-  // Filter tenants
-  const filteredTenants = tenants.filter((tenant) => {
-    const matchesSearch =
-      !searchQuery ||
-      tenant.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tenant.subdomain?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tenant.contact?.email?.toLowerCase().includes(searchQuery.toLowerCase());
+  const getStatusTone = (status) => {
+    switch (status) {
+      case 'active':
+        return 'success';
+      case 'trial':
+        return 'warning';
+      case 'suspended':
+      case 'expired':
+        return 'error';
+      default:
+        return 'neutral';
+    }
+  };
 
-    const matchesPlan =
-      filterPlan === "all" || tenant.subscription?.plan === filterPlan;
-    const matchesStatus =
-      filterStatus === "all" || tenant.subscription?.status === filterStatus;
+  const getPlanTone = (plan) => {
+    switch (plan) {
+      case 'free':
+        return 'neutral';
+      case 'basic':
+        return 'primary';
+      case 'professional':
+        return 'secondary';
+      case 'enterprise':
+        return 'success';
+      default:
+        return 'neutral';
+    }
+  };
 
-    return matchesSearch && matchesPlan && matchesStatus;
-  });
+  // Filtered tenants list
+  const filteredTenants = useMemo(() => {
+    return tenants.filter((tenant) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !searchQuery ||
+        tenant.name?.toLowerCase().includes(q) ||
+        tenant.subdomain?.toLowerCase().includes(q) ||
+        tenant.contact?.email?.toLowerCase().includes(q);
 
-  const uniquePlans = [...new Set(tenants.map((t) => t.subscription?.plan).filter(Boolean))];
-  const uniqueStatuses = [...new Set(tenants.map((t) => t.subscription?.status).filter(Boolean))];
+      const matchesPlan = !filterPlan || tenant.subscription?.plan === filterPlan;
+      const matchesStatus = !filterStatus || tenant.subscription?.status === filterStatus;
 
-  // Loading Skeleton
-  if (loading) {
-    return (
-      <div className="space-y-6 font-sans antialiased">
-        <div className="h-20 bg-white rounded-2xl border border-slate-200/80 p-6 flex items-center animate-pulse" />
-        <div className="h-16 w-full bg-white rounded-2xl border border-slate-200/80 animate-pulse" />
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="bg-white rounded-2xl p-5 border border-slate-200/80 flex items-center justify-between animate-pulse"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 rounded-xl"></div>
-                <div className="space-y-2">
-                  <div className="h-4 w-40 bg-slate-100 rounded"></div>
-                  <div className="h-3 w-56 bg-slate-100 rounded"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+      return matchesSearch && matchesPlan && matchesStatus;
+    });
+  }, [tenants, searchQuery, filterPlan, filterStatus]);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center p-6 min-h-[60vh]">
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-8 max-w-md w-full text-center shadow-sm">
-          <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-200">
-            <AlertCircle className="w-7 h-7" />
+  // Summary counts
+  const stats = useMemo(() => {
+    const total = tenants.length;
+    const active = tenants.filter((t) => t.subscription?.status === 'active').length;
+    const trial = tenants.filter((t) => t.subscription?.status === 'trial').length;
+    const suspended = tenants.filter(
+      (t) => t.subscription?.status === 'suspended' || t.subscription?.status === 'expired'
+    ).length;
+    return { total, active, trial, suspended };
+  }, [tenants]);
+
+  const columns = [
+    {
+      header: 'Institution & Domain',
+      cell: (row) => (
+        <div>
+          <div className="font-semibold text-ink flex items-center gap-2">
+            <span>{row.name}</span>
           </div>
-          <h2 className="text-lg font-bold text-slate-900 mb-1">Failed to Load Tenants</h2>
-          <p className="text-xs text-slate-500 mb-6">{error}</p>
-          <button
-            onClick={fetchTenants}
-            className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-semibold shadow-xs transition-all"
-          >
-            Retry Connection
-          </button>
+          <div className="text-[11px] font-mono tnum text-ink-muted flex items-center gap-1.5 mt-0.5">
+            <span className="font-medium">{row.subdomain}.attendease.com</span>
+            {row.contact?.email && (
+              <>
+                <span className="text-ink-faint">•</span>
+                <span className="text-ink-muted">{row.contact.email}</span>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    );
-  }
+      ),
+    },
+    {
+      header: 'Plan Tier',
+      align: 'center',
+      cell: (row) => (
+        <Badge tone={getPlanTone(row.subscription?.plan || 'free')}>
+          {(row.subscription?.plan || 'free').toUpperCase()}
+        </Badge>
+      ),
+    },
+    {
+      header: 'Status',
+      align: 'center',
+      cell: (row) => (
+        <Badge tone={getStatusTone(row.subscription?.status)} dot>
+          {(row.subscription?.status || 'trial').toUpperCase()}
+        </Badge>
+      ),
+    },
+    {
+      header: 'Campus Cohort',
+      align: 'center',
+      cell: (row) => (
+        <div className="font-mono tnum text-xs">
+          <span className="font-semibold text-ink">
+            {row.stats?.totalStudents ? Number(row.stats.totalStudents).toLocaleString() : '0'}
+          </span>
+          <span className="text-ink-muted text-[10px] ml-1">students</span>
+          <span className="text-ink-faint mx-1.5">/</span>
+          <span className="font-semibold text-ink">
+            {row.stats?.totalTeachers ? Number(row.stats.totalTeachers).toLocaleString() : '0'}
+          </span>
+          <span className="text-ink-muted text-[10px] ml-1">faculty</span>
+        </div>
+      ),
+    },
+    {
+      header: 'Provisioned',
+      align: 'right',
+      cell: (row) => (
+        <span className="font-mono tnum text-[11px] text-ink-muted whitespace-nowrap">
+          {formatDateDMY(row.createdAt)}
+        </span>
+      ),
+    },
+    {
+      header: 'Actions',
+      align: 'right',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => navigate(`/super-admin/tenants/${row._id}`)}
+            leftIcon={Eye}
+            title="Inspect institution details"
+          >
+            Details
+          </Button>
+
+          {row.subscription?.status === 'active' || row.subscription?.status === 'trial' ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() =>
+                setConfirmModal({
+                  type: 'suspend',
+                  tenantId: row._id,
+                  tenantName: row.name,
+                })
+              }
+              disabled={actionLoading === row._id}
+              leftIcon={Ban}
+              title="Suspend institution access"
+            >
+              Suspend
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() =>
+                setConfirmModal({
+                  type: 'activate',
+                  tenantId: row._id,
+                  tenantName: row.name,
+                })
+              }
+              disabled={actionLoading === row._id}
+              leftIcon={CheckCircle}
+              title="Activate institution"
+            >
+              Activate
+            </Button>
+          )}
+
+          <Button
+            variant="danger"
+            size="xs"
+            onClick={() =>
+              setConfirmModal({
+                type: 'delete',
+                tenantId: row._id,
+                tenantName: row.name,
+              })
+            }
+            disabled={actionLoading === row._id}
+            leftIcon={Trash2}
+            title="Purge tenant"
+          >
+            Purge
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6 font-sans antialiased text-slate-900">
-      {/* 1. Header Strip */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-1">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-line">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Institution Tenant Directory
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-ink">
+              Campus & Institution Tenants Directory
             </h1>
+            <Badge tone="primary">Multi-Tenancy Master</Badge>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
-            Managing {filteredTenants.length} of {tenants.length} isolated campus database schemas and domain mappings.
+          <p className="text-xs text-ink-muted mt-1">
+            Governing {filteredTenants.length} of {tenants.length} provisioned campus instances and
+            domains
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="inline-flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-mono text-slate-600">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="text-emerald-700 font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {tenants.filter((t) => t.subscription?.status === "active").length} Active Schemas
-            </span>
-          </div>
-
-          <button
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
             onClick={fetchTenants}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-[0.98]"
+            loading={loading}
+            leftIcon={RefreshCw}
           >
-            <RefreshCw className="w-3.5 h-3.5 text-primary" />
-            <span>Refresh</span>
-          </button>
+            Refresh Roster
+          </Button>
         </div>
       </div>
 
-      {/* 2. Search & Filter Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4">
-        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-          {/* Search Input */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by institution name, subdomain, or administrator email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-900"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Plan Filter */}
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              <select
-                value={filterPlan}
-                onChange={(e) => setFilterPlan(e.target.value)}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="all">All Plans</option>
-                {uniquePlans.map((plan) => (
-                  <option key={plan} value={plan}>
-                    {plan.charAt(0).toUpperCase() + plan.slice(1)} Tier
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="relative">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none cursor-pointer focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="all">All Statuses</option>
-                {uniqueStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Tenant List Items */}
-      {filteredTenants.length > 0 ? (
-        <div className="space-y-3">
-          {filteredTenants.map((tenant) => {
-            const plan = tenant.subscription?.plan || "free";
-            const status = tenant.subscription?.status || "trial";
-
-            return (
-              <div
-                key={tenant._id}
-                className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-primary/40 hover:shadow-md transition-all p-5 group"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                  {/* Left — Tenant Branding & Identity */}
-                  <div
-                    className="flex items-center gap-4 flex-1 cursor-pointer"
-                    onClick={() => navigate(`/super-admin/tenants/${tenant._id}`)}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-xs"
-                      style={{
-                        backgroundColor: tenant.branding?.primaryColor || "#4338ca",
-                      }}
-                    >
-                      {tenant.name?.[0]?.toUpperCase() || "T"}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                        <p className="font-bold text-base text-slate-900 group-hover:text-primary transition-colors">
-                          {tenant.name}
-                        </p>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider font-mono ${
-                            plan === "enterprise"
-                              ? "bg-primary-soft text-primary-dark border border-primary-surface"
-                              : plan === "professional"
-                              ? "bg-secondary-soft text-secondary-dark border border-secondary-surface"
-                              : "bg-slate-100 text-slate-700 border border-slate-200"
-                          }`}
-                        >
-                          {plan}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-slate-500 font-mono flex-wrap">
-                        <span className="text-primary font-semibold">
-                          {tenant.subdomain ? `${tenant.subdomain}.attendease.com` : "Domain unassigned"}
-                        </span>
-                        <span>•</span>
-                        <span>{tenant.contact?.email || "No contact email"}</span>
-                        <span>•</span>
-                        <span>Joined {formatDateDMY(tenant.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right — Stats, Status Badge & Action Buttons */}
-                  <div className="flex items-center gap-5 flex-shrink-0 justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
-                    {/* User Roster Counts */}
-                    <div className="hidden sm:flex items-center gap-4 text-xs font-semibold text-slate-600">
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg" title="Enrolled Students">
-                        <Users className="w-3.5 h-3.5 text-primary" />
-                        <span className="tabular-nums font-mono">{tenant.stats?.totalStudents || 0} Students</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg" title="Active Faculty">
-                        <Users className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="tabular-nums font-mono">{tenant.stats?.totalTeachers || 0} Faculty</span>
-                      </div>
-                    </div>
-
-                    {/* Status Pill with Pulsing Dot */}
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
-                        status === "active"
-                          ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                          : status === "trial"
-                          ? "text-amber-700 bg-amber-50 border-amber-200"
-                          : "text-rose-700 bg-rose-50 border-rose-200"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          status === "active"
-                            ? "bg-emerald-500 animate-pulse"
-                            : status === "trial"
-                            ? "bg-amber-500"
-                            : "bg-rose-500"
-                        }`}
-                      />
-                      <span className="capitalize">{status}</span>
-                    </span>
-
-                    {/* Actions Toolbar */}
-                    <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4">
-                      <button
-                        onClick={() => navigate(`/super-admin/tenants/${tenant._id}`)}
-                        className="p-2 text-slate-500 hover:text-primary hover:bg-primary-soft rounded-xl transition-colors"
-                        title="View Tenant Console"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-
-                      {status === "active" || status === "trial" ? (
-                        <button
-                          onClick={() =>
-                            setConfirmModal({
-                              type: "suspend",
-                              tenantId: tenant._id,
-                              tenantName: tenant.name,
-                            })
-                          }
-                          disabled={actionLoading === tenant._id}
-                          className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
-                          title="Suspend Tenant Schema"
-                        >
-                          <Ban className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            setConfirmModal({
-                              type: "activate",
-                              tenantId: tenant._id,
-                              tenantName: tenant.name,
-                            })
-                          }
-                          disabled={actionLoading === tenant._id}
-                          className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
-                          title="Activate Tenant Schema"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() =>
-                          setConfirmModal({
-                            type: "delete",
-                            tenantId: tenant._id,
-                            tenantName: tenant.name,
-                          })
-                        }
-                        disabled={actionLoading === tenant._id}
-                        className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
-                        title="Delete Tenant Database"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <EmptyState
-          title="No institution tenants found"
-          description={
-            searchQuery || filterPlan !== "all" || filterStatus !== "all"
-              ? "Try adjusting your search query or filter tags to locate the institution."
-              : "No institution campuses are currently provisioned."
-          }
+      {/* Metric Tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <StatTile
+          label="Provisioned Campuses"
+          value={stats.total.toLocaleString()}
+          subtitle="All tenant accounts created"
           icon={Building2}
         />
-      )}
+        <StatTile
+          label="Active Subscriptions"
+          value={stats.active.toLocaleString()}
+          subtitle="In full operational standing"
+          icon={CheckCircle}
+        />
+        <StatTile
+          label="Trial Deployments"
+          value={stats.trial.toLocaleString()}
+          subtitle="Evaluation pilot periods"
+          icon={Clock}
+        />
+        <StatTile
+          label="Suspended / Expired"
+          value={stats.suspended.toLocaleString()}
+          subtitle="Access blocked by policy"
+          icon={ShieldAlert}
+        />
+      </div>
 
-      {/* Confirmation Action Modal */}
+      {/* Main Ledger Panel */}
+      <Panel
+        title="Institution Registry Roster"
+        subtitle="Manage billing status, subscription entitlements, and institutional access"
+        tools={
+          <FilterBar
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search by campus, subdomain, or admin email..."
+            filters={[
+              {
+                id: 'plan',
+                label: 'Plan Tier',
+                value: filterPlan,
+                onChange: setFilterPlan,
+                options: [
+                  { value: '', label: 'All Plans' },
+                  { value: 'free', label: 'Free Tier' },
+                  { value: 'basic', label: 'Basic' },
+                  { value: 'professional', label: 'Professional' },
+                  { value: 'enterprise', label: 'Enterprise' },
+                ],
+              },
+              {
+                id: 'status',
+                label: 'Lifecycle Status',
+                value: filterStatus,
+                onChange: setFilterStatus,
+                options: [
+                  { value: '', label: 'All Statuses' },
+                  { value: 'active', label: 'Active' },
+                  { value: 'trial', label: 'Trial' },
+                  { value: 'suspended', label: 'Suspended' },
+                  { value: 'expired', label: 'Expired' },
+                ],
+              },
+            ]}
+            onReset={() => {
+              setSearchQuery('');
+              setFilterPlan('');
+              setFilterStatus('');
+            }}
+          />
+        }
+      >
+        {error ? (
+          <ErrorState
+            title="Institution Ledger Unavailable"
+            message={error}
+            onRetry={fetchTenants}
+          />
+        ) : (
+          <Table
+            columns={columns}
+            data={filteredTenants}
+            keyField="_id"
+            loading={loading}
+            emptyMessage="No campus tenant instances match the specified search or filter criteria."
+          />
+        )}
+      </Panel>
+
+      {/* Confirmation Modal */}
       <Modal
         isOpen={!!confirmModal}
         onClose={() => setConfirmModal(null)}
         title={
-          confirmModal?.type === "delete"
-            ? "Delete Tenant Instance"
-            : confirmModal?.type === "suspend"
-            ? "Suspend Tenant Schema"
-            : "Activate Tenant Schema"
+          confirmModal?.type === 'delete'
+            ? 'Purge Tenant Instance'
+            : confirmModal?.type === 'suspend'
+            ? 'Suspend Tenant Account'
+            : 'Activate Tenant Account'
         }
         size="sm"
         footer={
-          <div className="flex justify-end gap-2.5">
-            <button
-              onClick={() => setConfirmModal(null)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
-            >
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmModal(null)}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={confirmModal?.type === 'delete' ? 'danger' : 'primary'}
+              size="sm"
+              loading={!!actionLoading}
               onClick={() => {
                 if (!confirmModal) return;
-                if (confirmModal.type === "delete") {
+                if (confirmModal.type === 'delete') {
                   handleDeleteTenant(confirmModal.tenantId);
-                } else if (confirmModal.type === "suspend") {
+                } else if (confirmModal.type === 'suspend') {
                   handleSuspendTenant(confirmModal.tenantId);
                 } else {
                   handleActivateTenant(confirmModal.tenantId);
                 }
               }}
-              disabled={actionLoading}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl text-white transition ${
-                confirmModal?.type === "delete"
-                  ? "bg-rose-600 hover:bg-rose-700 shadow-sm"
-                  : confirmModal?.type === "suspend"
-                  ? "bg-amber-600 hover:bg-amber-700 shadow-sm"
-                  : "bg-emerald-600 hover:bg-emerald-700 shadow-sm"
-              }`}
             >
               {actionLoading
-                ? "Processing…"
-                : confirmModal?.type === "delete"
-                ? "Delete Permanently"
-                : confirmModal?.type === "suspend"
-                ? "Suspend Access"
-                : "Activate Access"}
-            </button>
-          </div>
+                ? 'Applying...'
+                : confirmModal?.type === 'delete'
+                ? 'Permanently Purge'
+                : confirmModal?.type === 'suspend'
+                ? 'Confirm Suspension'
+                : 'Confirm Activation'}
+            </Button>
+          </>
         }
       >
-        <p className="text-xs text-slate-600 leading-relaxed">
-          {confirmModal?.type === "delete"
-            ? `Are you sure you want to permanently delete "${confirmModal?.tenantName}"? This will drop the database schema and permanently remove ALL associated student records, academic timetables, and audit history. This action cannot be undone.`
-            : confirmModal?.type === "suspend"
-            ? `Are you sure you want to suspend "${confirmModal?.tenantName}"? The institution's domain, faculty logins, and API access will immediately be blocked.`
-            : `Are you sure you want to restore active access for "${confirmModal?.tenantName}"? All portals and scheduled tasks will resume.`}
+        <p className="text-xs text-ink-muted leading-relaxed">
+          {confirmModal?.type === 'delete'
+            ? `Are you sure you want to permanently purge "${confirmModal?.tenantName}"? This action irreversibly removes all student cohorts, attendance logs, and administrative records.`
+            : confirmModal?.type === 'suspend'
+            ? `Are you sure you want to suspend "${confirmModal?.tenantName}"? All faculty, staff, and students of this institution will immediately lose system access.`
+            : `Activate institution "${confirmModal?.tenantName}"? Authorized campus users will immediately regain platform access.`}
         </p>
       </Modal>
     </div>

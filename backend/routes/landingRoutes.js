@@ -124,16 +124,22 @@ router.get('/tenant-info', async (req, res) => {
         message: 'No tenant found'
       });
     }
+
+    const Plan = require('../models/Plan');
+    const planCode = tenant.subscription?.plan || 'free';
+    const plan = await Plan.findOne({ code: planCode }).lean();
+    const planAllowsCustomBranding = plan?.modules?.customBranding ?? (['professional', 'enterprise'].includes(planCode));
     
     res.json({
       success: true,
       hasTenant: true,
       tenant: {
         id: tenant._id,
-        name: tenant.name,
+        name: tenant.branding?.institutionName || tenant.name,
         subdomain: tenant.subdomain,
-        branding: tenant.branding,
-        plan: tenant.subscription?.plan
+        branding: tenant.branding || {},
+        plan: planCode,
+        hasCustomBranding: Boolean(planAllowsCustomBranding)
       }
     });
   } catch (error) {
@@ -146,41 +152,45 @@ router.get('/tenant-info', async (req, res) => {
 });
 
 /**
- * POST /api/landing/contact
- * Contact form submission (public)
+ * POST /api/landing/contact and POST /api/landing/lead
+ * Public prospective lead / inquiry submission
  */
-router.post('/contact', async (req, res) => {
-  const { name, email, phone, message, institutionName } = req.body;
+router.post(['/contact', '/lead'], async (req, res) => {
+  const { name, email, phone, message, institutionName, type, studentCount } = req.body;
   
-  if (!name || !email || !message) {
+  if (!name || !email) {
     return res.status(400).json({
       success: false,
-      message: 'Name, email, and message are required'
+      message: 'Name and email are required',
     });
   }
   
   try {
     const lead = await Lead.create({
-      type: 'contact',
-      name,
-      email,
-      phone,
-      institutionName,
-      message,
+      type: type === 'demo' ? 'demo' : 'contact',
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone ? phone.trim() : undefined,
+      institutionName: institutionName ? institutionName.trim() : 'General Inquiry',
+      studentCount: studentCount ? String(studentCount) : undefined,
+      message: message ? message.trim() : undefined,
       status: 'new',
     });
     
-    console.log('Contact lead created:', lead._id);
+    logger.info('Inbound prospective lead created', { leadId: lead._id, type: lead.type });
     
     res.json({
       success: true,
-      message: 'Thank you for contacting us! We will get back to you soon.',
+      message: type === 'demo'
+        ? 'Your demo request has been received. Our team will contact you shortly.'
+        : 'Thank you for contacting us! We will get back to you soon.',
+      data: { id: lead._id },
     });
   } catch (error) {
-    logger.error('Error creating contact lead', { error: error.message });
+    logger.error('Error creating contact/lead', { error: error.message });
     res.status(500).json({
       success: false,
-      message: 'Failed to submit contact form',
+      message: 'Failed to submit inquiry. Please try again.',
     });
   }
 });

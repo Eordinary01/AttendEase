@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Megaphone, History, Paperclip, ChevronRight, Bell } from "lucide-react";
+import { Megaphone, History, Paperclip, ChevronRight } from "lucide-react";
 import ERPCard from "./ERPCard";
 import UniversalSpinner from "../ui/UniversalSpinner";
 import { getDateBadgeParts } from "../../../utils/dateUtils";
@@ -10,7 +10,7 @@ export default function ERPNoticeNews({
   onRefresh,
   onSelectNotice,
 }) {
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'history'
+  const [activeTab, setActiveTab] = useState("all");
 
   const defaultNotices = [
     {
@@ -45,13 +45,13 @@ export default function ERPNoticeNews({
       isRefreshing={loading}
       bodyClassName="p-0"
       actions={
-        <div className="flex items-center gap-1 border border-line rounded-lg p-0.5 bg-background">
+        <div className="flex items-center gap-1 border border-line rounded p-0.5 bg-surface-subtle">
           <button
             type="button"
             onClick={() => setActiveTab("all")}
             title="Current Announcements"
-            className={`p-1 rounded-md transition cursor-pointer ${
-              activeTab === "all" ? "bg-primary text-white" : "text-ink-faint hover:text-ink"
+            className={`p-1 rounded transition cursor-pointer ${
+              activeTab === "all" ? "bg-primary text-on-primary" : "text-ink-muted hover:text-ink"
             }`}
           >
             <Megaphone className="w-3 h-3" />
@@ -60,8 +60,8 @@ export default function ERPNoticeNews({
             type="button"
             onClick={() => setActiveTab("history")}
             title="Notice Archive"
-            className={`p-1 rounded-md transition cursor-pointer ${
-              activeTab === "history" ? "bg-primary text-white" : "text-ink-faint hover:text-ink"
+            className={`p-1 rounded transition cursor-pointer ${
+              activeTab === "history" ? "bg-primary text-on-primary" : "text-ink-muted hover:text-ink"
             }`}
           >
             <History className="w-3 h-3" />
@@ -69,11 +69,11 @@ export default function ERPNoticeNews({
         </div>
       }
     >
-      <div className="divide-y divide-line/60 overflow-y-auto max-h-56">
+      <div className="divide-y divide-line overflow-y-auto max-h-56">
         {loading ? (
           <UniversalSpinner size="sm" label="Loading announcements..." className="py-6" />
         ) : items.length === 0 ? (
-          <div className="p-8 text-center text-xs text-ink-faint">
+          <div className="p-8 text-center text-xs text-ink-muted">
             No notices published yet.
           </div>
         ) : (
@@ -84,10 +84,9 @@ export default function ERPNoticeNews({
               <div
                 key={n._id || idx}
                 onClick={() => onSelectNotice && onSelectNotice(n)}
-                className="flex items-start gap-3 p-3 hover:bg-background/80 transition text-xs cursor-pointer group"
+                className="flex items-start gap-3 p-3 hover:bg-surface-subtle transition text-xs cursor-pointer group"
               >
-                {/* Date Block */}
-                <div className="w-11 h-11 rounded-xl bg-sky-500/10 border border-sky-500/20 flex flex-col items-center justify-center text-sky-600 shrink-0">
+                <div className="w-11 h-11 rounded-lg bg-primary-soft border border-primary/20 flex flex-col items-center justify-center text-primary shrink-0">
                   <span className="text-[10px] font-bold uppercase leading-none">
                     {monthStr}
                   </span>
@@ -96,18 +95,17 @@ export default function ERPNoticeNews({
                   </span>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <h4 className="font-semibold text-ink group-hover:text-primary transition line-clamp-2 text-xs leading-snug">
                       {n.title || n.message}
                     </h4>
                     {(n.hasAttachment || n.attachment) && (
-                      <Paperclip className="w-3 h-3 text-ink-faint shrink-0 ml-1" />
+                      <Paperclip className="w-3 h-3 text-ink-muted shrink-0 ml-1" />
                     )}
                   </div>
                   {n.title && n.message && (
-                    <p className="text-[11px] text-ink-soft line-clamp-1 mt-0.5">
+                    <p className="text-[11px] text-ink-muted line-clamp-1 mt-0.5">
                       {n.message}
                     </p>
                   )}

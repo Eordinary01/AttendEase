@@ -1,2417 +1,1806 @@
-// src/components/Landing/LandingPage.jsx
-// Confident Authority Design System — Structural Overhaul
-// Eliminates uniform card aesthetics with room-specific atmosphere, dark/light contrast shifts,
-// spring physics choreography, animated split-reality contrast, and metric counters.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  GraduationCap,
+  Check,
+  CheckCircle2,
+  Clock,
+  Shield,
   Users,
   BookOpen,
-  Shield,
+  Calendar,
+  Lock,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
   ArrowRight,
-  ArrowUp,
   Menu,
   X,
-  CreditCard,
-  Check,
-  Clock,
-  Calendar,
-  MessageSquare,
-  Lock,
-  Upload,
-  Headphones,
-  ChevronRight,
-  Activity,
+  Building,
+  GraduationCap,
   Sparkles,
-  Building2,
-  CheckCircle2,
-  Zap,
-  BarChart3,
-  Star,
+  Send,
+  Loader2,
+  AlertCircle,
+  Activity,
+  Scan,
+  RefreshCw,
+  Palette,
+  Layers,
+  Database,
+  Cpu,
+  Fingerprint
 } from 'lucide-react';
 import RoleSelectorModal from './RoleSelectorModal';
+import WelcomeEntrance from './WelcomeEntrance';
 import { useDemo } from '../../contexts/DemoContext';
 import api from '../../utils/api';
 
-gsap.registerPlugin(ScrollTrigger);
+const CANONICAL_PLANS = [
+  {
+    code: 'free',
+    name: 'Free Trial',
+    tagline: 'Standard evaluation deployment for single departments',
+    price: { monthly: 0, annual: 0 },
+    limits: { maxStudents: 50, maxTeachers: 5, maxAdmins: 1, maxSubjects: 20 },
+    badge: '14-Day Evaluation',
+    popular: false,
+    cta: 'Start Free Trial',
+    highlights: [
+      'Basic Attendance Tracking',
+      'Department Academic Structure',
+      'Campus Announcements & Alerts',
+      'Academic Calendar View',
+      'Community Documentation Support'
+    ],
+    modules: {
+      attendance: true,
+      academicStructure: true,
+      alerts: true,
+      calendar: true,
+      timetable: false,
+      examManagement: false,
+      financeManagement: false,
+      customRoles: false,
+      customBranding: false,
+      biometricAttendance: false,
+      whiteLabel: false,
+    }
+  },
+  {
+    code: 'basic',
+    name: 'Campus Starter',
+    tagline: 'Core academic management for growing schools & colleges',
+    price: { monthly: 999, annual: 799 },
+    limits: { maxStudents: 200, maxTeachers: 20, maxAdmins: 3, maxSubjects: 50 },
+    badge: 'Standard Tier',
+    popular: false,
+    cta: 'Choose Starter',
+    highlights: [
+      'Timetable Management & Clashes',
+      'Exam Schedules & Results',
+      'Attendance Aggregation & Reports',
+      'Data Export Capabilities',
+      'Standard Email Support'
+    ],
+    modules: {
+      attendance: true,
+      academicStructure: true,
+      alerts: true,
+      calendar: true,
+      timetable: true,
+      timetableManagement: true,
+      examManagement: true,
+      analytics: true,
+      reports: true,
+      financeManagement: false,
+      customRoles: false,
+      customBranding: false,
+      biometricAttendance: false,
+      whiteLabel: false,
+    }
+  },
+  {
+    code: 'professional',
+    name: 'Professional Campus',
+    tagline: 'Complete institutional ERP suite with custom themes & finance',
+    price: { monthly: 2499, annual: 1999 },
+    limits: { maxStudents: 1000, maxTeachers: 100, maxAdmins: 10, maxSubjects: 200 },
+    badge: 'Most Popular',
+    popular: true,
+    cta: 'Get Professional',
+    highlights: [
+      'Custom Institution Branding & Theme',
+      'Fee Collection & Receipts Tracking',
+      'Exam Hall & Seating Allocator',
+      'Custom Staff Roles & Permissions',
+      'Parent Portal & Priority Support'
+    ],
+    modules: {
+      attendance: true,
+      academicStructure: true,
+      alerts: true,
+      calendar: true,
+      timetable: true,
+      timetableManagement: true,
+      examManagement: true,
+      examSeating: true,
+      financeManagement: true,
+      libraryManagement: true,
+      parentPortal: true,
+      customRoles: true,
+      roleManagement: true,
+      customBranding: true,
+      analytics: true,
+      dataExport: true,
+      apiAccess: true,
+      prioritySupport: true,
+      biometricAttendance: false,
+      whiteLabel: false,
+    }
+  },
+  {
+    code: 'enterprise',
+    name: 'Enterprise ERP',
+    tagline: 'High-volume scale, biometric vectors, and dedicated SLA',
+    price: { monthly: 4999, annual: 3999 },
+    limits: { maxStudents: 10000, maxTeachers: 1000, maxAdmins: 50, maxSubjects: 1000 },
+    badge: 'Institutional Scale',
+    popular: false,
+    cta: 'Request Enterprise Quote',
+    highlights: [
+      'Offline WASM Biometric Face Auth',
+      'Full White-Labeling & Subdomains',
+      'Bulk Operations & Data Ingestion',
+      'Dedicated 99.99% Institutional SLA',
+      'On-Premise or Private Cloud Gateway'
+    ],
+    modules: {
+      attendance: true,
+      academicStructure: true,
+      alerts: true,
+      calendar: true,
+      timetable: true,
+      timetableManagement: true,
+      examManagement: true,
+      examStructure: true,
+      examSeating: true,
+      financeManagement: true,
+      libraryManagement: true,
+      hrManagement: true,
+      parentPortal: true,
+      customRoles: true,
+      roleManagement: true,
+      customBranding: true,
+      whiteLabel: true,
+      analytics: true,
+      dataExport: true,
+      bulkOperations: true,
+      bulkImport: true,
+      apiAccess: true,
+      biometricAttendance: true,
+      prioritySupport: true,
+      dedicatedSupport: true,
+    }
+  }
+];
 
-// ==========================================
-// 0. WELCOME AND IDENTITY TRANSITION
-// ==========================================
-const WelcomeEntrance = ({ onComplete }) => {
-  const containerRef = useRef(null);
-  const markRef = useRef(null);
-  const initialFormRef = useRef(null);
-  const finalFormRef = useRef(null);
-  const tagRef = useRef(null);
+// Smooth counting hook for institutional ledger proof points
+const useCountUp = (target, decimals = 0, duration = 1600) => {
+  const [val, setVal] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ref = useRef(null);
 
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        defaults: { ease: 'power3.inOut' },
-        onComplete: () => {
-          onComplete();
-        },
-      });
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started) {
+          setStarted(true);
+        }
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [started]);
 
-      tl.fromTo(
-        markRef.current,
-        { opacity: 0, scale: 0.86, rotation: -6 },
-        { opacity: 1, scale: 1, rotation: 0, duration: 0.5 }
-      )
-        .fromTo(
-          initialFormRef.current,
-          { opacity: 0, letterSpacing: '0.3em', y: 8 },
-          { opacity: 1, letterSpacing: '0.15em', y: 0, duration: 0.45 },
-          '-=0.2'
-        )
-        .fromTo(
-          tagRef.current,
-          { opacity: 0, y: 4 },
-          { opacity: 1, y: 0, duration: 0.35 },
-          '-=0.15'
-        )
-        .to(initialFormRef.current, {
-          opacity: 0,
-          y: -8,
-          duration: 0.35,
-          delay: 0.3,
-        })
-        .fromTo(
-          finalFormRef.current,
-          { opacity: 0, y: 8, scale: 0.96, letterSpacing: '-0.04em' },
-          { opacity: 1, y: 0, scale: 1, letterSpacing: '-0.02em', duration: 0.45 },
-          '-=0.15'
-        )
-        .to(containerRef.current, {
-          opacity: 0,
-          scale: 1.02,
-          duration: 0.5,
-          delay: 0.35,
-        });
-    }, containerRef);
+  useEffect(() => {
+    if (!started) return;
+    let startTimestamp = null;
+    let animationFrame;
+    const step = (timestamp) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setVal(eased * target);
+      if (progress < 1) {
+        animationFrame = window.requestAnimationFrame(step);
+      }
+    };
+    animationFrame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [started, target, duration]);
 
-    return () => ctx.revert();
-  }, [onComplete]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#070b14] text-white select-none transition-opacity"
-      style={{
-        backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.15) 1px, transparent 1px)',
-        backgroundSize: '24px 24px',
-      }}
-      onClick={() => onComplete()}
-      role="region"
-      aria-label="Welcome Introduction"
-    >
-      <div className="flex flex-col items-center text-center px-6 max-w-sm">
-        <div
-          ref={markRef}
-          className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-700 border border-indigo-400/40 rounded-2xl flex items-center justify-center mb-5 shadow-2xl shadow-indigo-900/60"
-        >
-          <GraduationCap className="w-8 h-8 text-white" />
-        </div>
-
-        <div className="relative h-11 w-full flex items-center justify-center mb-2">
-          <div
-            ref={initialFormRef}
-            className="absolute inset-0 flex items-center justify-center text-[11px] uppercase font-semibold text-indigo-300 font-mono tracking-widest"
-          >
-            Institutional Operations
-          </div>
-
-          <div
-            ref={finalFormRef}
-            className="absolute inset-0 flex items-center justify-center text-3xl font-extrabold text-white opacity-0 font-sans tracking-tight"
-          >
-            <span>Attend</span>
-            <span className="text-indigo-400">Ease</span>
-          </div>
-        </div>
-
-        <p ref={tagRef} className="text-xs text-slate-400 font-medium tracking-wide">
-          Academic Precision ERP Platform
-        </p>
-      </div>
-
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onComplete();
-        }}
-        className="absolute bottom-8 text-[11px] text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:underline"
-      >
-        Skip intro
-      </button>
-    </div>
-  );
+  return [val.toFixed(decimals), ref];
 };
 
-// ==========================================
-// MAIN LANDING PAGE CONTAINER
-// ==========================================
-const LandingPage = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [welcomeDone, setWelcomeDone] = useState(false);
-
+export const LandingPage = () => {
   const navigate = useNavigate();
   const { openRoleModal } = useDemo();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeAccentTab, setActiveAccentTab] = useState('a'); // 'a' (deep teal), 'b' (forest green), 'c' (maroon)
 
-  const scrollToSection = (sectionId) => {
-    const section = document.getElementById(sectionId);
-    if (section) {
-      section.scrollIntoView({ behavior: 'smooth' });
+  // Welcome Screen state
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try {
+      return sessionStorage.getItem('attendease_welcome_seen') !== 'true';
+    } catch (e) {
+      return false;
     }
-    setIsMenuOpen(false);
-  };
+  });
 
+  // Top scroll-scrubbed hairline progress bar
+  const [scrollProgress, setScrollProgress] = useState(0);
   useEffect(() => {
-    if (!welcomeDone) return;
-    const timer = setTimeout(() => {
-      ScrollTrigger.refresh();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [welcomeDone]);
-
-  return (
-    <div className="min-h-screen bg-[#faf8ff] text-[#0f172a] selection:bg-indigo-500/20 selection:text-indigo-950 font-sans antialiased">
-      {!welcomeDone ? (
-        <WelcomeEntrance onComplete={() => setWelcomeDone(true)} />
-      ) : (
-        <>
-          <Navbar
-            isMenuOpen={isMenuOpen}
-            setIsMenuOpen={setIsMenuOpen}
-            scrollToSection={scrollToSection}
-            navigate={navigate}
-            openRoleModal={openRoleModal}
-          />
-          <main>
-            <HeroSection navigate={navigate} openRoleModal={openRoleModal} />
-            <PlatformScopeSection />
-            <WhatChangesSection />
-            <DemoSandboxSection />
-            <PricingSection navigate={navigate} />
-            <CredibilitySection />
-            <DeploymentSection />
-            <FinalActionSection navigate={navigate} openRoleModal={openRoleModal} />
-          </main>
-          <Footer scrollToSection={scrollToSection} navigate={navigate} />
-          <RoleSelectorModal />
-        </>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// 1. NAVBAR
-// ==========================================
-const Navbar = ({ isMenuOpen, setIsMenuOpen, scrollToSection, navigate, openRoleModal }) => {
-  const [scrolled, setScrolled] = useState(false);
-  const progressRef = useRef(null);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    handleScroll();
+    const handleScroll = () => {
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      if (total > 0) {
+        setScrollProgress((window.scrollY / total) * 100);
+      }
+    };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Live Biometric & Session Simulation in Hero Ledger
+  const [activeRosterRow, setActiveRosterRow] = useState(0);
+  const [isVerifyingScan, setIsVerifyingScan] = useState(false);
+  const [verifiedCount, setVerifiedCount] = useState(142);
+  const [conflictStatus, setConflictStatus] = useState('Verified');
+  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+
+  // Auto-cycle through students in the ledger mockup
   useEffect(() => {
-    const bar = progressRef.current;
-    if (!bar) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        bar,
-        { scaleX: 0 },
-        {
-          scaleX: 1,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: document.documentElement,
-            start: 'top top',
-            end: 'bottom bottom',
-            scrub: 0.15,
-          },
-        }
-      );
-    });
-    return () => ctx.revert();
+    const timer = setInterval(() => {
+      setActiveRosterRow((prev) => (prev + 1) % 4);
+    }, 3200);
+    return () => clearInterval(timer);
   }, []);
 
-  const navLinks = [
-    { name: 'Platform', href: 'platform' },
-    { name: 'How It Works', href: 'how-it-works' },
-    { name: 'Live Sandbox', href: 'demo' },
-    { name: 'Pricing', href: 'pricing' },
-    { name: 'Proof Points', href: 'credibility' },
-  ];
+  const triggerScanSimulation = () => {
+    if (isVerifyingScan) return;
+    setIsVerifyingScan(true);
+    setTimeout(() => {
+      setIsVerifyingScan(false);
+      setVerifiedCount((prev) => prev + 1);
+      setActiveRosterRow(0);
+    }, 700);
+  };
 
-  return (
-    <nav
-      className={`fixed w-full z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-white/90 backdrop-blur-lg shadow-[0_4px_20px_-4px_rgba(15,23,42,0.08)] py-3 border-b border-slate-200/80'
-          : 'bg-transparent py-5'
-      }`}
-    >
-      {/* Precision progress bar */}
-      <div
-        ref={progressRef}
-        className="absolute top-0 left-0 w-full h-[2.5px] bg-gradient-to-r from-indigo-600 via-purple-500 to-emerald-500 origin-left z-50 pointer-events-none"
-        style={{ transform: 'scaleX(0)' }}
-      />
+  const triggerConflictSimulation = () => {
+    if (isCheckingConflict) return;
+    setIsCheckingConflict(true);
+    setConflictStatus('Validating...');
+    setTimeout(() => {
+      setIsCheckingConflict(false);
+      setConflictStatus('Verified (0 Clashes)');
+    }, 800);
+  };
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center">
-          {/* Brand Logo */}
-          <div
-            className="flex items-center gap-2.5 cursor-pointer group"
-            onClick={() => scrollToSection('hero')}
-          >
-            <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 group-hover:scale-105 transition-transform">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-extrabold text-slate-900 tracking-tight leading-none">
-                Attend<span className="text-indigo-600">Ease</span>
-              </span>
-              <span className="text-[10px] text-slate-500 font-medium tracking-wider uppercase">
-                Enterprise ERP
-              </span>
-            </div>
-          </div>
+  // Proof Metric Tickers
+  const [complianceRate, complianceRef] = useCountUp(99.8, 1, 1400);
+  const [authSpeed, authSpeedRef] = useCountUp(182, 0, 1200);
+  const [activeRecords, recordsRef] = useCountUp(124, 0, 1600);
+  const [uptimeSla, uptimeRef] = useCountUp(99.99, 2, 1500);
 
-          {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center gap-7">
-            {navLinks.map((link) => (
-              <button
-                key={link.name}
-                onClick={() => scrollToSection(link.href)}
-                className="text-slate-600 hover:text-indigo-600 font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 rounded-md px-1 py-1"
-              >
-                {link.name}
-              </button>
-            ))}
+  // Inbound Lead Form State
+  const [leadForm, setLeadForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    institutionName: '',
+    studentCount: '500 - 2000',
+    notes: '',
+  });
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [leadSuccess, setLeadSuccess] = useState(false);
+  const [leadError, setLeadError] = useState(null);
 
-            <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-              <button
-                onClick={() => navigate('/login')}
-                className="px-3.5 py-2 text-slate-700 hover:text-indigo-600 hover:bg-slate-100/80 transition-all font-semibold text-sm rounded-lg"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={openRoleModal}
-                className="px-4 py-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50/60 border border-slate-300/80 rounded-lg transition-all font-semibold text-sm bg-white shadow-sm hover:shadow"
-              >
-                Demo Role
-              </button>
-              <button
-                onClick={() => navigate('/register/tenant')}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-all font-semibold text-sm shadow-md shadow-indigo-600/25 hover:shadow-indigo-600/35 hover:-translate-y-0.5"
-              >
-                Start Free Trial
-              </button>
-            </div>
-          </div>
-
-          {/* Mobile Menu Toggle */}
-          <button
-            className="md:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Menu Dropdown */}
-      {isMenuOpen && (
-        <div className="md:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-xl">
-          <div className="px-5 py-5 space-y-2">
-            {navLinks.map((link) => (
-              <button
-                key={link.name}
-                onClick={() => scrollToSection(link.href)}
-                className="block w-full text-left px-4 py-2.5 text-slate-800 font-medium hover:bg-slate-100 hover:text-indigo-600 rounded-lg transition"
-              >
-                {link.name}
-              </button>
-            ))}
-            <div className="pt-4 border-t border-slate-200 flex flex-col gap-2.5">
-              <button
-                onClick={() => navigate('/login')}
-                className="w-full px-4 py-2.5 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 font-semibold text-center text-sm"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  openRoleModal();
-                }}
-                className="w-full px-4 py-2.5 border border-indigo-200 text-indigo-600 bg-indigo-50/50 hover:bg-indigo-50 rounded-lg font-semibold text-center text-sm"
-              >
-                Demo Role
-              </button>
-              <button
-                onClick={() => navigate('/register/tenant')}
-                className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold shadow-md hover:bg-indigo-700 text-center text-sm"
-              >
-                Start Free Trial
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </nav>
-  );
-};
-
-// ==========================================
-// 2. HERO SECTION — THE COMMAND CENTER
-// Metaphor: Cinematic Masked Text Reveal & 3D Interactive Console with Live Glow
-// ==========================================
-const HeroSection = ({ navigate, openRoleModal }) => {
-  const heroRef = useRef(null);
-  const headlineWordsRef = useRef([]);
-  const subheadRef = useRef(null);
-  const buttonsRef = useRef(null);
-  const previewRef = useRef(null);
-  const badgeRef = useRef(null);
-  const consolePulseRef = useRef(null);
-
-  useEffect(() => {
-    if (!heroRef.current) return;
-    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
-    const prefersReduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    const ctx = gsap.context(() => {
-      if (!prefersReduced) {
-        const tl = gsap.timeline({ defaults: { ease: 'power4.out' } });
-
-        // 1. Badge pop
-        tl.fromTo(
-          badgeRef.current,
-          { opacity: 0, y: 15, scale: 0.94 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.45 }
-        )
-          // 2. Editorial Masked Headline Reveal
-          .fromTo(
-            headlineWordsRef.current,
-            { yPercent: 120, opacity: 0 },
-            { yPercent: 0, opacity: 1, duration: 0.75, stagger: 0.04, ease: 'power4.out' },
-            '-=0.2'
-          )
-          // 3. Subhead fade & rise
-          .fromTo(
-            subheadRef.current,
-            { opacity: 0, y: 16 },
-            { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' },
-            '-=0.4'
-          )
-          // 4. Action buttons
-          .fromTo(
-            buttonsRef.current,
-            { opacity: 0, y: 20 },
-            { opacity: 1, y: 0, duration: 0.5, ease: 'back.out(1.4)' },
-            '-=0.3'
-          )
-          // 5. 3D Perspective Console entrance with spring settle
-          .fromTo(
-            previewRef.current,
-            {
-              opacity: 0,
-              scale: 0.92,
-              transformPerspective: 1200,
-              rotateX: 8,
-              rotateY: -5,
-              y: 40,
-            },
-            {
-              opacity: 1,
-              scale: 1,
-              rotateX: 0,
-              rotateY: 0,
-              y: 0,
-              duration: 0.85,
-              ease: 'power3.out',
-            },
-            '-=0.55'
-          );
-      }
-
-      // Scroll-driven subtle 3D tilt reaction on desktop
-      if (isDesktop && !prefersReduced && previewRef.current) {
-        gsap.to(previewRef.current, {
-          rotateX: -3,
-          y: 25,
-          scale: 0.985,
-          ease: 'power2.out',
-          scrollTrigger: {
-            trigger: heroRef.current,
-            start: 'top top',
-            end: 'bottom top',
-            scrub: 0.4,
-          },
-        });
-      }
-    }, heroRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  return (
-    <section
-      id="hero"
-      ref={heroRef}
-      className="relative pt-36 pb-28 px-4 sm:px-6 lg:px-8 overflow-hidden bg-gradient-to-b from-[#faf8ff] via-[#f5f3ff] to-[#f8fafc]"
-    >
-      {/* Ambient background glow & structural pattern */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[650px] pointer-events-none -z-10">
-        <div className="absolute top-10 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-28 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
-      </div>
-      <div className="absolute inset-0 landing-dots-light pointer-events-none -z-10" />
-
-      <div className="max-w-7xl mx-auto relative z-10">
-        <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-          {/* Left: Editorial Pitch */}
-          <div className="lg:col-span-6 text-left">
-            <div
-              ref={badgeRef}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold mb-6 shadow-sm"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Unified Institutional Education ERP
-            </div>
-
-            {/* Editorial Headline with Word-Level Masking */}
-            <h1 className="text-3xl sm:text-5xl xl:text-[3.25rem] font-extrabold text-slate-900 mb-6 leading-[1.12] tracking-tight font-sans">
-              <div className="overflow-hidden pb-1">
-                <span
-                  ref={(el) => (headlineWordsRef.current[0] = el)}
-                  className="inline-block font-light text-slate-600"
-                >
-                  Run institutional operations
-                </span>
-              </div>
-              <div className="overflow-hidden pb-1">
-                <span
-                  ref={(el) => (headlineWordsRef.current[1] = el)}
-                  className="inline-block font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600"
-                >
-                  with analytical precision
-                </span>
-              </div>
-              <div className="overflow-hidden pb-1">
-                <span
-                  ref={(el) => (headlineWordsRef.current[2] = el)}
-                  className="inline-block font-bold text-slate-900"
-                >
-                  and zero fragmentation.
-                </span>
-              </div>
-            </h1>
-
-            <p
-              ref={subheadRef}
-              className="text-base sm:text-lg text-slate-600 mb-8 max-w-xl leading-relaxed font-normal"
-            >
-              Mark attendance in seconds, automate conflict-free exams, reconcile fee ledgers, and synchronize role portals across departments on one consolidated architecture.
-            </p>
-
-            <div ref={buttonsRef} className="flex flex-wrap items-center gap-4">
-              <button
-                onClick={() => navigate('/register/tenant')}
-                className="px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl transition-all font-semibold flex items-center gap-2 text-base shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:scale-[0.98]"
-              >
-                Start Free Trial
-                <ArrowRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={openRoleModal}
-                className="px-6 py-3.5 bg-white text-slate-800 border border-slate-300 hover:border-slate-400 hover:bg-slate-50/80 rounded-xl transition-all font-semibold text-base shadow-sm hover:shadow active:scale-[0.98]"
-              >
-                Explore Live Demo
-              </button>
-            </div>
-
-            <div className="mt-8 flex items-center gap-6 text-xs text-slate-500 font-medium">
-              <span className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" /> Isolated tenant databases
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" /> 24–48h rapid provisioning
-              </span>
-            </div>
-          </div>
-
-          {/* Right: 3D Perspective Live Console */}
-          <div ref={previewRef} className="lg:col-span-6 relative [perspective:1200px]">
-            {/* Atmospheric Glow behind console */}
-            <div
-              ref={consolePulseRef}
-              className="absolute -inset-3 bg-gradient-to-tr from-indigo-500/20 via-purple-500/15 to-emerald-500/20 rounded-3xl blur-2xl -z-10 landing-glow-pulse pointer-events-none"
-            />
-
-            <div className="relative w-full bg-white rounded-2xl p-3.5 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.15)] border border-slate-200/90 ring-1 ring-slate-100">
-              {/* Window Header Chrome */}
-              <div className="bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-rose-400/80" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-                  <span className="ml-2 text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
-                    AttendEase Console · Campus Live Operations
-                  </span>
-                </div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Sync Active
-                </span>
-              </div>
-
-              {/* Console Body */}
-              <div className="mt-3 bg-slate-50/70 rounded-xl p-4 border border-slate-200 space-y-3.5">
-                {/* Metric Cards Row */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-sm">
-                    <p className="text-[11px] font-semibold text-slate-500">Today's Attendance</p>
-                    <p className="text-2xl font-black text-slate-900 mt-1 tabular-nums font-sans">
-                      96.4%
-                    </p>
-                    <span className="text-[10px] text-emerald-600 font-bold">↑ +2.1% benchmark</span>
-                  </div>
-                  <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-sm">
-                    <p className="text-[11px] font-semibold text-slate-500">Active Sessions</p>
-                    <p className="text-2xl font-black text-indigo-600 mt-1 tabular-nums font-sans">
-                      48 / 50
-                    </p>
-                    <span className="text-[10px] text-slate-500 font-medium">Semester 6 Roster</span>
-                  </div>
-                  <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-sm">
-                    <p className="text-[11px] font-semibold text-slate-500">Fee Ledger</p>
-                    <p className="text-2xl font-black text-amber-600 mt-1 tabular-nums font-sans">
-                      ₹4.8M
-                    </p>
-                    <span className="text-[10px] text-amber-600 font-bold">92% settled</span>
-                  </div>
-                </div>
-
-                {/* Live Class Rosters Matrix */}
-                <div className="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs font-bold text-slate-900">Active Course Rosters</span>
-                    </div>
-                    <span className="text-[11px] text-slate-500 font-mono">
-                      Period 3 · 10:00–11:00 AM
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      {
-                        code: 'CS-301',
-                        title: 'Data Structures & Algorithms',
-                        present: '58/60',
-                        rate: '96.7%',
-                        badge: 'Completed',
-                        badgeStyle: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-                        iconBg: 'bg-indigo-50 text-indigo-600 border-indigo-200',
-                      },
-                      {
-                        code: 'MATH-202',
-                        title: 'Discrete Mathematics',
-                        present: '54/55',
-                        rate: '98.2%',
-                        badge: 'Completed',
-                        badgeStyle: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-                        iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-                      },
-                      {
-                        code: 'PHYS-101',
-                        title: 'Quantum Physics Lab',
-                        present: '42/48',
-                        rate: '87.5%',
-                        badge: 'In Progress',
-                        badgeStyle: 'text-amber-700 bg-amber-50 border-amber-200',
-                        iconBg: 'bg-amber-50 text-amber-600 border-amber-200',
-                      },
-                    ].map((row, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 text-xs hover:bg-slate-100/80 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`w-7 h-7 rounded-lg ${row.iconBg} font-mono font-bold text-[10px] flex items-center justify-center border`}
-                          >
-                            {row.code.split('-')[0]}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-800">{row.title}</p>
-                            <p className="text-[11px] text-slate-500 font-mono">
-                              {row.code} · Present: {row.present}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-bold text-slate-900 tabular-nums">{row.rate}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${row.badgeStyle}`}
-                          >
-                            {row.badge}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Telemetry Bar */}
-                <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                    Hardware biometric & encrypted QR verification active
-                  </span>
-                  <span className="font-mono text-emerald-600 font-bold">0 pending anomalies</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 3. PLATFORM SCOPE — IMMERSIVE BENTO
-// Metaphor: Spring physics snap, cursor spotlight, gradient border & distinct accent personalities
-// ==========================================
-const PlatformScopeSection = () => {
-  const scopeRef = useRef(null);
-  const featuredBlockRef = useRef(null);
-  const cardsRef = useRef([]);
-  const progressBarRef = useRef(null);
-
-  useEffect(() => {
-    if (!scopeRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      // 1. Featured card snap with spring physics
-      if (featuredBlockRef.current) {
-        gsap.fromTo(
-          featuredBlockRef.current,
-          { opacity: 0, y: 50, scale: 0.96 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.75,
-            ease: 'back.out(1.4)',
-            scrollTrigger: {
-              trigger: featuredBlockRef.current,
-              start: 'top 82%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
-      }
-
-      // 2. Smaller module cards: staggered spring entrance
-      cardsRef.current.forEach((card, idx) => {
-        if (!card) return;
-        gsap.fromTo(
-          card,
-          {
-            opacity: 0,
-            y: 35,
-            scale: 0.94,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.6,
-            delay: idx * 0.08,
-            ease: 'back.out(1.5)',
-            scrollTrigger: {
-              trigger: card,
-              start: 'top 88%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
+  const handleLeadSubmit = async (e) => {
+    e.preventDefault();
+    if (!leadForm.name || !leadForm.email || !leadForm.institutionName) {
+      setLeadError('Please fill in your name, campus email, and institution name.');
+      return;
+    }
+    setLeadSubmitting(true);
+    setLeadError(null);
+    try {
+      await api.post('/landing/lead', {
+        name: leadForm.name,
+        email: leadForm.email,
+        phone: leadForm.phone || undefined,
+        institutionName: leadForm.institutionName,
+        studentCount: leadForm.studentCount === 'Under 500' ? 250 :
+                      leadForm.studentCount === '500 - 2000' ? 1000 :
+                      leadForm.studentCount === '2000 - 10000' ? 5000 : 15000,
+        notes: leadForm.notes || undefined,
+        leadType: 'demo_request',
       });
-
-      // 3. Live biometric fill progress
-      if (progressBarRef.current) {
-        gsap.fromTo(
-          progressBarRef.current,
-          { width: '15%' },
-          {
-            width: '98%',
-            duration: 0.8,
-            ease: 'power3.out',
-            scrollTrigger: {
-              trigger: scopeRef.current,
-              start: 'top 70%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
-      }
-    }, scopeRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  const modules = [
-    {
-      title: 'Automated anti-cheating seating & GPA calculation',
-      tag: 'Exams & Seating',
-      desc: 'Generate room-wise hall tickets with anti-collision student seating. SGPA and CGPA calculated automatically from exam rosters.',
-      icon: BookOpen,
-      color: 'emerald',
-      iconClass: 'text-emerald-600 bg-emerald-50 border-emerald-200',
-      badgeClass: 'text-emerald-700 bg-emerald-50/80 border-emerald-200',
-      hoverBorder: 'hover:border-emerald-300 hover:shadow-emerald-500/10',
-      span: 'md:col-span-5',
-    },
-    {
-      title: 'Automated invoicing, installments, and receipts',
-      tag: 'Fee Ledgers',
-      desc: 'Track multi-tier installment structures, generate digital receipts, and reconcile pending campus dues in one financial view.',
-      icon: CreditCard,
-      color: 'amber',
-      iconClass: 'text-amber-600 bg-amber-50 border-amber-200',
-      badgeClass: 'text-amber-700 bg-amber-50/80 border-amber-200',
-      hoverBorder: 'hover:border-amber-300 hover:shadow-amber-500/10',
-      span: 'md:col-span-5',
-    },
-    {
-      title: 'Faculty schedule conflict resolution',
-      tag: 'Timetable Matrix',
-      desc: 'Assemble multi-semester schedules with zero faculty overlap. Changes propagate live across student and staff apps.',
-      icon: Calendar,
-      color: 'blue',
-      iconClass: 'text-blue-600 bg-blue-50 border-blue-200',
-      badgeClass: 'text-blue-700 bg-blue-50/80 border-blue-200',
-      hoverBorder: 'hover:border-blue-300 hover:shadow-blue-500/10',
-      span: 'md:col-span-4',
-    },
-    {
-      title: 'Departments, academic years, and RBAC',
-      tag: 'Governance & RBAC',
-      desc: 'Configure granular permissions. Institution leadership monitors whole-campus analytics while faculty access their assigned sections.',
-      icon: Shield,
-      color: 'purple',
-      iconClass: 'text-purple-600 bg-purple-50 border-purple-200',
-      badgeClass: 'text-purple-700 bg-purple-50/80 border-purple-200',
-      hoverBorder: 'hover:border-purple-300 hover:shadow-purple-500/10',
-      span: 'md:col-span-4',
-    },
-    {
-      title: 'Parent dispatches & departmental notices',
-      tag: 'Guardian Dispatches',
-      desc: 'Direct emergency broadcasts and attendance notices to guardian phones. Official portal notices keep campus communities informed.',
-      icon: MessageSquare,
-      color: 'rose',
-      iconClass: 'text-rose-600 bg-rose-50 border-rose-200',
-      badgeClass: 'text-rose-700 bg-rose-50/80 border-rose-200',
-      hoverBorder: 'hover:border-rose-300 hover:shadow-rose-500/10',
-      span: 'md:col-span-4',
-    },
-  ];
-
-  return (
-    <section
-      id="platform"
-      ref={scopeRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-white border-t border-slate-200/90 relative"
-    >
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-16 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
-            <Building2 className="w-4 h-4" />
-            Institutional Architecture
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-            Six unified modules. One authoritative core.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Eliminate fragmented software silos. Every administrative layer communicates in real time with the central academic ledger.
-          </p>
-        </div>
-
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          {/* Featured Attendance Centerpiece with Gradient Rim */}
-          <div
-            ref={featuredBlockRef}
-            className="md:col-span-7 md:row-span-2 p-[1px] rounded-2xl bg-gradient-to-br from-indigo-500/40 via-purple-500/20 to-emerald-500/30 shadow-2xl shadow-indigo-950/20"
-          >
-            <div className="h-full bg-slate-950 rounded-[15px] p-7 sm:p-9 text-white relative overflow-hidden flex flex-col justify-between">
-              {/* Background ambient lighting */}
-              <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
-                    <Users className="w-4 h-4 text-indigo-300" />
-                  </div>
-                  <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono">
-                    Module 01 · Attendance Engine
-                  </span>
-                </div>
-                <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-3 tracking-tight">
-                  Subject-wise attendance marked & verified in under 30 seconds
-                </h3>
-                <p className="text-slate-300 text-sm leading-relaxed mb-6 max-w-lg">
-                  Faculty capture rosters via hardware biometric terminals or dynamic rotating QR tokens. Absentees automatically trigger encrypted SMS alerts to parents with zero manual friction.
-                </p>
-
-                {/* Attendance Sandbox Console */}
-                <div className="bg-slate-900/90 rounded-xl p-4 border border-slate-800/90 shadow-inner">
-                  <div className="flex items-center justify-between pb-2 text-xs mb-2">
-                    <span className="font-semibold text-slate-200">CS-301 Attendance Session</span>
-                    <span className="text-emerald-400 font-mono font-bold">
-                      98% Verified
-                    </span>
-                  </div>
-                  {/* Live Biometric Progress Fill */}
-                  <div className="w-full bg-slate-800 rounded-full h-2 mb-3 overflow-hidden">
-                    <div
-                      ref={progressBarRef}
-                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-75"
-                      style={{ width: '15%' }}
-                    />
-                  </div>
-                  <div className="space-y-2 text-xs">
-                    {[
-                      {
-                        name: 'Rahul Sharma (CS-01)',
-                        status: 'Verified (Biometric)',
-                        statusColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-                      },
-                      {
-                        name: 'Ananya Verma (CS-02)',
-                        status: 'Verified (QR Scan)',
-                        statusColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-                      },
-                      {
-                        name: 'Dev Patel (CS-03)',
-                        status: 'Absent · SMS Dispatched',
-                        statusColor: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-                      },
-                    ].map((s, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80"
-                      >
-                        <span className="text-slate-200 font-medium">{s.name}</span>
-                        <span
-                          className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${s.statusColor}`}
-                        >
-                          {s.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                <span>Hardware API + Tablet / Mobile app sync</span>
-                <span className="text-indigo-400 font-semibold">100% Offline tolerant</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Distinct Personality Module Cards */}
-          {modules.map((m, idx) => {
-            const Icon = m.icon;
-            return (
-              <div
-                key={idx}
-                ref={(el) => (cardsRef.current[idx] = el)}
-                className={`${m.span} bg-white rounded-2xl p-6 sm:p-7 border border-slate-200/90 shadow-sm transition-all duration-200 ${m.hoverBorder} hover:shadow-lg flex flex-col justify-between`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${m.iconClass}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className={`text-[11px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-full border ${m.badgeClass}`}>
-                      {m.tag}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-2 leading-snug">
-                    {m.title}
-                  </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {m.desc}
-                  </p>
-                </div>
-                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center text-xs font-semibold text-slate-500">
-                  <span>Included across all institutional tiers</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 4. WHAT CHANGES — SPLIT REALITY CONTRAST
-// Metaphor: Polarity Contrast, Strikethrough Animation & Top-Down Drawing Divider Line
-// ==========================================
-const WhatChangesSection = () => {
-  const sectionRef = useRef(null);
-  const beforeColRef = useRef(null);
-  const afterColRef = useRef(null);
-  const dividerLineRef = useRef(null);
-  const checkIconsRef = useRef([]);
-
-  useEffect(() => {
-    if (!sectionRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      // 1. Drawing Divider Line
-      if (dividerLineRef.current) {
-        gsap.fromTo(
-          dividerLineRef.current,
-          { scaleY: 0 },
-          {
-            scaleY: 1,
-            duration: 0.8,
-            ease: 'power3.inOut',
-            scrollTrigger: {
-              trigger: sectionRef.current,
-              start: 'top 75%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
-      }
-
-      // 2. Left Legacy Column Entrance
-      gsap.fromTo(
-        beforeColRef.current,
-        { opacity: 0.3, x: -30 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 0.6,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            start: 'top 80%',
-            toggleActions: 'play reverse play reverse',
-          },
-        }
-      );
-
-      // 3. Right AttendEase Column Entrance
-      gsap.fromTo(
-        afterColRef.current,
-        { opacity: 0.3, x: 30, scale: 0.98 },
-        {
-          opacity: 1,
-          x: 0,
-          scale: 1,
-          duration: 0.6,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            start: 'top 80%',
-            toggleActions: 'play reverse play reverse',
-          },
-        }
-      );
-
-      // 4. Checkmarks popping with spring
-      checkIconsRef.current.forEach((icon, idx) => {
-        if (!icon) return;
-        gsap.fromTo(
-          icon,
-          { scale: 0, opacity: 0, rotation: -45 },
-          {
-            scale: 1,
-            opacity: 1,
-            rotation: 0,
-            duration: 0.4,
-            delay: 0.15 + idx * 0.08,
-            ease: 'back.out(1.7)',
-            scrollTrigger: {
-              trigger: afterColRef.current,
-              start: 'top 80%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
+      setLeadSuccess(true);
+      setLeadForm({
+        name: '',
+        email: '',
+        phone: '',
+        institutionName: '',
+        studentCount: '500 - 2000',
+        notes: '',
       });
-    }, sectionRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  const beforeItems = [
-    'Paper registers manually passed between staff and tallied at month-end',
-    'Fees tracked across physical receipt books and disparate bank spreadsheets',
-    'Exam seating plotted in Excel; hall tickets formatted and printed individually',
-    'Parents constantly phone the administrative office for attendance inquiries',
-    'Timetable updates distributed via paper bulletin boards and informal chats',
-    'Leadership must manually stitch five disparate spreadsheets for monthly audits',
-  ];
-
-  const afterItems = [
-    {
-      role: 'Faculty',
-      text: 'Mark rosters in 30 seconds; absent guardian dispatches trigger automatically',
-    },
-    {
-      role: 'Admin',
-      text: 'Unified dashboard displays live attendance, exam schedules, and collected fees',
-    },
-    {
-      role: 'Students',
-      text: 'Access live attendance analytics, class schedules, and leave filings on their portal',
-    },
-    {
-      role: 'Parents',
-      text: 'Direct transparency into attendance, fee deadlines, and official institutional notices',
-    },
-    {
-      role: 'Leadership',
-      text: 'Multi-campus oversight, granular role policies, and immutable audit logs',
-    },
-  ];
-
-  return (
-    <section
-      id="how-it-works"
-      ref={sectionRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-[#f8fafc] border-t border-slate-200 relative overflow-hidden"
-    >
-      <div className="max-w-7xl mx-auto relative">
-        <div className="mb-16 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
-            <Sparkles className="w-4 h-4" />
-            Operational Transformation
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-            What changes when your campus adopts AttendEase
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Transition from fragmented, error-prone manual records to an authoritative, real-time institutional operations center.
-          </p>
-        </div>
-
-        {/* Split Reality Grid */}
-        <div className="relative grid md:grid-cols-2 gap-8 lg:gap-12 items-stretch">
-          {/* Animated Central Vertical Divider on desktop */}
-          <div
-            ref={dividerLineRef}
-            className="hidden md:block absolute left-1/2 top-4 bottom-4 w-[2px] bg-gradient-to-b from-indigo-500/20 via-indigo-600 to-indigo-500/20 origin-top -translate-x-1/2 z-20 pointer-events-none"
-            style={{ transform: 'scaleY(0)' }}
-          />
-
-          {/* Left: Legacy Disconnected Reality */}
-          <div
-            ref={beforeColRef}
-            className="bg-slate-100/90 rounded-2xl p-7 sm:p-9 border border-rose-200/70 shadow-sm flex flex-col justify-between relative overflow-hidden"
-          >
-            <div className="absolute top-4 right-4 text-[10px] font-mono uppercase tracking-widest text-rose-500 font-bold bg-rose-50 px-2.5 py-1 rounded-md border border-rose-200">
-              Legacy Approach
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-200">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                <h3 className="text-xs font-bold text-rose-700 uppercase tracking-wider font-mono">
-                  Fragmented Campus Operations
-                </h3>
-              </div>
-              <ul className="space-y-4">
-                {beforeItems.map((item, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-3 text-sm text-slate-600 leading-relaxed group"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 mt-0.5 border border-rose-200">
-                      <X className="w-3 h-3 stroke-[2.5]" />
-                    </div>
-                    <span className="line-through decoration-rose-400/70 decoration-1 text-slate-500">
-                      {item}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-8 pt-4 border-t border-slate-200 text-xs text-rose-600/90 font-medium">
-              ⚠ High manual labor · frequent calculation discrepancies · delayed notifications
-            </div>
-          </div>
-
-          {/* Right: Modern AttendEase Unified Reality */}
-          <div
-            ref={afterColRef}
-            className="bg-white rounded-2xl p-7 sm:p-9 border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/5 ring-4 ring-emerald-500/5 flex flex-col justify-between relative overflow-hidden"
-          >
-            <div className="absolute top-4 right-4 text-[10px] font-mono uppercase tracking-widest text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              AttendEase Standard
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-100">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider font-mono">
-                  Autonomous Central Ledger
-                </h3>
-              </div>
-              <ul className="space-y-4">
-                {afterItems.map((item, i) => (
-                  <li key={i} className="flex items-start gap-3.5 text-sm leading-relaxed">
-                    <div
-                      ref={(el) => (checkIconsRef.current[i] = el)}
-                      className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 border border-emerald-300 shadow-sm"
-                    >
-                      <Check className="w-3 h-3 stroke-[2.5]" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-900">{item.role}:</span>{' '}
-                      <span className="text-slate-700">{item.text}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-8 pt-4 border-t border-emerald-50 text-xs text-emerald-700 font-bold flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Automated audit trail across all academic, attendance, and fee transactions
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 5. DEMO SANDBOX SHOWCASE — DRAMATIC DARK MODE SHIFT
-// Room change: switches from bright slate to sleek dark obsidian space (#0a0f1d)
-// ==========================================
-const DEMO_ROLES = [
-  { key: 'admin', name: 'Institution Admin', icon: Shield },
-  { key: 'teacher', name: 'Faculty', icon: BookOpen },
-  { key: 'student', name: 'Student', icon: GraduationCap },
-  { key: 'parent', name: 'Parent', icon: Users },
-];
-
-const DemoSandboxSection = () => {
-  const [selectedRole, setSelectedRole] = useState('admin');
-  const { slotsStatus, fetchSlotStatus, claimDemoRole, loading } = useDemo();
-  const sandboxRef = useRef(null);
-  const panelRef = useRef(null);
-  const previewContentRef = useRef(null);
-
-  const handleRoleSelect = (roleKey) => {
-    if (roleKey === selectedRole) return;
-    setSelectedRole(roleKey);
-    if (previewContentRef.current) {
-      gsap.fromTo(
-        previewContentRef.current,
-        { filter: 'blur(6px)', opacity: 0.4, scale: 0.985 },
-        { filter: 'blur(0px)', opacity: 1, scale: 1, duration: 0.35, ease: 'power2.out' }
-      );
+    } catch (err) {
+      setLeadError(err?.response?.data?.message || err.message || 'Unable to submit inquiry. Please try again.');
+    } finally {
+      setLeadSubmitting(false);
     }
   };
 
-  useEffect(() => {
-    fetchSlotStatus();
-    const interval = setInterval(fetchSlotStatus, 12000);
-    return () => clearInterval(interval);
-  }, [fetchSlotStatus]);
-
-  useEffect(() => {
-    if (!panelRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        panelRef.current,
-        { scale: 0.94, opacity: 0.3, y: 30 },
-        {
-          scale: 1,
-          opacity: 1,
-          y: 0,
-          duration: 0.7,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: panelRef.current,
-            start: 'top 82%',
-            toggleActions: 'play reverse play reverse',
-          },
-        }
-      );
-    }, panelRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  const selectedSlot = slotsStatus[selectedRole];
-  const isOccupied = selectedSlot && selectedSlot.isAvailable === false;
-  const remainingMin = selectedSlot?.remainingSeconds
-    ? Math.ceil(selectedSlot.remainingSeconds / 60)
-    : null;
-
-  return (
-    <section
-      id="demo"
-      ref={sandboxRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-[#0a0f1d] text-white border-t border-slate-800 relative overflow-hidden"
-    >
-      {/* Dark Room Ambient Background Grid Pattern & Radial Lighting */}
-      <div className="absolute inset-0 landing-grid-pattern pointer-events-none opacity-60 -z-10" />
-      <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
-
-      <div className="max-w-7xl mx-auto relative z-10">
-        <div className="mb-12 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3 bg-indigo-500/15 border border-indigo-400/30 px-3 py-1 rounded-full">
-            <Shield className="w-3.5 h-3.5 text-indigo-300" />
-            Interactive Environment Sandbox
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-snug">
-            Inspect authentic role-based interfaces
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
-            Every persona is equipped with an interface tailored to their exact operational scope. Switch tabs to preview each console, then claim a live 15-minute isolated sandbox.
-          </p>
-        </div>
-
-        {/* Role Selector Capsule Tabs */}
-        <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-1.5 rounded-2xl inline-flex flex-wrap gap-1.5 mb-8 shadow-xl">
-          {DEMO_ROLES.map((role) => {
-            const Icon = role.icon;
-            const isSelected = selectedRole === role.key;
-            const slot = slotsStatus[role.key];
-            const occupied = slot && slot.isAvailable === false;
-
-            return (
-              <button
-                key={role.key}
-                onClick={() => handleRoleSelect(role.key)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
-                  isSelected
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/40'
-                    : occupied
-                    ? 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{role.name}</span>
-                {occupied && (
-                  <span
-                    className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 animate-pulse"
-                    title="Slot occupied"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Dark Obsidian Console Preview Panel */}
-        <div
-          ref={panelRef}
-          className="bg-slate-900/95 rounded-2xl p-3.5 shadow-2xl shadow-black/60 border border-slate-800 mb-8"
-        >
-          {/* Header Chrome */}
-          <div className="bg-slate-950/80 rounded-xl px-4 py-3 border border-slate-800/80 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-700" />
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-700" />
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-700" />
-              <span className="ml-2 text-xs font-semibold text-slate-300 font-mono">
-                AttendEase Console · {DEMO_ROLES.find((r) => r.key === selectedRole)?.name} View
-              </span>
-            </div>
-            {isOccupied ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                <Clock className="w-3.5 h-3.5" />
-                Slot in use · ~{remainingMin}m remaining
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Demo Slot Available
-              </span>
-            )}
-          </div>
-
-          {/* Role Preview Body with Dark Styling */}
-          <div
-            ref={previewContentRef}
-            className="bg-slate-950/90 rounded-xl mt-3 p-5 sm:p-6 border border-slate-800/80 min-h-[320px] overflow-hidden"
-          >
-            {selectedRole === 'admin' && <AdminPreviewDark />}
-            {selectedRole === 'teacher' && <TeacherPreviewDark />}
-            {selectedRole === 'student' && <StudentPreviewDark />}
-            {selectedRole === 'parent' && <ParentPreviewDark />}
-          </div>
-        </div>
-
-        {/* Claim Sandbox Button Bar */}
-        <div className="flex flex-wrap items-center gap-5">
-          <button
-            onClick={() => claimDemoRole(selectedRole)}
-            disabled={isOccupied || loading}
-            className={`px-7 py-3.5 rounded-xl font-bold text-sm flex items-center gap-2.5 transition-all duration-150 active:scale-[0.98] ${
-              isOccupied
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                : 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white shadow-xl shadow-indigo-600/30 landing-glow-pulse hover:-translate-y-0.5'
-            }`}
-          >
-            {loading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Initializing Sandbox…
-              </>
-            ) : isOccupied ? (
-              <>
-                <Clock className="w-4 h-4" />
-                Slot busy · ~{remainingMin}m wait
-              </>
-            ) : (
-              <>
-                Launch {DEMO_ROLES.find((r) => r.key === selectedRole)?.name} Live Sandbox
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-          <span className="text-xs text-slate-400">
-            Isolated 15-minute operational instance · zero credentials or registration required
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// --- Dark Mode Role Preview Sub-components ---
-const AdminPreviewDark = () => (
-  <div className="space-y-4">
-    <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
-      <Shield className="w-4 h-4 text-indigo-400" />
-      <span className="text-xs font-bold text-slate-200">Campus Master Command · Demo Institute</span>
-    </div>
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {[
-        { label: 'Attendance Today', value: '96.4%', sub: '↑ 2.1% benchmark', color: 'text-emerald-400' },
-        { label: 'Active Sections', value: '48 / 50', sub: 'Semester 6', color: 'text-slate-400' },
-        { label: 'Fee Collection', value: '₹4.8M', sub: '92% reconciled', color: 'text-amber-400' },
-        { label: 'At-Risk Flags', value: '12', sub: '< 75% attendance', color: 'text-rose-400' },
-      ].map((m, i) => (
-        <div key={i} className="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 shadow-sm">
-          <p className="text-[11px] font-semibold text-slate-400">{m.label}</p>
-          <p className="text-xl font-bold text-white mt-1 tabular-nums font-sans">{m.value}</p>
-          <span className={`text-[10px] font-bold ${m.color}`}>{m.sub}</span>
-        </div>
-      ))}
-    </div>
-    <div className="bg-slate-900/90 rounded-xl p-4 border border-slate-800 shadow-sm">
-      <p className="text-xs font-bold text-slate-200 mb-3">Department Academic Efficiency</p>
-      {[
-        { dept: 'Computer Science & Engineering', rate: '94.2%', w: '94%' },
-        { dept: 'Electronics & Communication', rate: '91.7%', w: '92%' },
-        { dept: 'Mechanical Sciences', rate: '89.3%', w: '89%' },
-      ].map((d, i) => (
-        <div key={i} className="flex items-center gap-3 mb-2.5 last:mb-0">
-          <span className="text-xs text-slate-300 w-48 flex-shrink-0 font-medium">{d.dept}</span>
-          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 rounded-full" style={{ width: d.w }} />
-          </div>
-          <span className="text-xs font-bold text-slate-200 w-14 text-right tabular-nums">
-            {d.rate}
-          </span>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-const TeacherPreviewDark = () => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-      <div className="flex items-center gap-2">
-        <BookOpen className="w-4 h-4 text-indigo-400" />
-        <span className="text-xs font-bold text-slate-200">CS-301 · Data Structures & Algorithms</span>
-      </div>
-      <span className="text-[11px] text-slate-400 font-mono">Period 3 · 10:00–11:00 AM</span>
-    </div>
-    <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-      <div className="px-4 py-2.5 bg-slate-950/60 text-[11px] font-bold text-slate-400 flex items-center justify-between border-b border-slate-800">
-        <span>Student Roster (60 Enrolled)</span>
-        <span className="text-emerald-400">56 Present · 4 Absent</span>
-      </div>
-      <div className="divide-y divide-slate-800/60">
-        {[
-          { roll: 'CS-01', name: 'Rahul Sharma', status: 'Present', color: 'text-emerald-400' },
-          { roll: 'CS-02', name: 'Ananya Verma', status: 'Present', color: 'text-emerald-400' },
-          { roll: 'CS-03', name: 'Dev Patel', status: 'Absent · SMS Alert', color: 'text-rose-400' },
-          { roll: 'CS-04', name: 'Priya Nair', status: 'Present', color: 'text-emerald-400' },
-        ].map((s, i) => (
-          <div key={i} className="flex items-center justify-between px-4 py-2.5 text-xs">
-            <div className="flex items-center gap-3">
-              <span className="text-slate-500 font-mono w-10">{s.roll}</span>
-              <span className="font-semibold text-slate-200">{s.name}</span>
-            </div>
-            <span className={`text-[11px] font-bold ${s.color}`}>{s.status}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-    <div className="flex gap-3">
-      <button className="px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-300 text-xs font-bold border border-emerald-500/30">
-        Mark All Present
-      </button>
-      <button className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold shadow-md">
-        Submit Attendance Roster
-      </button>
-    </div>
-  </div>
-);
-
-const StudentPreviewDark = () => (
-  <div className="space-y-4">
-    <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
-      <GraduationCap className="w-4 h-4 text-indigo-400" />
-      <span className="text-xs font-bold text-slate-200">Arjun Mehta · Semester 6 Roster</span>
-    </div>
-    <div className="grid grid-cols-3 gap-3">
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Cumulative Attendance</p>
-        <p className="text-xl font-bold text-emerald-400 mt-1 tabular-nums font-sans">87.5%</p>
-      </div>
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Lectures Today</p>
-        <p className="text-xl font-bold text-white mt-1 tabular-nums font-sans">4</p>
-      </div>
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Leave Quota</p>
-        <p className="text-xl font-bold text-amber-400 mt-1 tabular-nums font-sans">3 / 8</p>
-      </div>
-    </div>
-    <div className="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 text-xs">
-      <p className="font-bold text-slate-200 mb-2.5">Today's Academic Timetable</p>
-      {[
-        { time: '09:00', subject: 'Data Structures & Algorithms', status: 'Verified', color: 'text-emerald-400' },
-        { time: '10:00', subject: 'Discrete Mathematics', status: 'Verified', color: 'text-emerald-400' },
-        { time: '11:00', subject: 'Physics Laboratory', status: 'Upcoming', color: 'text-slate-400' },
-      ].map((s, i) => (
-        <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-800/80 last:border-0 text-xs">
-          <span className="text-slate-500 font-mono w-12 font-medium">{s.time}</span>
-          <span className="font-semibold text-slate-200 flex-1">{s.subject}</span>
-          <span className={`font-bold ${s.color}`}>{s.status}</span>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-const ParentPreviewDark = () => (
-  <div className="space-y-4">
-    <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
-      <Users className="w-4 h-4 text-amber-400" />
-      <span className="text-xs font-bold text-slate-200">Ward: Arjun Mehta · Roll: CS-01</span>
-    </div>
-    <div className="grid grid-cols-3 gap-3">
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Weekly Attendance</p>
-        <p className="text-xl font-bold text-emerald-400 mt-1 tabular-nums font-sans">92%</p>
-      </div>
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Fee Outstanding</p>
-        <p className="text-xl font-bold text-amber-400 mt-1 tabular-nums font-sans">₹5,000</p>
-      </div>
-      <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
-        <p className="text-[11px] font-semibold text-slate-400">Academic Standing</p>
-        <p className="text-xl font-bold text-indigo-400 mt-1 tabular-nums font-sans">Good</p>
-      </div>
-    </div>
-    <div className="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 text-xs">
-      <p className="font-bold text-slate-200 mb-2">Automated Incident Feed</p>
-      <div className="space-y-2">
-        <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-          <span className="text-slate-300">Today · 4/4 Classes Attended</span>
-          <span className="text-emerald-400 font-bold">Confirmed</span>
-        </div>
-        <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-          <span className="text-slate-300">Semester Fee Installment #2</span>
-          <span className="text-emerald-400 font-bold">Paid (₹45,000)</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-// ==========================================
-// 6. PRICING SECTION — CLEAN SPOTLIGHT ELEVATION
-// Metaphor: Single recommended plan spotlight, domino cascade arrival, tabular typography
-// ==========================================
-const DEFAULT_PLANS = [
-  {
-    code: 'free',
-    name: 'Free',
-    description: 'For testing and small community setups',
-    pricing: { monthly: 0, yearly: 0, currency: 'INR' },
-    limits: { maxStudents: 50, maxTeachers: 5, maxAdmins: 1, maxStorageMB: 1024 },
-    modules: { attendance: true, timetable: false, examManagement: false, financeManagement: false, parentPortal: false, analytics: false },
-    features: [
-      { name: 'Core Attendance Tracking', included: true },
-      { name: 'Subject-wise Rosters', included: true },
-      { name: 'Standard CSV Data Export', included: true },
-      { name: 'Community Support', included: true },
-    ],
-    isPopular: false,
-    sortOrder: 1,
-  },
-  {
-    code: 'basic',
-    name: 'Basic',
-    description: 'For small schools & coaching institutes',
-    pricing: { monthly: 49, yearly: 499, currency: 'INR' },
-    limits: { maxStudents: 200, maxTeachers: 20, maxAdmins: 3, maxStorageMB: 10240 },
-    modules: { attendance: true, timetable: true, examManagement: true, financeManagement: false, parentPortal: false, analytics: true },
-    features: [
-      { name: 'Full Attendance & Timetables', included: true },
-      { name: 'Exam Management & Grades', included: true },
-      { name: 'Department Analytics', included: true },
-      { name: 'Priority Email Support', included: true },
-    ],
-    isPopular: false,
-    sortOrder: 2,
-  },
-  {
-    code: 'professional',
-    name: 'Professional',
-    description: 'For standard universities & colleges',
-    pricing: { monthly: 149, yearly: 1499, currency: 'INR' },
-    limits: { maxStudents: 1000, maxTeachers: 100, maxAdmins: 10, maxStorageMB: 51200 },
-    modules: { attendance: true, timetable: true, examManagement: true, financeManagement: true, parentPortal: true, analytics: true },
-    features: [
-      { name: 'Everything in Basic', included: true },
-      { name: 'Parent Portal & Instant SMS', included: true },
-      { name: 'Fee Collection & Dues Tracking', included: true },
-      { name: 'Custom Roles & Granular RBAC', included: true },
-      { name: 'API Access & Webhooks', included: true },
-    ],
-    isPopular: true,
-    sortOrder: 3,
-  },
-  {
-    code: 'enterprise',
-    name: 'Enterprise',
-    description: 'For university networks & institutes',
-    pricing: { monthly: 499, yearly: 4999, currency: 'INR' },
-    limits: { maxStudents: 10000, maxTeachers: 1000, maxAdmins: 50, maxStorageMB: 512000 },
-    modules: { attendance: true, timetable: true, examManagement: true, financeManagement: true, parentPortal: true, analytics: true },
-    features: [
-      { name: 'Everything in Professional', included: true },
-      { name: 'Biometric & Hardware Sync', included: true },
-      { name: 'Multi-Campus Consolidation', included: true },
-      { name: 'HR & Library Management', included: true },
-      { name: 'Dedicated SLA & Migration', included: true },
-    ],
-    isPopular: false,
-    sortOrder: 4,
-  },
-];
-
-const PricingSection = ({ navigate }) => {
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
+  // Dynamic Pricing State
+  const [plans, setPlans] = useState(CANONICAL_PLANS);
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const pricingRef = useRef(null);
-  const planCardsRef = useRef([]);
-  const priceNumbersRef = useRef([]);
+  const [showFullMatrix, setShowFullMatrix] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
-    const fetchPricing = async () => {
-      try {
-        const res = await api.get('/landing/pricing');
-        if (
-          isMounted &&
-          res.data &&
-          res.data.success &&
-          Array.isArray(res.data.data) &&
-          res.data.data.length > 0
-        ) {
-          const sorted = [...res.data.data].sort(
-            (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)
-          );
-          setPlans(sorted);
+    setPlansLoading(true);
+    api.get('/landing/pricing')
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.data?.success && Array.isArray(res.data?.data) && res.data.data.length > 0) {
+          const fetched = res.data.data.map((p) => {
+            const code = (p.code || p.name || '').toLowerCase();
+            const fallback = CANONICAL_PLANS.find((c) => c.code === code) || CANONICAL_PLANS[0];
+            const basePrice = p.priceInr ?? p.price?.monthly ?? p.price ?? fallback.price.monthly;
+            return {
+              ...fallback,
+              ...p,
+              code: code || fallback.code,
+              name: p.name || fallback.name,
+              tagline: p.description || fallback.tagline,
+              price: {
+                monthly: basePrice,
+                annual: Math.round(basePrice * 0.8), // 20% annual discount
+              },
+              limits: { ...fallback.limits, ...(p.limits || {}) },
+              modules: { ...fallback.modules, ...(p.modules || {}) },
+            };
+          });
+          setPlans(fetched);
         }
-      } catch (err) {
-        // Fallback to default plans safely
-      }
-    };
-    fetchPricing();
-    return () => {
-      isMounted = false;
-    };
+      })
+      .catch(() => {
+        // Fall back to CANONICAL_PLANS seamlessly
+      })
+      .finally(() => {
+        if (isMounted) setPlansLoading(false);
+      });
+    return () => { isMounted = false; };
   }, []);
 
-  // Domino Cascade Entrance
-  useEffect(() => {
-    if (!pricingRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      planCardsRef.current.forEach((card, idx) => {
-        if (!card) return;
-        gsap.fromTo(
-          card,
-          { opacity: 0, y: 40 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.6,
-            delay: idx * 0.1,
-            ease: 'back.out(1.3)',
-            scrollTrigger: {
-              trigger: pricingRef.current,
-              start: 'top 80%',
-              toggleActions: 'play reverse play reverse',
-            },
-          }
-        );
-      });
-    }, pricingRef);
-
-    return () => ctx.revert();
-  }, [plans]);
-
-  // Split-flap flip on billing change
-  useEffect(() => {
-    priceNumbersRef.current.forEach((el) => {
-      if (!el) return;
-      gsap.fromTo(
-        el,
-        { rotateX: 60, opacity: 0.2 },
-        { rotateX: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
-      );
-    });
-  }, [billingCycle]);
-
-  const formatLimit = (count) => {
-    if (count === undefined || count === null) return 'Unlimited';
-    return count.toLocaleString();
-  };
-
-  const formatStorage = (mb) => {
-    if (mb >= 1024) return `${Math.round(mb / 1024)} GB`;
-    return `${mb} MB`;
+  const scrollTo = (id, targetPlan = null) => {
+    setMobileMenuOpen(false);
+    if (targetPlan && targetPlan === 'enterprise') {
+      setLeadForm(prev => ({
+        ...prev,
+        notes: prev.notes || 'Interested in Enterprise Tier onboarding and quote.',
+      }));
+    }
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
-    <section
-      id="pricing"
-      ref={pricingRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-[#faf8ff] border-t border-slate-200"
-    >
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
-            <CreditCard className="w-4 h-4" />
-            Predictable Institutional Licensing
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-            Straightforward tiers. No hidden per-message markups.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Predictable budgeting scaled to active student capacity. Includes unlimited administrative accounts and daily backups.
-          </p>
-        </div>
+    <div className="min-h-screen bg-background font-body text-ink antialiased selection:bg-primary/20 selection:text-ink">
+      {/* Welcome Entrance Intro Modal */}
+      {showWelcome && <WelcomeEntrance onFinish={() => setShowWelcome(false)} />}
 
-        {/* Billing Cycle Toggle */}
-        <div className="flex items-center justify-center mb-16">
-          <div className="inline-flex p-1.5 bg-slate-200/80 rounded-xl border border-slate-300/80 shadow-inner">
+      {/* Top Scroll-Scrubbed Hairline Progress Indicator */}
+      <div
+        className="fixed top-0 left-0 h-[2px] bg-primary z-50 transition-all duration-75 origin-left"
+        style={{ width: `${scrollProgress}%` }}
+        role="progressbar"
+        aria-valuenow={Math.round(scrollProgress)}
+        aria-valuemin="0"
+        aria-valuemax="100"
+      />
+
+      {/* Focusable Skip Link */}
+      <a
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-primary focus:text-white focus:px-4 focus:py-2 focus:rounded focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary text-xs font-medium"
+        href="#main-content"
+      >
+        Skip to content
+      </a>
+
+      {/* Header Navigation */}
+      <header className="fixed top-0 left-0 w-full z-40 bg-surface/95 backdrop-blur-xs border-b border-line">
+        <div className="h-16 max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => setBillingCycle('monthly')}
-              className={`px-5 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
-                billingCycle === 'monthly'
-                  ? 'bg-white text-slate-900 shadow-md'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
             >
-              Monthly Billing
-            </button>
-            <button
-              onClick={() => setBillingCycle('yearly')}
-              className={`px-5 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                billingCycle === 'yearly'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Annual Billing
-              <span
-                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  billingCycle === 'yearly'
-                    ? 'bg-indigo-800 text-yellow-300'
-                    : 'bg-emerald-100 text-emerald-800'
-                }`}
-              >
-                Save ~16%
+              <span className="font-bold text-xl tracking-tight text-ink">
+                Attend<span className="text-primary">Ease</span>
               </span>
             </button>
-          </div>
-        </div>
-
-        {/* Plan Cards Grid — Spotlight on Exactly ONE Recommended Card */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-7 items-stretch">
-          {plans.map((plan, index) => {
-            // Strictly enforce only ONE plan is recommended (Professional tier)
-            const isRecommended =
-              plan.code?.toLowerCase() === 'professional' ||
-              (!plans.some((p) => p.code?.toLowerCase() === 'professional') && plan.isPopular);
-
-            const monthlyPrice = plan.pricing?.monthly ?? 0;
-            const yearlyPrice = plan.pricing?.yearly ?? 0;
-            const isFree = monthlyPrice === 0 && yearlyPrice === 0;
-
-            const displayPrice = isFree
-              ? '₹0'
-              : billingCycle === 'monthly'
-              ? `₹${monthlyPrice}`
-              : `₹${yearlyPrice.toLocaleString()}`;
-
-            const billingPeriod = isFree
-              ? 'forever'
-              : billingCycle === 'monthly'
-              ? '/ month'
-              : '/ year';
-
-            return (
-              <div
-                key={plan.code || plan._id || plan.name}
-                ref={(el) => (planCardsRef.current[index] = el)}
-                className={`rounded-2xl p-7 transition-all duration-200 flex flex-col justify-between relative ${
-                  isRecommended
-                    ? 'bg-white border-2 border-indigo-600 shadow-2xl shadow-indigo-600/15 ring-4 ring-indigo-500/10 lg:-translate-y-3 z-10'
-                    : 'bg-white/90 border border-slate-200/90 hover:border-slate-300 shadow-sm hover:shadow-md'
-                }`}
-              >
-                {/* Single Recommended Ribbon Badge */}
-                {isRecommended && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-extrabold text-[11px] rounded-full uppercase tracking-wider shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
-                    <Star className="w-3 h-3 fill-current" />
-                    Most Popular Choice
-                  </div>
-                )}
-
-                <div>
-                  <div className="mb-4">
-                    <h3 className="text-xl font-bold text-slate-900">{plan.name}</h3>
-                    <p className="text-xs text-slate-500 mt-1.5 min-h-[36px] leading-relaxed">
-                      {plan.description || 'Comprehensive campus operations'}
-                    </p>
-                  </div>
-
-                  {/* Price Block */}
-                  <div className="mb-6 pb-6 border-b border-slate-100 [perspective:600px]">
-                    <div
-                      ref={(el) => (priceNumbersRef.current[index] = el)}
-                      className="flex items-baseline gap-1.5"
-                    >
-                      <span className="text-4xl font-extrabold text-slate-900 tracking-tight tabular-nums font-sans">
-                        {displayPrice}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-500">{billingPeriod}</span>
-                    </div>
-                    {!isFree && billingCycle === 'yearly' && (
-                      <p className="text-[11px] text-emerald-600 font-bold mt-1.5">
-                        Effective ₹{Math.round(yearlyPrice / 12)}/mo billed annually
-                      </p>
-                    )}
-                    {isFree && (
-                      <p className="text-[11px] text-slate-400 font-medium mt-1.5">
-                        No credit card required
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Resource Limits with Tabular Numbers (No Monospace) */}
-                  <div className="space-y-2.5 py-3 border-b border-slate-100 mb-6 text-xs">
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Max Student Capacity</span>
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatLimit(plan.limits?.maxStudents)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Faculty Seats</span>
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatLimit(plan.limits?.maxTeachers)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Admin Accounts</span>
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatLimit(plan.limits?.maxAdmins)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>Storage Quota</span>
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatStorage(plan.limits?.maxStorageMB)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Capabilities List */}
-                  <div className="space-y-3 mb-6">
-                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 font-mono">
-                      Modules Included
-                    </p>
-                    {(plan.features || []).slice(0, 5).map((feat, idx) => (
-                      <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700">
-                        <Check
-                          className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                            isRecommended ? 'text-indigo-600 font-bold' : 'text-emerald-600'
-                          }`}
-                        />
-                        <span className="leading-snug">{feat.name || feat}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Call to Action Button */}
-                <div className="pt-3">
-                  <button
-                    onClick={() =>
-                      navigate(
-                        `/register/tenant?plan=${(plan.code || plan.name || '').toLowerCase()}`
-                      )
-                    }
-                    className={`w-full py-3.5 px-4 rounded-xl text-xs font-bold transition-all text-center active:scale-[0.98] ${
-                      isRecommended
-                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80'
-                    }`}
-                  >
-                    {plan.code === 'enterprise'
-                      ? 'Contact Enterprise Desk'
-                      : isFree
-                      ? 'Start Free Plan'
-                      : 'Start 14-Day Free Trial'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 7. CREDIBILITY SECTION — METRIC COUNTERS
-// Metaphor: Numbers count up dynamically + custom accent colored progress bars fill on enter
-// ==========================================
-const CredibilitySection = () => {
-  const sectionRef = useRef(null);
-  const countersRef = useRef([]);
-  const gaugeLinesRef = useRef([]);
-
-  const proofPoints = [
-    {
-      targetNum: 6,
-      prefix: '',
-      suffix: '',
-      label: 'Unified Modules',
-      detail: 'Attendance, Exams, Fees, Timetable, Administration, and Guardian Portals in sync.',
-      gaugeGradient: 'from-indigo-600 to-indigo-400',
-    },
-    {
-      targetNum: 4,
-      prefix: '',
-      suffix: '',
-      label: 'Role-Specific Portals',
-      detail: 'Tailored consoles for Admins, Faculty, Students, and Parents with dedicated RBAC.',
-      gaugeGradient: 'from-emerald-500 to-teal-400',
-    },
-    {
-      targetNum: 30,
-      prefix: '< ',
-      suffix: 's',
-      label: 'Roster Completion',
-      detail: 'Biometric terminals and dynamic QR codes allow instant classroom capture.',
-      gaugeGradient: 'from-amber-500 to-orange-400',
-    },
-    {
-      targetNum: 100,
-      prefix: '',
-      suffix: '%',
-      label: 'Traceable Audit Logs',
-      detail: 'Every fee receipt, grade entry, and attendance edit is permanently logged.',
-      gaugeGradient: 'from-purple-600 to-indigo-500',
-    },
-    {
-      targetNum: 24,
-      prefix: '',
-      suffix: 'h',
-      label: 'Rapid Deployment',
-      detail: 'Isolated tenant database partitions and CSV ingestion pipelines active in 24–48h.',
-      gaugeGradient: 'from-blue-600 to-cyan-400',
-    },
-    {
-      targetNum: 99,
-      prefix: '',
-      suffix: '.9%',
-      label: 'Infrastructure SLA',
-      detail: 'Cloud resilience with daily rolling backups and TLS 1.3 encryption in transit.',
-      gaugeGradient: 'from-rose-500 to-pink-500',
-    },
-  ];
-
-  useEffect(() => {
-    if (!sectionRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      proofPoints.forEach((point, i) => {
-        const counterEl = countersRef.current[i];
-        const gaugeEl = gaugeLinesRef.current[i];
-        if (!counterEl) return;
-
-        const proxy = { val: 0 };
-        gsap.to(proxy, {
-          val: point.targetNum,
-          duration: 1.4,
-          ease: 'power2.out',
-          scrollTrigger: {
-            trigger: counterEl,
-            start: 'top 85%',
-            toggleActions: 'play reverse play reverse',
-          },
-          onUpdate: () => {
-            counterEl.innerText = `${point.prefix || ''}${Math.round(proxy.val)}${point.suffix || ''}`;
-          },
-        });
-
-        if (gaugeEl) {
-          gsap.fromTo(
-            gaugeEl,
-            { scaleX: 0 },
-            {
-              scaleX: 1,
-              duration: 1.0,
-              ease: 'power3.out',
-              scrollTrigger: {
-                trigger: counterEl,
-                start: 'top 85%',
-                toggleActions: 'play reverse play reverse',
-              },
-            }
-          );
-        }
-      });
-    }, sectionRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  return (
-    <section
-      id="credibility"
-      ref={sectionRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-white border-t border-slate-200"
-    >
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-16 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
-            <CheckCircle2 className="w-4 h-4" />
-            Verified Benchmarks
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-            Institutional proof points
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-            Measurable operational capabilities engineered for educational dignity, regulatory audit, and scale.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7">
-          {proofPoints.map((point, i) => (
-            <div
-              key={i}
-              className="bg-slate-50 rounded-2xl p-7 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-300 transition-all relative overflow-hidden group"
-            >
-              <div className="mb-3">
-                <span
-                  ref={(el) => (countersRef.current[i] = el)}
-                  className="text-4xl sm:text-5xl font-black text-slate-900 font-sans tabular-nums tracking-tight"
-                >
-                  {point.prefix || ''}{point.targetNum}{point.suffix || ''}
-                </span>
-                <p className="text-base font-bold text-slate-800 mt-2">{point.label}</p>
-              </div>
-
-              {/* Accent colored progress line that fills on scroll */}
-              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden my-4">
-                <div
-                  ref={(el) => (gaugeLinesRef.current[i] = el)}
-                  className={`h-full bg-gradient-to-r ${point.gaugeGradient} origin-left rounded-full`}
-                  style={{ transform: 'scaleX(0)' }}
-                />
-              </div>
-
-              <p className="text-xs text-slate-600 leading-relaxed font-normal">{point.detail}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 8. DEPLOYMENT & GOVERNANCE ACCORDION
-// Metaphor: Refined clean lines, spring physics, active left accent border
-// ==========================================
-const DeploymentSection = () => {
-  const [openIndex, setOpenIndex] = useState(0);
-  const sectionRef = useRef(null);
-
-  const items = [
-    {
-      question: 'How is student and institutional data isolated?',
-      answer:
-        'Every institution operates on a tenant-isolated database partition with dedicated cryptographic schemas. Cross-institution data leakage is prevented by design at the API routing and database persistence layer.',
-      icon: Lock,
-    },
-    {
-      question: 'What encryption protocols and backup protections are active?',
-      answer:
-        'All database records utilize 256-bit AES encryption at rest, paired with TLS 1.3 in transit. Automated point-in-time daily backups are stored in geo-redundant vaults with periodic restoration tests.',
-      icon: Shield,
-    },
-    {
-      question: 'How does campus onboarding and legacy migration work?',
-      answer:
-        'New campus environments are deployed in 24–48 hours. Our automated CSV pipelines validate and ingest historical student records, course matrices, faculty rosters, and fee structures with duplicate resolution.',
-      icon: Upload,
-    },
-    {
-      question: 'What role-based access controls and audits are supported?',
-      answer:
-        'Granular permissions for Super Admin, Campus Admin, Department Heads, Faculty, Students, and Guardians. Every record mutation is immutably timestamped in audit logs for accreditation compliance.',
-      icon: Users,
-    },
-    {
-      question: 'What SLA guarantees and onboarding support are included?',
-      answer:
-        'Standard environments include 24-hour email turnarounds. Professional and Enterprise agreements feature a 4-hour priority response window, dedicated migration engineers, and personalized faculty training webinars.',
-      icon: Headphones,
-    },
-  ];
-
-  return (
-    <section
-      ref={sectionRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-[#faf8ff] border-t border-slate-200"
-    >
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-14 text-center">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
-            <Shield className="w-4 h-4" />
-            Governance & Compliance
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-            Deployment, security, and operational confidence
-          </h2>
-          <p className="mt-3 text-base text-slate-600 leading-relaxed font-normal">
-            Clear technical answers to the infrastructure questions institutional leadership asks before migrating.
-          </p>
-        </div>
-
-        {/* Refined Accordion with Left Accent Border */}
-        <div className="space-y-3.5">
-          {items.map((item, index) => {
-            const isOpen = openIndex === index;
-            const Icon = item.icon;
-            return (
-              <div
-                key={index}
-                className={`bg-white rounded-xl border transition-all duration-200 overflow-hidden ${
-                  isOpen
-                    ? 'border-l-4 border-l-indigo-600 border-slate-300 shadow-md ring-1 ring-indigo-500/10'
-                    : 'border-slate-200 hover:border-slate-300 shadow-sm'
-                }`}
-              >
-                <button
-                  className="w-full px-6 py-4 text-left font-bold text-slate-900 hover:bg-slate-50 flex items-center gap-4 transition-colors text-sm"
-                  onClick={() => setOpenIndex(isOpen ? null : index)}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                      isOpen ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <span className="flex-1">{item.question}</span>
-                  <ChevronRight
-                    className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${
-                      isOpen ? 'rotate-90 text-indigo-600' : ''
-                    }`}
-                  />
-                </button>
-                <AnimatePresence>
-                  {isOpen && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeOut' }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-6 pb-5 pt-0 text-slate-600 text-sm leading-relaxed border-t border-slate-100 ml-12">
-                        <div className="pt-3">{item.answer}</div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 9. FINAL CALL TO ACTION — GRADIENT DRAMA & NOISE
-// Metaphor: Cinematic entrance, glowing CTA button, rich atmospheric contrast
-// ==========================================
-const FinalActionSection = ({ navigate, openRoleModal }) => {
-  const sectionRef = useRef(null);
-  const contentRef = useRef(null);
-
-  useEffect(() => {
-    if (!sectionRef.current) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
-
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        contentRef.current,
-        { opacity: 0.3, y: 35 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.7,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            start: 'top 80%',
-            toggleActions: 'play reverse play reverse',
-          },
-        }
-      );
-    }, sectionRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  return (
-    <section
-      ref={sectionRef}
-      className="py-28 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#0c0f1d] via-[#1e1b4b] to-[#0a0d18] text-white relative overflow-hidden landing-noise border-t border-indigo-950"
-    >
-      {/* Ambient Breathing Radial Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-gradient-to-tr from-indigo-500/20 to-purple-600/20 rounded-full blur-3xl pointer-events-none -z-10" />
-
-      <div ref={contentRef} className="max-w-3xl mx-auto text-center relative z-10">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 text-indigo-200 text-xs font-bold mb-8 border border-white/15 backdrop-blur-md">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
-          Rapid 24–48 Hour Campus Provisioning
-        </div>
-
-        <h2 className="text-3xl sm:text-5xl font-black text-white mb-5 tracking-tight leading-tight">
-          Ready to streamline your institution's operations?
-        </h2>
-
-        <p className="text-base sm:text-lg text-indigo-200/90 mb-10 max-w-2xl mx-auto leading-relaxed font-normal">
-          Launch a 14-day institutional trial with full administrative modules. Isolated database partition. Zero payment card required.
-        </p>
-
-        <div className="flex flex-wrap gap-4 justify-center">
-          <button
-            onClick={() => navigate('/register/tenant')}
-            className="px-9 py-4 bg-white text-indigo-950 rounded-xl hover:bg-indigo-50 transition-all font-bold text-base flex items-center gap-2.5 shadow-2xl shadow-white/20 active:scale-[0.98] hover:-translate-y-0.5 landing-glow-pulse"
-          >
-            Start Free Trial
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={openRoleModal}
-            className="px-8 py-4 border border-indigo-300/40 text-white hover:bg-white/10 rounded-xl transition-all font-semibold text-base active:scale-[0.98]"
-          >
-            Explore Live Demo Role
-          </button>
-        </div>
-
-        <p className="mt-10 text-xs text-indigo-300/70">
-          Need custom multi-campus governance or bespoke SIS integration?{' '}
-          <span
-            onClick={() => navigate('/register/tenant?plan=enterprise')}
-            className="text-white underline cursor-pointer hover:text-indigo-200 font-semibold"
-          >
-            Talk to our technical engineering team
-          </span>
-        </p>
-      </div>
-    </section>
-  );
-};
-
-// ==========================================
-// 10. FOOTER
-// ==========================================
-const Footer = ({ scrollToSection, navigate }) => {
-  return (
-    <footer className="bg-[#080d1a] text-slate-400 py-16 px-4 sm:px-6 lg:px-8 border-t border-slate-800/80">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-12 gap-8 lg:gap-12">
-          {/* Brand Col */}
-          <div className="col-span-2 md:col-span-4">
-            <div
-              className="flex items-center gap-2.5 mb-4 cursor-pointer"
-              onClick={() => scrollToSection('hero')}
-            >
-              <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-                <GraduationCap className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-xl font-extrabold text-white tracking-tight">AttendEase</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-xs">
-              Institutional precision ERP for universities, colleges, and academic networks. Multi-tenant, automated attendance, and audit-compliant governance.
-            </p>
+            <span className="hidden sm:inline-block h-4 w-px bg-line"></span>
+            <span className="hidden sm:inline-block text-xs uppercase tracking-wider text-ink-muted font-mono font-medium">
+              Academic ERP
+            </span>
           </div>
 
-          {/* Platform Navigation */}
-          <div className="col-span-1 md:col-span-2">
-            <h4 className="font-bold text-slate-200 text-xs uppercase tracking-wider mb-4 font-mono">
-              Platform
-            </h4>
-            <ul className="space-y-2.5 text-xs">
-              <li>
-                <button onClick={() => scrollToSection('platform')} className="hover:text-white transition">
-                  Attendance Engine
-                </button>
-              </li>
-              <li>
-                <button onClick={() => scrollToSection('platform')} className="hover:text-white transition">
-                  Exams & Grading
-                </button>
-              </li>
-              <li>
-                <button onClick={() => scrollToSection('platform')} className="hover:text-white transition">
-                  Fee Ledgers
-                </button>
-              </li>
-              <li>
-                <button onClick={() => scrollToSection('demo')} className="hover:text-white transition">
-                  Role Sandboxes
-                </button>
-              </li>
-              <li>
-                <button onClick={() => scrollToSection('pricing')} className="hover:text-white transition">
-                  Institutional Plans
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Resources */}
-          <div className="col-span-1 md:col-span-2">
-            <h4 className="font-bold text-slate-200 text-xs uppercase tracking-wider mb-4 font-mono">
-              Resources
-            </h4>
-            <ul className="space-y-2.5 text-xs">
-              <li>
-                <button onClick={() => scrollToSection('how-it-works')} className="hover:text-white transition">
-                  How It Works
-                </button>
-              </li>
-              <li>
-                <button onClick={() => scrollToSection('credibility')} className="hover:text-white transition">
-                  Proof Points
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigate('/login')} className="hover:text-white transition">
-                  Sign In
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigate('/register/tenant')} className="hover:text-white transition">
-                  Register Campus
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Back to top */}
-          <div className="col-span-2 md:col-span-4 flex flex-col justify-end">
+          {/* Desktop Nav Links */}
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
             <button
-              onClick={() => scrollToSection('hero')}
-              className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-indigo-400 transition-colors self-start md:self-end"
+              onClick={() => scrollTo('features')}
+              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
             >
-              <ArrowUp className="w-3.5 h-3.5" />
-              Back to top
+              Modules
+            </button>
+            <button
+              onClick={() => scrollTo('how-it-works')}
+              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+            >
+              How it works
+            </button>
+            <button
+              onClick={() => scrollTo('portals')}
+              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+            >
+              Portals
+            </button>
+            <button
+              onClick={() => scrollTo('pricing')}
+              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+            >
+              Plans
+            </button>
+            <button
+              onClick={() => scrollTo('contact')}
+              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+            >
+              Inquiry
+            </button>
+          </nav>
+
+          {/* Desktop Action Buttons */}
+          <div className="hidden md:flex items-center gap-3 text-xs font-medium">
+            <button
+              onClick={() => navigate('/login')}
+              className="text-ink-muted hover:text-ink transition-colors px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              Sign in
+            </button>
+            <button
+              onClick={openRoleModal}
+              className="h-9 inline-flex items-center justify-center px-3.5 bg-surface hover:bg-surface-subtle text-ink rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              Explore Demo Sandbox
+            </button>
+            <button
+              onClick={() => navigate('/register/tenant')}
+              className="h-9 inline-flex items-center justify-center px-4 bg-primary hover:bg-primary-hover text-on-primary rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              Start Free Trial
+            </button>
+          </div>
+
+          {/* Mobile Hamburger Button */}
+          <div className="flex items-center md:hidden">
+            <button
+              aria-label="Toggle navigation"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-ink-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary rounded"
+              type="button"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
 
-        <div className="border-t border-slate-800 mt-12 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>&copy; {new Date().getFullYear()} AttendEase Platforms. All rights reserved.</p>
-          <div className="flex gap-6">
-            <span className="hover:text-slate-300 cursor-pointer">Privacy Framework</span>
-            <span className="hover:text-slate-300 cursor-pointer">Terms of Service</span>
-            <span className="hover:text-slate-300 cursor-pointer">Security Whitepaper</span>
+        {/* Mobile Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-b border-line bg-surface px-4 pt-3 pb-6 space-y-3">
+            <nav className="flex flex-col space-y-2 text-sm font-medium">
+              <button
+                onClick={() => scrollTo('features')}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                Modules
+              </button>
+              <button
+                onClick={() => scrollTo('how-it-works')}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                How it works
+              </button>
+              <button
+                onClick={() => scrollTo('portals')}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                Portals &amp; Branding
+              </button>
+              <button
+                onClick={() => scrollTo('pricing')}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                Plans
+              </button>
+              <button
+                onClick={() => scrollTo('contact')}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                Campus Consultation
+              </button>
+              <button
+                onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
+                className="py-2 text-left text-ink-muted hover:text-ink"
+              >
+                Sign in
+              </button>
+            </nav>
+            <div className="flex flex-col gap-2 pt-3 border-t border-line">
+              <button
+                onClick={() => { setMobileMenuOpen(false); openRoleModal(); }}
+                className="h-9 inline-flex items-center justify-center px-4 bg-surface hover:bg-surface-subtle text-ink rounded border border-line text-xs font-medium"
+              >
+                Explore Demo Sandbox
+              </button>
+              <button
+                onClick={() => { setMobileMenuOpen(false); navigate('/register/tenant'); }}
+                className="h-9 inline-flex items-center justify-center px-4 bg-primary hover:bg-primary-hover text-on-primary rounded border border-primary text-xs font-medium"
+              >
+                Start Free Trial
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Main Content Area */}
+      <main className="w-full pt-16" id="main-content">
+        {/* 1. HERO SECTION */}
+        <section className="w-full border-b border-line bg-background">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
+            >
+              {/* Left Column: Heading, Specs & CTAs */}
+              <div className="lg:col-span-5 flex flex-col justify-center">
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface border border-line text-xs text-ink-muted w-fit mb-4">
+                  <span className="w-2 h-2 rounded-full bg-status-success-text animate-pulse"></span>
+                  <span className="font-mono uppercase tracking-wider text-[11px] font-medium text-ink">Academic Release 2026 &bull; Active</span>
+                </div>
+
+                <h1 className="font-headline text-3xl sm:text-4xl lg:text-5xl font-bold text-ink tracking-tight mb-4 leading-tight">
+                  Multi-tenant academic ERP for colleges and schools.
+                </h1>
+                <p className="text-base text-ink-muted mb-6 leading-relaxed">
+                  AttendEase manages attendance, timetables, exams, fees, and custom staff roles across independent institution portals with strict tenant data isolation.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => navigate('/register/tenant')}
+                    className="h-10 inline-flex items-center justify-center px-5 bg-primary hover:bg-primary-hover text-on-primary text-xs font-medium rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  >
+                    Start Free Trial
+                  </button>
+                  <button
+                    onClick={openRoleModal}
+                    className="h-10 inline-flex items-center justify-center px-5 bg-surface hover:bg-surface-subtle text-ink text-xs font-medium rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+                  >
+                    Explore Sandbox
+                  </button>
+                  <button
+                    onClick={() => scrollTo('contact')}
+                    className="h-10 inline-flex items-center justify-center px-4 text-ink-muted hover:text-ink text-xs font-medium transition-colors"
+                  >
+                    Consultation &rarr;
+                  </button>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-line grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="block font-mono text-[11px] uppercase tracking-wider text-ink-muted mb-0.5">DATA RESIDENCY</span>
+                    <span className="text-xs font-medium text-ink">Client-side offline vector auth</span>
+                  </div>
+                  <div>
+                    <span className="block font-mono text-[11px] uppercase tracking-wider text-ink-muted mb-0.5">TENANCY MODEL</span>
+                    <span className="text-xs font-medium text-ink">tenant-scoped data isolation</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Registrar Console UI Ledger Mockup */}
+              <div className="lg:col-span-7 bg-surface border border-line rounded-panel shadow-level1 overflow-hidden">
+                <div className="h-10 bg-surface-subtle border-b border-line px-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-line"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-line"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-line"></span>
+                    <span className="ml-2 font-mono text-xs text-ink-muted">REGISTRAR CONSOLE : SESSION 2026-27</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="hidden sm:inline font-mono text-xs text-ink-muted">INSTANCE: demo.attendease.app</span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-soft border border-primary/20 text-primary font-mono text-[10px] font-bold">
+                      DEMO SANDBOX
+                    </span>
+                  </div>
+                </div>
+
+                {/* Content Grid */}
+                <div className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {/* Pane A: Attendance Registry Table */}
+                  <div className="md:col-span-7 border border-line rounded overflow-hidden flex flex-col justify-between">
+                    <div>
+                      <div className="p-2.5 bg-surface-subtle border-b border-line flex items-center justify-between">
+                        <span className="text-xs font-semibold text-ink uppercase tracking-wide">Attendance Registry</span>
+                        <span className="font-mono text-[11px] text-ink-muted">MON 09:00 - 10:00</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-surface-subtle border-b border-line font-mono text-[11px] text-ink-muted">
+                              <th className="py-1.5 px-2.5">Roll no.</th>
+                              <th className="py-1.5 px-2.5">Student name</th>
+                              <th className="py-1.5 px-2.5">Slot</th>
+                              <th className="py-1.5 px-2.5 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-line text-xs font-mono">
+                            <tr className={`transition-colors ${activeRosterRow === 0 ? 'bg-primary/5 font-semibold' : 'hover:bg-surface-subtle'}`}>
+                              <td className="py-2 px-2.5 tnum">CS-101</td>
+                              <td className="py-2 px-2.5 font-body">Aarav Sharma</td>
+                              <td className="py-2 px-2.5 text-ink-muted tnum">09:00 - 10:00</td>
+                              <td className="py-2 px-2.5 text-right font-body">
+                                {isVerifyingScan ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-status-info-bg text-status-info-text border border-status-info-border text-[10px]">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>Scanning</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-status-success-bg text-status-success-text border border-status-success-border text-[11px]">Present</span>
+                                )}
+                              </td>
+                            </tr>
+                            <tr className={`transition-colors ${activeRosterRow === 1 ? 'bg-primary/5 font-semibold' : 'hover:bg-surface-subtle'}`}>
+                              <td className="py-2 px-2.5 tnum">CS-102</td>
+                              <td className="py-2 px-2.5 font-body">Priya Nair</td>
+                              <td className="py-2 px-2.5 text-ink-muted tnum">09:00 - 10:00</td>
+                              <td className="py-2 px-2.5 text-right font-body">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-status-error-bg text-status-error-text border border-status-error-border text-[11px]">Absent</span>
+                              </td>
+                            </tr>
+                            <tr className={`transition-colors ${activeRosterRow === 2 ? 'bg-primary/5 font-semibold' : 'hover:bg-surface-subtle'}`}>
+                              <td className="py-2 px-2.5 tnum">CS-103</td>
+                              <td className="py-2 px-2.5 font-body">Rohan Desai</td>
+                              <td className="py-2 px-2.5 text-ink-muted tnum">09:00 - 10:00</td>
+                              <td className="py-2 px-2.5 text-right font-body">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-status-warning-bg text-status-warning-text border border-status-warning-border text-[11px]">Leave</span>
+                              </td>
+                            </tr>
+                            <tr className={`transition-colors ${activeRosterRow === 3 ? 'bg-primary/5 font-semibold' : 'hover:bg-surface-subtle'}`}>
+                              <td className="py-2 px-2.5 tnum">CS-104</td>
+                              <td className="py-2 px-2.5 font-body">Sneha Gupta</td>
+                              <td className="py-2 px-2.5 text-ink-muted tnum">09:00 - 10:00</td>
+                              <td className="py-2 px-2.5 text-right font-body">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-status-success-bg text-status-success-text border border-status-success-border text-[11px]">Present</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Interactive Scan Action Bar */}
+                    <div className="p-2 border-t border-line bg-surface-subtle flex items-center justify-between">
+                      <span className="font-mono text-[10px] text-ink-muted">
+                        Verified: <strong className="text-ink">{verifiedCount}</strong> / 150
+                      </span>
+                      <button
+                        onClick={triggerScanSimulation}
+                        disabled={isVerifyingScan}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary text-white text-[11px] font-medium hover:bg-[#115E59] transition-colors cursor-pointer"
+                        title="Simulate browser vector recognition"
+                      >
+                        <Scan className="w-3 h-3" />
+                        <span>Simulate Scan</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pane B: Timetable Conflict Matrix Snippet */}
+                  <div className="md:col-span-5 flex flex-col gap-3">
+                    <div className="border border-line rounded p-3 bg-surface">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-ink uppercase tracking-wide">Conflict Verification</span>
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 bg-status-success-bg text-status-success-text border border-status-success-border rounded">
+                          {conflictStatus}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 pt-1 text-xs">
+                        <div className="flex justify-between border-b border-line pb-1">
+                          <span className="text-ink-muted">Section:</span>
+                          <span className="font-mono font-medium tnum">B.Tech CS-3A</span>
+                        </div>
+                        <div className="flex justify-between border-b border-line pb-1">
+                          <span className="text-ink-muted">Classroom:</span>
+                          <span className="font-mono font-medium tnum">LH-102 (Cap: 60)</span>
+                        </div>
+                        <div className="flex justify-between border-b border-line pb-1">
+                          <span className="text-ink-muted">Faculty Allocation:</span>
+                          <span className="font-medium text-right">Dr. V. Rao</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-muted">Slot Matrix:</span>
+                          <span className="font-mono text-ink-muted tnum">MON 09:00 - 10:00</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border border-line rounded p-3 bg-surface-subtle flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-ink-muted font-mono font-semibold block mb-1">Validation Engine</span>
+                        <p className="text-xs text-ink leading-relaxed mb-3">
+                          Timetable conflict detection active across teacher availability, room reservations, and cohorts.
+                        </p>
+                      </div>
+                      <button
+                        onClick={triggerConflictSimulation}
+                        disabled={isCheckingConflict}
+                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded bg-surface hover:bg-surface-subtle text-ink border border-line text-[11px] font-medium transition cursor-pointer w-full"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isCheckingConflict ? 'animate-spin' : ''}`} />
+                        <span>Run Clash Audit</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ENTERPRISE ARCHITECTURAL SPECIFICATIONS */}
+        <section className="w-full border-b border-line bg-surface-subtle py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
+              {/* Pillar 1 */}
+              <div className="border-l-2 border-primary pl-4 flex flex-col justify-between">
+                <div>
+                  <div className="font-mono text-xs font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5" />
+                    <span>Local Vector Auth</span>
+                  </div>
+                  <div className="text-sm font-semibold text-ink leading-snug">WASM Edge Verification</div>
+                  <div className="text-xs text-ink-muted mt-1 leading-relaxed">
+                    Zero raw biometric photos stored. 128-d feature embeddings evaluated client-side in browser memory.
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] font-mono text-ink-muted">Privacy Invariant: 100% Client-Side</div>
+              </div>
+
+              {/* Pillar 2 */}
+              <div className="border-l-2 border-secondary pl-4 flex flex-col justify-between">
+                <div>
+                  <div className="font-mono text-xs font-bold text-secondary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5" />
+                    <span>Multi-Tenancy</span>
+                  </div>
+                  <div className="text-sm font-semibold text-ink leading-snug">Tenant Data Isolation</div>
+                  <div className="text-xs text-ink-muted mt-1 leading-relaxed">
+                    Tenant-scoped schema boundaries with automated subdomain dispatch and partitioned ledger indexing.
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] font-mono text-ink-muted">Residency: Multi-Tenant Logical Separation</div>
+              </div>
+
+              {/* Pillar 3 */}
+              <div className="border-l-2 border-primary pl-4 flex flex-col justify-between">
+                <div>
+                  <div className="font-mono text-xs font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Deterministic Engine</span>
+                  </div>
+                  <div className="text-sm font-semibold text-ink leading-snug">0-Clash Invariant Check</div>
+                  <div className="text-xs text-ink-muted mt-1 leading-relaxed">
+                    Strict mathematical validation guarantees zero room, instructor, or student cohort timetable clashes.
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] font-mono text-ink-muted">Overlap Prevention: Automated</div>
+              </div>
+
+              {/* Pillar 4 */}
+              <div className="border-l-2 border-secondary pl-4 flex flex-col justify-between">
+                <div>
+                  <div className="font-mono text-xs font-bold text-secondary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Access & Audit</span>
+                  </div>
+                  <div className="text-sm font-semibold text-ink leading-snug">Granular RBAC Security</div>
+                  <div className="text-xs text-ink-muted mt-1 leading-relaxed">
+                    Least-privilege module authorizations with tamper-evident audit logging across academic operations.
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] font-mono text-ink-muted">Audit Trail: Append-Only Immutable</div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 2. CORE ACADEMIC MODULES */}
+        <section className="w-full border-b border-line bg-surface py-14" id="features">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="mb-10 max-w-3xl">
+              <h2 className="font-headline text-2xl font-bold text-ink tracking-tight mb-2">Core academic modules</h2>
+              <p className="text-sm text-ink-muted">
+                Engineered for deterministic institutional administration across integrated domains.
+              </p>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              {/* Module 1: Attendance */}
+              <div className="bg-background border border-line rounded-panel p-6 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-8 h-8 rounded border border-line bg-surface flex items-center justify-center text-primary mb-4">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink mb-2">Attendance</h3>
+                  <p className="text-xs text-ink-muted mb-6 leading-relaxed">
+                    Attendance marked against a scheduled timetable slot. Face-based attendance works offline in the browser, with face data stored only as numeric vectors, never as photos.
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Specifications</span>
+                  <ul className="space-y-1.5 text-xs text-ink">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Attendance marked against a scheduled timetable slot
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Face-based attendance works offline in browser
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Face data stored only as numeric vectors, never photos
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Module 2: Timetable Conflict Detection */}
+              <div className="bg-background border border-line rounded-panel p-6 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-8 h-8 rounded border border-line bg-surface flex items-center justify-center text-primary mb-4">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink mb-2">Timetable conflict detection</h3>
+                  <p className="text-xs text-ink-muted mb-6 leading-relaxed">
+                    Timetable conflict detection prevents room double-booking, faculty overlaps, and section clashes across scheduled lecture slots.
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Specifications</span>
+                  <ul className="space-y-1.5 text-xs text-ink">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Detection for teacher, room, and section clashes
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Timetable-linked attendance session mapping
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Automatic slot matrix synchronization
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Module 3: Exams */}
+              <div className="bg-background border border-line rounded-panel p-6 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-8 h-8 rounded border border-line bg-surface flex items-center justify-center text-primary mb-4">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink mb-2">Exams</h3>
+                  <p className="text-xs text-ink-muted mb-6 leading-relaxed">
+                    Exam scheduling on a date and shift grid, with invigilator assignment (maximum 2 per exam) and clash checks.
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Specifications</span>
+                  <ul className="space-y-1.5 text-xs text-ink">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Exam scheduling on a date and shift grid
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Invigilator assignment (maximum 2 per exam)
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Clash checks across examination halls
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Module 4: Fees */}
+              <div className="bg-background border border-line rounded-panel p-6 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-8 h-8 rounded border border-line bg-surface flex items-center justify-center text-primary mb-4">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink mb-2">Fees</h3>
+                  <p className="text-xs text-ink-muted mb-6 leading-relaxed">
+                    Fee structures configured by course, fee collection tracking, waivers, and formal receipts configured across student records.
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Specifications</span>
+                  <ul className="space-y-1.5 text-xs text-ink">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Fee structures configured by course
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Fee collection tracking and receipts
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Institutional fee waivers and audit logs
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Module 5: Roles and Permissions (Spans 2 cols on lg) */}
+              <div className="md:col-span-2 lg:col-span-2 bg-background border border-line rounded-panel p-6 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="w-8 h-8 rounded border border-line bg-surface flex items-center justify-center text-primary mb-4">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink mb-2">Roles and permissions</h3>
+                  <p className="text-xs text-ink-muted mb-6 leading-relaxed">
+                    Custom roles with granular permissions per module. Provide role-specific views for admin, teacher, student, and parent.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Access Control</span>
+                    <ul className="space-y-1.5 text-xs text-ink">
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                        Granular permissions per module
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                        tenant-scoped data isolation
+                      </li>
+                    </ul>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-ink-muted font-semibold block mb-2">Lifecycle &amp; Views</span>
+                    <ul className="space-y-1.5 text-xs text-ink">
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                        Role-specific views for admin, teacher, student, parent
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                        Automatic semester promotion and graduation
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 3. STRUCTURED DEPLOYMENT WORKFLOW */}
+        <section className="w-full border-b border-line bg-background py-14" id="how-it-works">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="mb-10">
+              <h2 className="font-headline text-2xl font-bold text-ink tracking-tight">Structured deployment workflow</h2>
+              <p className="text-sm text-ink-muted mt-1">Deterministic three-step onboarding process for campus administrators.</p>
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            >
+              {/* Step 1 */}
+              <div className="border border-line bg-surface rounded-panel p-6 shadow-xs">
+                <div className="font-mono text-xs font-semibold text-primary mb-3">STEP 01</div>
+                <h3 className="text-base font-semibold text-ink mb-2">Set up academic structure</h3>
+                <p className="text-xs text-ink-muted leading-relaxed mb-4">
+                  Configure departments, degree courses, semesters, classroom inventories, and fee structures by course.
+                </p>
+                <div className="p-2.5 bg-surface-subtle border border-line rounded font-mono text-[11px] text-ink-muted">
+                  Entity Schema: Dept / Degree / Rooms / Ledger
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="border border-line bg-surface rounded-panel p-6 shadow-xs">
+                <div className="font-mono text-xs font-semibold text-primary mb-3">STEP 02</div>
+                <h3 className="text-base font-semibold text-ink mb-2">Assign teachers and sections</h3>
+                <p className="text-xs text-ink-muted leading-relaxed mb-4">
+                  Allocate instructors, define student cohorts, and map scheduled lecture slots with clash detection.
+                </p>
+                <div className="p-2.5 bg-surface-subtle border border-line rounded font-mono text-[11px] text-ink-muted">
+                  Validation: Teacher, Room, and Section Clashes
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="border border-line bg-surface rounded-panel p-6 shadow-xs">
+                <div className="font-mono text-xs font-semibold text-primary mb-3">STEP 03</div>
+                <h3 className="text-base font-semibold text-ink mb-2">Start marking attendance</h3>
+                <p className="text-xs text-ink-muted leading-relaxed mb-4">
+                  Mark attendance against scheduled timetable slots using browser offline face vectors or manual rosters.
+                </p>
+                <div className="p-2.5 bg-surface-subtle border border-line rounded font-mono text-[11px] text-ink-muted">
+                  Verification: Browser Vector Auth / Roster
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 4. INSTITUTION BRANDING AND PORTALS */}
+        <section className="w-full border-b border-line bg-surface py-14" id="portals">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="max-w-3xl mb-10">
+              <h2 className="font-headline text-2xl font-bold text-ink tracking-tight mb-2">Institution branding and portals</h2>
+              <p className="text-sm text-ink-muted">
+                Per-institution branding and subdomain login with tenant-scoped data isolation across portals.
+              </p>
+            </div>
+
+            {/* Interactive Campus Accent Switcher */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            >
+              {/* Instance A: Deep Teal */}
+              <div
+                onClick={() => setActiveAccentTab('a')}
+                className={`border rounded-panel p-4 cursor-pointer transition-all ${
+                  activeAccentTab === 'a' ? 'border-primary ring-2 ring-primary/20 bg-background' : 'border-line bg-background hover:border-line-hover'
+                }`}
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
+                  <span className="font-mono text-xs text-ink-muted">oxford.attendease.app</span>
+                  <span className="w-3 h-3 rounded bg-primary"></span>
+                </div>
+                <div className="bg-surface border border-line rounded p-4 shadow-xs">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono text-ink-muted font-medium block">Example Campus A</span>
+                      <span className="text-xs font-semibold text-ink">Student Attendance Summary</span>
+                    </div>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-primary text-white font-medium tnum">Active</span>
+                  </div>
+                  <div className="space-y-2 border-t border-line pt-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Enrolled Courses:</span>
+                      <span className="font-mono font-medium tnum">6 Departments</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Verified Sessions:</span>
+                      <span className="font-mono font-medium tnum">142 Slots</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Accent Configuration:</span>
+                      <span className="font-mono text-primary font-medium">Default Primary</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-line">
+                    <div className="h-1.5 w-full bg-line rounded overflow-hidden">
+                      <div className="h-full bg-primary w-4/5"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instance B: Forest Green */}
+              <div
+                onClick={() => setActiveAccentTab('b')}
+                className={`border rounded-panel p-4 cursor-pointer transition-all ${
+                  activeAccentTab === 'b' ? 'border-[#166534] ring-2 ring-[#166534]/20 bg-background' : 'border-line bg-background hover:border-line-hover'
+                }`}
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
+                  <span className="font-mono text-xs text-ink-muted">stjude.attendease.app</span>
+                  <span className="w-3 h-3 rounded bg-[#166534]"></span>
+                </div>
+                <div className="bg-surface border border-line rounded p-4 shadow-xs">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono text-ink-muted font-medium block">Example Campus B</span>
+                      <span className="text-xs font-semibold text-ink">Student Attendance Summary</span>
+                    </div>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-[#166534] text-white font-medium tnum">Active</span>
+                  </div>
+                  <div className="space-y-2 border-t border-line pt-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Enrolled Courses:</span>
+                      <span className="font-mono font-medium tnum">8 Departments</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Verified Sessions:</span>
+                      <span className="font-mono font-medium tnum">188 Slots</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Accent Configuration:</span>
+                      <span className="font-mono text-[#166534] font-medium">Custom Emerald</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-line">
+                    <div className="h-1.5 w-full bg-line rounded overflow-hidden">
+                      <div className="h-full bg-[#166534] w-[92%]"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instance C: Crimson Maroon */}
+              <div
+                onClick={() => setActiveAccentTab('c')}
+                className={`border rounded-panel p-4 cursor-pointer transition-all ${
+                  activeAccentTab === 'c' ? 'border-[#881337] ring-2 ring-[#881337]/20 bg-background' : 'border-line bg-background hover:border-line-hover'
+                }`}
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
+                  <span className="font-mono text-xs text-ink-muted">horizon.attendease.app</span>
+                  <span className="w-3 h-3 rounded bg-[#881337]"></span>
+                </div>
+                <div className="bg-surface border border-line rounded p-4 shadow-xs">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono text-ink-muted font-medium block">Example Campus C</span>
+                      <span className="text-xs font-semibold text-ink">Student Attendance Summary</span>
+                    </div>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-[#881337] text-white font-medium tnum">Active</span>
+                  </div>
+                  <div className="space-y-2 border-t border-line pt-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Enrolled Courses:</span>
+                      <span className="font-mono font-medium tnum">12 Departments</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Verified Sessions:</span>
+                      <span className="font-mono font-medium tnum">254 Slots</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Accent Configuration:</span>
+                      <span className="font-mono text-[#881337] font-medium">Custom Maroon</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-line">
+                    <div className="h-1.5 w-full bg-line rounded overflow-hidden">
+                      <div className="h-full bg-[#881337] w-[85%]"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 5. PRIVACY AND SECURITY ARCHITECTURE */}
+        <section className="w-full border-b border-line bg-background py-14">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="max-w-3xl mb-10">
+              <h2 className="font-headline text-2xl font-bold text-ink tracking-tight mb-2">Privacy and security architecture</h2>
+              <p className="text-sm text-ink-muted">
+                Technical specifications ensuring compliance, vector authentication privacy, and multi-tenant isolation.
+              </p>
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            >
+              <div className="bg-surface border border-line rounded-panel p-6 shadow-xs">
+                <div className="w-8 h-8 rounded border border-line bg-surface-subtle flex items-center justify-center text-primary mb-4">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-semibold text-ink mb-2">Browser-based offline face attendance</h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  Biometric verification happens locally in browser memory. Face data is converted and stored solely as numeric feature vectors, never as raw photographs.
+                </p>
+              </div>
+
+              <div className="bg-surface border border-line rounded-panel p-6 shadow-xs">
+                <div className="w-8 h-8 rounded border border-line bg-surface-subtle flex items-center justify-center text-primary mb-4">
+                  <Building className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-semibold text-ink mb-2">Multi-tenant data isolation</h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  Multi-tenant data isolation between institutions with tenant-scoped data isolation and subdomain authentication.
+                </p>
+              </div>
+
+              <div className="bg-surface border border-line rounded-panel p-6 shadow-xs">
+                <div className="w-8 h-8 rounded border border-line bg-surface-subtle flex items-center justify-center text-primary mb-4">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-semibold text-ink mb-2">Granular administrative control</h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  Custom roles with granular permissions per module ensure controlled data access across admin, teacher, student, and parent views.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 6. PLAN MATRIX AND FEATURE SPECIFICATIONS */}
+        <section className="w-full border-b border-line bg-surface py-14" id="pricing">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="text-center max-w-3xl mx-auto mb-10"
+            >
+              <div className="font-mono text-xs uppercase tracking-wider text-primary font-semibold mb-2">
+                Predictable Institutional Tiers
+              </div>
+              <h2 className="font-headline text-3xl font-bold text-ink tracking-tight mb-3">
+                Deterministic module enablement across campus tiers
+              </h2>
+              <p className="text-sm text-ink-muted mb-6">
+                Transparent scale limits and modular capability licensing. Choose a plan tailored to your institution.
+              </p>
+
+              {/* Monthly vs Annual Toggle */}
+              <div className="inline-flex items-center gap-1 p-1 bg-surface-subtle border border-line rounded-lg shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('monthly')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all cursor-pointer ${
+                    billingCycle === 'monthly'
+                      ? 'bg-surface text-ink shadow-xs border border-line font-semibold'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Monthly billing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('annual')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-all cursor-pointer ${
+                    billingCycle === 'annual'
+                      ? 'bg-surface text-ink shadow-xs border border-line font-semibold'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  <span>Annual billing</span>
+                  <span className="px-1.5 py-0.2 bg-primary-soft text-primary font-mono text-[10px] font-bold rounded">
+                    Save 20%
+                  </span>
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Pricing Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+              {plans.map((p, idx) => {
+                const isPopular = p.popular || p.code === 'professional';
+                const currentPrice = p.price ? p.price[billingCycle] : 0;
+
+                return (
+                  <motion.div
+                    key={p.code || idx}
+                    initial={{ opacity: 0, y: 24 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-40px" }}
+                    transition={{ duration: 0.4, delay: idx * 0.1 }}
+                    className={`bg-background rounded-panel p-6 flex flex-col justify-between border transition-all ${
+                      isPopular
+                        ? 'border-primary ring-2 ring-primary/20 shadow-md relative'
+                        : 'border-line shadow-xs hover:border-line-strong'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Badge */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-ink-muted font-medium">
+                          {p.badge || (p.code === 'enterprise' ? 'Enterprise' : 'Plan')}
+                        </span>
+                        {isPopular && (
+                          <span className="px-2 py-0.5 rounded-full bg-primary text-white font-mono text-[10px] font-bold">
+                            RECOMMENDED
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="font-headline text-lg font-bold text-ink mb-1">{p.name}</h3>
+                      <p className="text-xs text-ink-muted min-h-[36px] mb-4 leading-relaxed">
+                        {p.tagline}
+                      </p>
+
+                      {/* Price Display */}
+                      <div className="py-4 border-t border-b border-line mb-4">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-extrabold text-ink font-mono tnum">
+                            {currentPrice === 0 ? 'Free' : `₹${currentPrice.toLocaleString()}`}
+                          </span>
+                          {currentPrice > 0 && (
+                            <span className="text-xs text-ink-muted font-normal">/ month</span>
+                          )}
+                        </div>
+                        {currentPrice > 0 && billingCycle === 'annual' && (
+                          <div className="text-[11px] text-primary font-mono font-medium mt-1">
+                            Billed ₹{(currentPrice * 12).toLocaleString()}/year
+                          </div>
+                        )}
+                        {currentPrice === 0 && (
+                          <div className="text-[11px] text-ink-muted font-mono mt-1">
+                            Zero credit card required
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quota Highlights */}
+                      <div className="bg-surface border border-line rounded p-3 mb-4 space-y-1.5 text-xs font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-ink-muted">Students:</span>
+                          <span className="font-semibold text-ink tnum">
+                            {p.limits?.maxStudents ? `${p.limits.maxStudents.toLocaleString()}` : 'Custom'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-muted">Instructors:</span>
+                          <span className="font-semibold text-ink tnum">
+                            {p.limits?.maxTeachers ? `${p.limits.maxTeachers.toLocaleString()}` : 'Custom'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-muted">Administrators:</span>
+                          <span className="font-semibold text-ink tnum">
+                            {p.limits?.maxAdmins ? `${p.limits.maxAdmins.toLocaleString()}` : 'Custom'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Included Feature Highlights */}
+                      <div className="space-y-2 mb-6 text-xs text-ink">
+                        {(p.highlights || []).map((h, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                            <span className="leading-snug">{h}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* CTA Button */}
+                    <div className="pt-2">
+                      {p.code === 'enterprise' ? (
+                        <button
+                          type="button"
+                          onClick={() => scrollTo('contact', 'enterprise')}
+                          className="w-full h-10 inline-flex items-center justify-center gap-1.5 px-4 rounded text-xs font-semibold bg-surface hover:bg-surface-subtle text-ink border border-line transition cursor-pointer"
+                        >
+                          <span>{p.cta || 'Request Enterprise Quote'}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/register/tenant?plan=${p.code}`)}
+                          className={`w-full h-10 inline-flex items-center justify-center gap-1.5 px-4 rounded text-xs font-semibold transition cursor-pointer ${
+                            isPopular
+                              ? 'bg-primary hover:bg-primary-hover text-on-primary shadow-xs'
+                              : 'bg-surface hover:bg-surface-subtle text-ink border border-line'
+                          }`}
+                        >
+                          <span>{p.cta || 'Start Trial'}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            {/* Expandable Module Comparison Matrix Toggle */}
+            <div className="text-center mb-6">
+              <button
+                type="button"
+                onClick={() => setShowFullMatrix(!showFullMatrix)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface border border-line hover:border-line-strong text-xs font-medium text-ink transition shadow-xs cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5 text-primary" />
+                <span>{showFullMatrix ? 'Collapse capability matrix' : 'Compare all 16+ module capabilities across tiers'}</span>
+                {showFullMatrix ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Collapsible Full Matrix Table */}
+            <AnimatePresence>
+              {showFullMatrix && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="overflow-hidden mb-8"
+                >
+                  <div className="border border-line rounded-panel overflow-x-auto bg-surface shadow-xs">
+                    <table className="w-full text-left border-collapse min-w-[720px]">
+                      <thead>
+                        <tr className="bg-surface-subtle border-b border-line text-xs font-semibold text-ink">
+                          <th className="py-3 px-4 w-2/6 uppercase tracking-wide">Capability / Module</th>
+                          <th className="py-3 px-4 w-1/6 text-center">Free Trial</th>
+                          <th className="py-3 px-4 w-1/6 text-center">Campus Starter</th>
+                          <th className="py-3 px-4 w-1/6 text-center bg-primary-soft/40 border-l border-r border-line text-primary font-bold">
+                            Professional
+                          </th>
+                          <th className="py-3 px-4 w-1/6 text-center">Enterprise ERP</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line text-xs font-mono">
+                        {[
+                          { name: 'Attendance Registry (Timetable Slot linked)', key: 'attendance' },
+                          { name: 'Academic Structure & Course Schemas', key: 'academicStructure' },
+                          { name: 'Announcements & Institutional Alerts', key: 'alerts' },
+                          { name: 'Academic Calendar & Semester Terms', key: 'calendar' },
+                          { name: 'Timetable Scheduling & Clash Prevention', key: 'timetable' },
+                          { name: 'Exam Grid Scheduling & Hall Allocation', key: 'examManagement' },
+                          { name: 'Automated Exam Seating Engine', key: 'examSeating' },
+                          { name: 'Institutional Analytics & Custom Reports', key: 'analytics' },
+                          { name: 'Fee Collection, Waivers & Receipt Ledger', key: 'financeManagement' },
+                          { name: 'Parent & Student Dedicated Portals', key: 'parentPortal' },
+                          { name: 'Custom Staff Roles & Module Permissions', key: 'customRoles' },
+                          { name: 'Custom Subdomain & Per-Campus Theme/Branding', key: 'customBranding' },
+                          { name: 'Offline Client-Side Biometric Face Auth', key: 'biometricAttendance' },
+                          { name: 'Full White-Labeling & Domain Masking', key: 'whiteLabel' },
+                          { name: 'Bulk Data Ingestion & Batch Operations', key: 'bulkOperations' },
+                          { name: 'Priority Engineering Support & SLA', key: 'prioritySupport' },
+                        ].map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-surface-subtle transition-colors">
+                            <td className="py-2.5 px-4 font-body font-medium text-ink">
+                              {row.name}
+                            </td>
+                            {plans.map((p) => {
+                              const hasModule = !!(p.modules && p.modules[row.key]);
+                              const isPro = p.code === 'professional';
+
+                              return (
+                                <td
+                                  key={p.code}
+                                  className={`py-2.5 px-4 text-center ${
+                                    isPro ? 'bg-primary-soft/20 border-l border-r border-line' : ''
+                                  }`}
+                                >
+                                  {hasModule ? (
+                                    <span className="inline-flex items-center gap-1 text-status-success-text font-semibold">
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Included</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-ink-muted">—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-background border border-line rounded">
+              <span className="text-xs text-ink-muted">
+                Need customized compliance, SIS interoperability, or biometric hardware gateway integration?
+              </span>
+              <button
+                type="button"
+                onClick={() => scrollTo('contact', 'enterprise')}
+                className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                Request Enterprise Campus Walkthrough &rarr;
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* 7. INBOUND PROSPECTIVE INQUIRY & CAMPUS CONSULTATION FORM */}
+        <section className="w-full border-b border-line bg-background py-14" id="contact">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center max-w-2xl mx-auto mb-10"
+            >
+              <span className="text-[11px] font-mono uppercase tracking-wider text-primary font-semibold block mb-1">
+                Registrar Consultation
+              </span>
+              <h2 className="font-headline text-2xl sm:text-3xl font-bold text-ink tracking-tight mb-2">
+                Deploy AttendEase on Your Campus
+              </h2>
+              <p className="text-xs sm:text-sm text-ink-muted">
+                Schedule a technical walkthrough or request institutional trial provisioning. Our engineering team responds within one business day.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.15 }}
+              className="bg-surface border border-line rounded-panel p-6 sm:p-8 shadow-xs"
+            >
+              {leadSuccess ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-status-success-bg text-status-success-text border border-status-success-border flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-ink mb-1">Inquiry Submitted Successfully</h3>
+                  <p className="text-xs text-ink-muted max-w-md mx-auto mb-6">
+                    Thank you for reaching out. A campus onboarding specialist will review your institution’s requirements and contact you shortly.
+                  </p>
+                  <button
+                    onClick={() => setLeadSuccess(false)}
+                    className="h-9 px-4 bg-surface hover:bg-surface-subtle text-ink rounded border border-line text-xs font-medium"
+                  >
+                    Send Another Inquiry
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleLeadSubmit} className="space-y-4">
+                  {leadError && (
+                    <div className="p-3 bg-status-error-bg text-status-error-text border border-status-error-border rounded text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{leadError}</span>
+                    </div>
+                  )}
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">
+                        Full Name <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={leadForm.name}
+                        onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                        placeholder="Dr. Eleanor Vance"
+                        className="w-full h-9 px-3 bg-surface border border-line rounded text-xs text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">
+                        Campus Email <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={leadForm.email}
+                        onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
+                        placeholder="registrar@oxford.edu"
+                        className="w-full h-9 px-3 bg-surface border border-line rounded text-xs text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">
+                        Institution / University Name <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={leadForm.institutionName}
+                        onChange={(e) => setLeadForm({ ...leadForm, institutionName: e.target.value })}
+                        placeholder="Oxford Institute of Technology"
+                        className="w-full h-9 px-3 bg-surface border border-line rounded text-xs text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">
+                        Contact Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={leadForm.phone}
+                        onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
+                        placeholder="+1 (555) 234-5678"
+                        className="w-full h-9 px-3 bg-surface border border-line rounded text-xs text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">
+                      Estimated Student Cohort Size
+                    </label>
+                    <select
+                      value={leadForm.studentCount}
+                      onChange={(e) => setLeadForm({ ...leadForm, studentCount: e.target.value })}
+                      className="w-full h-9 px-3 bg-surface border border-line rounded text-xs text-ink focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                    >
+                      <option value="Under 500">Under 500 students</option>
+                      <option value="500 - 2000">500 - 2,000 students</option>
+                      <option value="2000 - 10000">2,000 - 10,000 students</option>
+                      <option value="10000+">10,000+ students (Enterprise)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">
+                      Notes &amp; Operational Priorities
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={leadForm.notes}
+                      onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
+                      placeholder="Outline any legacy SIS migration needs, custom fee schedules, or timetable clash challenges..."
+                      className="w-full p-3 bg-surface border border-line rounded text-xs text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-y"
+                    ></textarea>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[11px] text-ink-muted">
+                      Strictly confidential. No spam, ever.
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={leadSubmitting}
+                      className="h-9 px-5 bg-primary hover:bg-primary-hover text-on-primary rounded text-xs font-medium border border-primary transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      {leadSubmitting ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Submit Inquiry</span>
+                          <Send className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        </section>
+
+        {/* 8. CLOSING CALL TO ACTION */}
+        <section className="w-full bg-background py-16 border-b border-line">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98, y: 20 }}
+            whileInView={{ opacity: 1, scale: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="max-w-4xl mx-auto px-4 sm:px-6 text-center"
+          >
+            <h2 className="font-headline text-2xl lg:text-3xl font-bold text-ink tracking-tight mb-4">
+              Deploy AttendEase for your institution with dedicated tenant isolation and academic workflow management.
+            </h2>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => navigate('/register/tenant')}
+                className="h-10 inline-flex items-center justify-center px-6 bg-primary hover:bg-primary-hover text-on-primary text-xs font-medium rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+              >
+                Start Free Trial
+              </button>
+              <button
+                onClick={openRoleModal}
+                className="h-10 inline-flex items-center justify-center px-6 bg-surface hover:bg-surface-subtle text-ink text-xs font-medium rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+              >
+                Explore Sandbox
+              </button>
+            </div>
+          </motion.div>
+        </section>
+      </main>
+
+      {/* SINGLE INSTITUTIONAL FOOTER */}
+      <footer className="w-full bg-surface border-t border-line text-ink">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-line">
+            <div>
+              <span className="font-bold text-lg text-ink tracking-tight">
+                Attend<span className="text-primary">Ease</span>
+              </span>
+              <span className="block mt-1 font-mono text-xs text-ink-muted">
+                Multi-Tenant Academic ERP Infrastructure
+              </span>
+            </div>
+            <nav className="flex flex-wrap items-center gap-6 text-xs text-ink-muted font-medium">
+              <button onClick={() => scrollTo('features')} className="hover:text-ink transition-colors">
+                Modules
+              </button>
+              <button onClick={() => scrollTo('how-it-works')} className="hover:text-ink transition-colors">
+                How it works
+              </button>
+              <button onClick={() => scrollTo('portals')} className="hover:text-ink transition-colors">
+                Portals
+              </button>
+              <button onClick={() => scrollTo('pricing')} className="hover:text-ink transition-colors">
+                Plans
+              </button>
+              <button onClick={() => scrollTo('contact')} className="hover:text-ink transition-colors">
+                Consultation
+              </button>
+              <button onClick={() => navigate('/login')} className="hover:text-ink transition-colors">
+                Sign in
+              </button>
+            </nav>
+          </div>
+          <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-ink-muted">
+            <p>&copy; {new Date().getFullYear()} AttendEase. All rights reserved.</p>
+            <div className="font-mono text-xs">
+              tenant-scoped data isolation &bull; WCAG AA compliant
+            </div>
           </div>
         </div>
-      </div>
-    </footer>
+      </footer>
+
+      {/* Interactive Role Sandbox Modal */}
+      <RoleSelectorModal />
+    </div>
   );
 };
 

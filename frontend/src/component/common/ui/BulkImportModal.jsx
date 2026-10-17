@@ -405,7 +405,7 @@ const BulkImportModal = ({
                 })
               }
               leftIcon={Crown}
-              className="bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200"
+              variant="primary"
             >
               Upgrade to Enterprise
             </Button>
@@ -417,8 +417,8 @@ const BulkImportModal = ({
             <div
               className={`flex gap-3 rounded-xl border p-3.5 ${
                 result.success
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-red-50 border-red-200 text-red-800"
+                  ? "bg-status-success-bg border-status-success-border text-status-success-text"
+                  : "bg-status-error-bg border-status-error-border text-status-error-text"
               }`}
             >
               {result.success ? (
@@ -429,9 +429,9 @@ const BulkImportModal = ({
               <div className="text-sm w-full">
                 <p className="font-semibold">{result.message}</p>
                 {Array.isArray(result.errors) && result.errors.length > 0 && (
-                  <div className="mt-2 space-y-1 max-h-40 overflow-auto border-t border-red-200/60 pt-2">
+                  <div className="mt-2 space-y-1 max-h-40 overflow-auto border-t border-status-error-border/60 pt-2">
                     {result.errors.map((e, idx) => (
-                      <p key={idx} className="text-xs text-red-700 font-mono">
+                      <p key={idx} className="text-xs text-status-error-text font-mono">
                         Row #{e.index !== undefined ? e.index + 1 : idx + 1}: {e.error}
                       </p>
                     ))}
@@ -443,12 +443,12 @@ const BulkImportModal = ({
 
           {/* Contextual defaults hint */}
           {Object.keys(activeDefaults).length > 0 && (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-800 px-3 py-2.5 text-xs flex items-start gap-2">
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div className="rounded-xl border border-primary/25 bg-primary-soft/60 text-primary-ink px-3 py-2.5 text-xs flex items-start gap-2">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
               <span>
                 Pre-filled from your current view —{" "}
                 {Object.entries(activeDefaults).map(([k, v]) => (
-                  <code key={k} className="font-mono font-bold bg-indigo-100 border border-indigo-200 rounded px-1 py-0.5 mx-0.5">{k}={v}</code>
+                  <code key={k} className="font-mono font-bold bg-primary-soft border border-primary/25 rounded px-1 py-0.5 mx-0.5">{k}={v}</code>
                 ))}{" "}
                 will be applied to every blank row automatically. You can still override any cell in the file.
               </span>

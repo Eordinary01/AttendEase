@@ -51,10 +51,6 @@ const ROLE_PRIMARY_NAV = {
   ],
 };
 
-/**
- * BottomNav
- * Fixed mobile bottom navigation with role-tailored primary quick actions and an expandable "More" sheet.
- */
 export const BottomNav = ({
   role = 'student',
   groups = [],
@@ -72,7 +68,6 @@ export const BottomNav = ({
 
   const isActive = (to) => location.pathname === to || (to !== '/' && location.pathname.startsWith(to + '/'));
 
-  // Flatten all secondary items for the "More" bottom sheet
   const primaryUrls = new Set(primaryItems.map((i) => i.to));
   const secondaryGroups = groups
     .map((g) => ({
@@ -85,9 +80,9 @@ export const BottomNav = ({
     <>
       <nav
         aria-label="Mobile Navigation"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/90 backdrop-blur-md border-t border-line shadow-card pb-[env(safe-area-inset-bottom)]"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-line text-ink pb-[env(safe-area-inset-bottom)] shadow-xs"
       >
-        <div className="flex items-center justify-around h-16 px-1">
+        <div className="flex items-center justify-around h-14 px-1">
           {primaryItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.to);
@@ -98,78 +93,77 @@ export const BottomNav = ({
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
                 className={`
-                  flex-1 flex flex-col items-center justify-center min-h-[44px] py-1.5 px-1 rounded-xl transition-colors
-                  outline-none focus-visible:ring-2 focus-visible:ring-primary/40
-                  ${active ? 'text-primary font-bold' : 'text-ink-faint hover:text-ink'}
+                  flex-1 flex flex-col items-center justify-center min-h-[40px] py-1 px-1 rounded transition-colors relative
+                  outline-none focus-visible:ring-2 focus-visible:ring-primary
+                  ${active ? 'text-primary font-semibold' : 'text-ink-muted hover:text-ink'}
                 `}
               >
-                <Icon className={`w-5 h-5 mb-0.5 transition-colors ${active ? 'text-primary' : 'text-ink-faint'}`} />
-                <span className="text-[10px] truncate max-w-[64px]">{item.label}</span>
+                {active && <span className="absolute top-0 inset-x-3 h-[2px] bg-primary rounded-full" />}
+                <Icon className={`w-4 h-4 mb-0.5 transition-colors ${active ? 'text-primary' : 'text-ink-muted'}`} />
+                <span className="text-[11px] truncate max-w-[64px]">{item.label}</span>
               </NavLink>
             );
           })}
 
-          {/* "More" Sheet Trigger */}
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
             className={`
-              flex-1 flex flex-col items-center justify-center min-h-[44px] py-1.5 px-1 rounded-xl text-ink-faint hover:text-ink transition-colors
-              outline-none focus-visible:ring-2 focus-visible:ring-primary/40
-              ${moreOpen ? 'text-primary font-bold' : ''}
+              flex-1 flex flex-col items-center justify-center min-h-[40px] py-1 px-1 rounded text-ink-muted hover:text-ink transition-colors
+              outline-none focus-visible:ring-2 focus-visible:ring-primary
+              ${moreOpen ? 'text-primary font-semibold' : ''}
             `}
             aria-label="More navigation options"
           >
-            <Menu className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">More</span>
+            <Menu className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">More</span>
           </button>
         </div>
       </nav>
 
-      {/* "More" Action Sheet */}
       <Transition appear show={moreOpen} as={Fragment}>
         <Dialog as="div" className="relative z-50 lg:hidden" onClose={() => setMoreOpen(false)}>
           <Transition.Child
             as={Fragment}
-            enter="ease-out duration-200"
+            enter="ease-out duration-150"
             enterFrom="opacity-0"
             enterTo="opacity-100"
-            leave="ease-in duration-150"
+            leave="ease-in duration-100"
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm" />
+            <div className="fixed inset-0 bg-[#111827]/40" />
           </Transition.Child>
 
           <div className="fixed inset-x-0 bottom-0 z-10 flex flex-col max-h-[80vh]">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200"
+              enter="ease-out duration-150"
               enterFrom="translate-y-full"
               enterTo="translate-y-0"
-              leave="ease-in duration-150"
+              leave="ease-in duration-100"
               leaveFrom="translate-y-0"
               leaveTo="translate-y-full"
             >
-              <Dialog.Panel className="w-full bg-surface border-t border-line rounded-t-3xl p-4 shadow-pop overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <Dialog.Panel className="w-full bg-surface border-t border-line rounded-t-panel p-4 shadow-xl overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <div className="flex items-center justify-between pb-3 border-b border-line mb-3">
-                  <Dialog.Title className="text-sm font-bold text-ink">
+                  <Dialog.Title className="text-sm font-semibold text-ink">
                     Navigation Menu
                   </Dialog.Title>
                   <button
                     type="button"
                     onClick={() => setMoreOpen(false)}
-                    className="p-1.5 rounded-xl text-ink-faint hover:bg-background hover:text-ink transition-colors"
+                    className="p-1.5 rounded text-ink-muted hover:bg-surface-subtle hover:text-ink transition-colors"
                     aria-label="Close menu"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 <div className="space-y-4">
                   {secondaryGroups.map((section) => (
                     <div key={section.group}>
-                      <p className="px-3 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                      <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
                         {section.group}
                       </p>
                       <div className="space-y-1">

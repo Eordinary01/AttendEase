@@ -1,33 +1,34 @@
 import React from 'react';
 
 const tones = {
-  neutral: 'bg-slate-100 text-slate-600 border-slate-200/80',
-  primary: 'bg-primary-soft text-primary-dark border-primary-surface',
-  secondary: 'bg-secondary-soft text-secondary-dark border-secondary-surface',
-  success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  live: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  warning: 'bg-amber-50 text-amber-700 border-amber-200',
-  danger: 'bg-rose-50 text-rose-700 border-rose-200',
-  critical: 'bg-rose-50 text-rose-700 border-rose-200',
-  info: 'bg-sky-50 text-sky-700 border-sky-200',
+  neutral: 'bg-surface-subtle border-line text-ink-muted',
+  primary: 'bg-primary-soft border-primary/25 text-primary-ink',
+  secondary: 'bg-secondary-soft border-secondary/25 text-secondary',
+  success: 'bg-status-success-bg border-status-success-border text-status-success-text',
+  warning: 'bg-status-warning-bg border-status-warning-border text-status-warning-text',
+  danger: 'bg-status-error-bg border-status-error-border text-status-error-text',
+  error: 'bg-status-error-bg border-status-error-border text-status-error-text',
+  info: 'bg-status-info-bg border-status-info-border text-status-info-text',
 };
 
-const Badge = ({ children, tone = 'neutral', dot = false, pulse = false, className = '' }) => {
-  const isPulse = pulse || tone === 'live';
+const Badge = ({ children, tone = 'neutral', dot = true, icon: Icon, className = '' }) => {
   return (
     <span
       className={`
-        inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border
+        inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider border
         ${tones[tone] || tones.neutral}
         ${className}
       `}
     >
-      {(dot || isPulse) && (
-        <span className={`w-1.5 h-1.5 rounded-full bg-current ${isPulse ? 'animate-pulse' : ''}`} />
-      )}
-      {children}
+      {Icon ? (
+        <Icon className="w-3 h-3 flex-shrink-0" />
+      ) : dot ? (
+        <span className="w-1.5 h-1.5 rounded-sm bg-current flex-shrink-0 opacity-80" aria-hidden="true" />
+      ) : null}
+      <span>{children}</span>
     </span>
   );
 };
 
 export default Badge;
+

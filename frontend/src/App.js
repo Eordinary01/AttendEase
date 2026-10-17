@@ -52,6 +52,7 @@ const TenantList = lazy(() => import("./component/SuperAdmin/TenantList"));
 const TenantDetails = lazy(() => import("./component/SuperAdmin/TenantDetails"));
 const SupportPanel = lazy(() => import("./component/Admin/SupportPanel"));
 const SupportDashboard = lazy(() => import("./component/SuperAdmin/SupportDashboard"));
+const LeadManager = lazy(() => import("./component/SuperAdmin/LeadManager"));
 const PlanManager = lazy(() => import("./component/SuperAdmin/PlanManager"));
 const RoleManager = lazy(() => import("./component/Admin/RoleManager"));
 const ParentDashboard = lazy(() => import("./component/ParentDashboard"));
@@ -722,6 +723,14 @@ const App = () => {
           element={
             <Protected requiredRole="super_admin">
               <PlanManager />
+            </Protected>
+          }
+        />
+        <Route
+          path="/super-admin/leads"
+          element={
+            <Protected requiredRole="super_admin">
+              <LeadManager />
             </Protected>
           }
         />

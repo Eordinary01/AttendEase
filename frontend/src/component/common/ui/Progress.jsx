@@ -1,11 +1,12 @@
 import React from 'react';
 
 const COLOR_MAP = {
-  primary: 'bg-gradient-to-r from-primary to-primary/75',
-  green: 'bg-emerald-500',
-  red: 'bg-rose-500',
-  amber: 'bg-amber-500',
-  sky: 'bg-sky-500',
+  primary: 'bg-gradient-to-r from-primary to-primary-light',
+  secondary: 'bg-gradient-to-r from-secondary to-secondary-light',
+  green: 'bg-status-success-text',
+  red: 'bg-status-error-text',
+  amber: 'bg-status-warning-text',
+  sky: 'bg-status-info-text',
 };
 
 export default function Progress({
@@ -26,14 +27,14 @@ export default function Progress({
 
   return (
     <div className={`flex items-center gap-2.5 w-full ${className}`}>
-      <div className={`flex-1 bg-line/60 rounded-full overflow-hidden ${heightClass}`}>
+      <div className={`flex-1 bg-surface-subtle border border-line/60 rounded-full overflow-hidden ${heightClass}`}>
         <div
           className={`h-full rounded-full transition-all duration-500 ease-out ${fillStyle}`}
           style={{ width: `${clampedValue}%` }}
         />
       </div>
       {showLabel && (
-        <span className="text-[11px] font-semibold text-ink-soft shrink-0">
+        <span className="text-[11px] font-semibold text-ink-muted font-mono tnum shrink-0">
           {Math.round(clampedValue)}%
         </span>
       )}

@@ -123,6 +123,9 @@ export const CommandPalette = ({
             leaveTo="opacity-0 scale-95"
           >
             <Dialog.Panel className="mx-auto max-w-xl transform rounded-2xl bg-surface border border-line shadow-pop transition-all overflow-hidden">
+              {/* Institutional Roofline Accent Strip */}
+              <div className="h-[2.5px] w-full bg-gradient-to-r from-primary via-primary-light to-secondary shrink-0" />
+
               {/* Search Header Input */}
               <div className="relative flex items-center px-4 border-b border-line">
                 <Search className="w-5 h-5 text-ink-faint shrink-0" />
@@ -172,7 +175,7 @@ export const CommandPalette = ({
                             onMouseEnter={() => setSelectedIndex(idx)}
                             className={`
                               flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium cursor-pointer transition-colors
-                              ${isSelected ? 'bg-primary-soft text-primary-dark font-semibold' : 'text-ink-soft hover:bg-background hover:text-ink'}
+                              ${isSelected ? 'bg-primary-soft text-primary-ink font-semibold' : 'text-ink-soft hover:bg-primary-soft/20 hover:text-ink'}
                             `}
                           >
                             <div className="flex items-center gap-2.5 truncate">

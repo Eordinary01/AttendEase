@@ -1,25 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --color-primary: 79 70 229;
-  --color-primary-light: 99 102 241;
-  --color-primary-dark: 67 56 202;
-  --color-primary-soft: 238 242 255;
-  --color-primary-surface: 224 231 255;
-  --color-secondary: 139 92 246;
-  --color-secondary-light: 167 139 250;
-  --color-secondary-dark: 124 58 237;
-  --color-secondary-soft: 245 243 255;
-  --color-secondary-surface: 237 233 254;
-  --color-accent: 79 70 229;
-  --color-surface: 255 255 255;
-  --color-background: 248 250 252;
-  --color-ink: 15 23 42;
-  --color-ink-soft: 71 85 105;
-  --color-ink-faint: 148 163 184;
-  --color-line: 226 232 240;
+  /* Academic Registrar Primary Brand (#005C55 / #0F766E) */
+  --color-primary: 0 92 85;
+  --color-primary-hover: 17 94 89;
+  --color-primary-active: 19 78 74;
+  --color-primary-light: 15 118 110;
+  --color-primary-dark: 0 60 55;
+  --color-primary-soft: 240 253 250;
+  --color-primary-surface: 204 251 241;
+  --color-primary-container: 15 118 110;
+  --color-primary-ink: 0 92 85;
+  --color-on-primary: 255 255 255;
+
+  /* Secondary Brand (#1D4ED8 Cobalt) */
+  --color-secondary: 29 78 216;
+  --color-secondary-light: 64 105 242;
+  --color-secondary-dark: 30 58 138;
+  --color-secondary-soft: 239 246 255;
+  --color-secondary-surface: 219 234 254;
+  --color-secondary-container: 64 105 242;
+  --color-on-secondary: 255 255 255;
+
+  --color-accent: 0 92 85;
+
+  /* Base Canvas & Institutional Surfaces */
+  --color-background: 251 251 249; /* #FBFBF9 warm off-white canvas */
+  --color-surface: 255 255 255;    /* #FFFFFF pure white elevation 1 */
+  --color-surface-subtle: 243 244 241; /* #F3F4F1 table headers, subdued rails */
+  --color-surface-alt: 249 250 248;    /* #F9FAF8 hover row tint */
+  --color-surface-container: 233 237 255; /* #E9EDFF */
+  --color-surface-container-high: 225 232 253;
+  --color-surface-container-highest: 220 226 247;
+
+  /* Typography Ink */
+  --color-ink: 17 24 39;        /* #111827 deep ledger ink */
+  --color-ink-muted: 75 85 99;   /* #4B5563 secondary text */
+  --color-ink-soft: 75 85 99;
+  --color-ink-faint: 156 163 175; /* #9CA3AF placeholder, disabled */
+  --color-ink-disabled: 156 163 175;
+
+  /* Hairline Dividing Lines */
+  --color-line: 229 231 235;    /* #E5E7EB 1px hairline stroke */
+  --color-line-strong: 209 213 219; /* #D1D5DB active/hover border */
+
+  /* Institutional Status Semantics */
+  --color-status-success-bg: 240 253 244;
+  --color-status-success-border: 187 247 208;
+  --color-status-success-text: 21 128 61;
+
+  --color-status-error-bg: 254 242 242;
+  --color-status-error-border: 254 202 202;
+  --color-status-error-text: 185 28 28;
+
+  --color-status-warning-bg: 255 251 235;
+  --color-status-warning-border: 253 230 138;
+  --color-status-warning-text: 180 83 9;
+
+  --color-status-info-bg: 239 246 255;
+  --color-status-info-border: 191 219 254;
+  --color-status-info-text: 29 78 216;
+
+  /* Chart Semantics */
+  --color-chart-1: 15 118 110;
+  --color-chart-2: 29 78 216;
+  --color-chart-3: 180 83 9;
+  --color-chart-4: 21 128 61;
+}
+
+.dark {
+  --color-background: 15 23 42;
+  --color-surface: 30 41 59;
+  --color-surface-subtle: 24 33 47;
+  --color-surface-alt: 33 45 65;
+  --color-surface-container: 40 53 74;
+  --color-surface-container-high: 51 65 85;
+  --color-surface-container-highest: 71 85 105;
+
+  --color-ink: 241 245 249;
+  --color-ink-muted: 148 163 184;
+  --color-ink-soft: 148 163 184;
+  --color-ink-faint: 100 116 139;
+  --color-ink-disabled: 100 116 139;
+
+  --color-line: 51 65 85;
+  --color-line-strong: 71 85 105;
+
+  --color-primary-soft: 19 78 74;
+  --color-primary-surface: 17 94 89;
+  --color-secondary-soft: 30 58 138;
+  --color-secondary-surface: 29 78 216;
 }
 
 @layer base {
@@ -27,142 +101,42 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
-
   body {
     @apply bg-background text-ink;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   }
-
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
-
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-
   ::-webkit-scrollbar-thumb {
-    @apply bg-line;
-    border-radius: 8px;
+    background: rgba(156, 163, 175, 0.4);
+    border-radius: 4px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
-
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-ink-faint;
+    background: rgba(156, 163, 175, 0.7);
   }
 }
 
-/* ========================================
-   LANDING PAGE — ATMOSPHERIC EFFECTS
-   ======================================== */
-
-/* Gradient mesh: slow-moving ambient background for hero */
-@keyframes gradientMesh {
-  0% {
-    background-position: 0% 50%;
+@layer utilities {
+  .tnum {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
   }
-
-  50% {
-    background-position: 100% 50%;
+  .hairline {
+    border: 1px solid rgb(var(--color-line));
   }
-
-  100% {
-    background-position: 0% 50%;
+  .hairline-strong {
+    border: 1px solid rgb(var(--color-line-strong));
+  }
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
-.landing-gradient-mesh {
-  background: linear-gradient(135deg,
-      #0f172a 0%,
-      #1e1b4b 25%,
-      #312e81 50%,
-      #1e1b4b 75%,
-      #0f172a 100%);
-  background-size: 400% 400%;
-  animation: gradientMesh 12s ease infinite;
-}
-
-/* Subtle noise texture overlay for premium feel */
-.landing-noise::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.03;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  background-size: 256px;
-}
-
-/* Glow pulse for primary CTA buttons */
-@keyframes glowPulse {
-
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), 0 0 60px rgba(99, 102, 241, 0.1);
-  }
-
-  50% {
-    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5), 0 0 80px rgba(99, 102, 241, 0.15);
-  }
-}
-
-.landing-glow-pulse {
-  animation: glowPulse 3s ease-in-out infinite;
-}
-
-/* Divider line draw animation */
-@keyframes drawLine {
-  from {
-    transform: scaleY(0);
-  }
-
-  to {
-    transform: scaleY(1);
-  }
-}
-
-/* Grid dot pattern for dark sections */
-.landing-grid-pattern {
-  background-image: radial-gradient(circle, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-/* Subtle dot pattern for light sections */
-.landing-dots-light {
-  background-image: radial-gradient(circle, rgba(67, 56, 202, 0.035) 1.2px, transparent 1.2px);
-  background-size: 24px 24px;
-}
-
-/* ========================================
-   EXISTING UTILITIES
-   ======================================== */
-
-.blur-background {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(10px);
-  z-index: 49;
-}
-
-.loader {
-  border: 5px solid #f3f3f3;
-  border-top: 5px solid #3498db;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}

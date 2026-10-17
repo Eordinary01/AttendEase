@@ -6,12 +6,11 @@ import {
   Shield,
   Users,
   X,
-  Sparkles,
   Clock,
   ArrowRight,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  Lock
 } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 
@@ -21,8 +20,6 @@ const ROLES_CONFIG = [
     title: 'Student Portal',
     badge: 'Student',
     icon: GraduationCap,
-    gradient: 'from-blue-500 to-indigo-600',
-    borderHover: 'hover:border-indigo-400',
     tagline: 'Track attendance, classes & leaves',
     description: 'Inspect live attendance percentages, timetable lecture schedule, subject statistics, and submit leave requests in sandbox.',
     highlights: ['Subject Analytics', 'Lecture Schedule', 'Leave Requests', 'Notification Feed']
@@ -32,8 +29,6 @@ const ROLES_CONFIG = [
     title: 'Faculty Portal',
     badge: 'Teacher',
     icon: BookOpen,
-    gradient: 'from-purple-500 to-indigo-600',
-    borderHover: 'hover:border-purple-400',
     tagline: 'Mark attendance & manage subjects',
     description: 'Take class attendance, browse student rosters, monitor subject performance, and manage academic sessions with ease.',
     highlights: ['Attendance Marking', 'Class Rosters', 'Subject Metrics', 'Batch Analytics']
@@ -43,8 +38,6 @@ const ROLES_CONFIG = [
     title: 'Institution Admin',
     badge: 'Tenant Admin',
     icon: Shield,
-    gradient: 'from-emerald-500 to-teal-600',
-    borderHover: 'hover:border-emerald-400',
     tagline: 'Full institution ERP control',
     description: 'Explore campus-wide analytics, department configurations, role permissions, broadcast alerts, and system telemetry.',
     highlights: ['Campus Metrics', 'Broadcast Alerts', 'Academic Config', 'Department Insights']
@@ -54,8 +47,6 @@ const ROLES_CONFIG = [
     title: 'Parent Portal',
     badge: 'Parent',
     icon: Users,
-    gradient: 'from-amber-500 to-orange-600',
-    borderHover: 'hover:border-amber-400',
     tagline: 'Monitor ward attendance & progress',
     description: 'Real-time visibility into your child’s attendance records, timetable, academic calendar, and fee breakdown.',
     highlights: ['Ward Attendance', 'Academic Calendar', 'Fee Records', 'Daily Summaries']
@@ -85,49 +76,49 @@ export const RoleSelectorModal = () => {
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-        {/* Backdrop */}
+        {/* Solid Scrim (No ambient blur) */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={closeRoleModal}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-[#111827]/40 transition-opacity"
         />
 
         {/* Modal Dialog */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10 my-8"
+          exit={{ opacity: 0, scale: 0.98, y: 10 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="relative w-full max-w-4xl bg-surface rounded-panel shadow-level4 border border-line overflow-hidden z-10 my-8 text-ink"
         >
           {/* Header */}
-          <div className="relative px-6 sm:px-8 pt-8 pb-6 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
+          <div className="relative px-6 sm:px-8 pt-6 pb-5 border-b border-line bg-surface">
             <button
               onClick={closeRoleModal}
-              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+              className="absolute top-5 right-5 p-1.5 text-ink-muted hover:text-ink rounded hover:bg-surface-subtle transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
               aria-label="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-semibold w-fit mb-3 border border-purple-100">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              <span>Interactive 15-Minute Sandbox</span>
+            <div className="flex items-center gap-2 px-2.5 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-mono uppercase tracking-wider font-semibold w-fit mb-2 border border-primary/20">
+              <Clock className="w-3.5 h-3.5" />
+              <span>15-Minute Isolated Session</span>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Choose Your Demo Role
+            <h2 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">
+              Choose Academic Role to Explore
             </h2>
-            <p className="mt-1.5 text-slate-500 text-sm sm:text-base max-w-2xl">
-              Experience AttendEase from any perspective. No registration or credentials required.
-              Your actions are safely simulated and isolated.
+            <p className="mt-1 text-ink-muted text-xs sm:text-sm max-w-2xl">
+              Experience AttendEase from any institutional perspective. No registration required.
+              Operations are safely simulated in a dedicated sandbox session.
             </p>
           </div>
 
           {/* Role Cards Grid */}
-          <div className="p-6 sm:p-8 grid sm:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">
+          <div className="p-6 sm:p-8 grid sm:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto bg-background">
             {ROLES_CONFIG.map((item) => {
               const Icon = item.icon;
               const slot = slotsStatus[item.role];
@@ -137,54 +128,52 @@ export const RoleSelectorModal = () => {
               return (
                 <div
                   key={item.role}
-                  className={`group relative flex flex-col justify-between p-5 sm:p-6 rounded-xl border transition-all duration-200 bg-white ${
+                  className={`flex flex-col justify-between p-5 rounded-panel border bg-surface transition-all ${
                     isOccupied
-                      ? 'border-slate-200 opacity-80 bg-slate-50/50 cursor-not-allowed'
-                      : `border-slate-200 ${item.borderHover} hover:shadow-lg hover:-translate-y-0.5`
+                      ? 'border-line opacity-75 bg-surface-subtle cursor-not-allowed'
+                      : 'border-line hover:border-primary/50 shadow-xs'
                   }`}
                 >
                   <div>
                     {/* Top Row: Icon & Status Badge */}
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br ${item.gradient} shadow-md group-hover:scale-105 transition-transform`}
-                      >
-                        <Icon className="w-6 h-6" />
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="w-10 h-10 rounded border border-line bg-surface-subtle flex items-center justify-center text-primary">
+                        <Icon className="w-5 h-5" />
                       </div>
 
                       {/* Availability Tag */}
                       {isOccupied ? (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          <span>In Use (~{remainingMin}m left)</span>
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-status-warning-bg text-status-warning-text border border-status-warning-border">
+                          <Clock className="w-3 h-3 text-status-warning-text" />
+                          <span className="font-mono tnum">In Use (~{remainingMin}m left)</span>
                         </div>
                       ) : (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-status-success-bg text-status-success-text border border-status-success-border">
+                          <CheckCircle2 className="w-3 h-3 text-status-success-text" />
                           <span>Slot Available</span>
                         </div>
                       )}
                     </div>
 
                     {/* Role Title & Description */}
-                    <div className="mb-4">
-                      <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
+                    <div className="mb-3">
+                      <h3 className="text-base font-bold text-ink">
                         {item.title}
                       </h3>
-                      <p className="text-xs font-semibold text-purple-600 mb-1">
+                      <p className="text-xs font-medium text-primary mb-1">
                         {item.tagline}
                       </p>
-                      <p className="text-xs text-slate-600 leading-relaxed">
+                      <p className="text-xs text-ink-muted leading-relaxed">
                         {item.description}
                       </p>
                     </div>
 
                     {/* Highlight Pills */}
-                    <div className="flex flex-wrap gap-1.5 mb-6">
+                    <div className="flex flex-wrap gap-1.5 mb-5">
                       {item.highlights.map((h) => (
                         <span
                           key={h}
-                          className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md"
+                          className="text-[10px] font-medium bg-surface-subtle text-ink-muted border border-line px-2 py-0.5 rounded font-mono"
                         >
                           {h}
                         </span>
@@ -196,26 +185,26 @@ export const RoleSelectorModal = () => {
                   <button
                     disabled={isOccupied || loading}
                     onClick={() => claimDemoRole(item.role)}
-                    className={`w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                    className={`w-full py-2 px-3 rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors ${
                       isOccupied
-                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        : `bg-gradient-to-r ${item.gradient} text-white hover:opacity-95 shadow-md shadow-purple-500/10 active:scale-[0.98]`
+                        ? 'bg-surface-subtle border border-line text-ink-muted cursor-not-allowed'
+                        : 'bg-primary hover:bg-[#115E59] text-white border border-primary shadow-xs focus:outline-none focus:ring-1 focus:ring-primary'
                     }`}
                   >
                     {loading ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         <span>Initializing Sandbox...</span>
                       </>
                     ) : isOccupied ? (
                       <>
-                        <Clock className="w-4 h-4" />
-                        <span>Slot Busy (Wait ~{remainingMin}m)</span>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span className="font-mono tnum">Slot Busy (~{remainingMin}m)</span>
                       </>
                     ) : (
                       <>
                         <span>Explore as {item.badge}</span>
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </button>
@@ -225,16 +214,16 @@ export const RoleSelectorModal = () => {
           </div>
 
           {/* Footer Note */}
-          <div className="px-6 sm:px-8 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="px-6 sm:px-8 py-3 bg-surface border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-ink-muted">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span>
               <span>
-                Each role session is reserved exclusively for you for 15 minutes to prevent conflicts.
+                Each role session is reserved exclusively for you for 15 minutes to guarantee transactional consistency.
               </span>
             </div>
             <button
               onClick={closeRoleModal}
-              className="font-semibold text-slate-600 hover:text-slate-800 transition"
+              className="font-medium text-ink-muted hover:text-ink transition-colors"
             >
               Cancel
             </button>

@@ -1,10 +1,17 @@
-// src/contexts/ThemeContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { logError } from '../utils/logger';
 import { fetchTenantInfo, getCachedTenantBranding, clearCachedTenantBranding } from '../utils/tenantService';
+import {
+  extractThemeColors,
+  hexToRgbTriplet,
+  DEFAULT_PRIMARY,
+  DEFAULT_SECONDARY,
+  DEFAULT_CANVAS,
+  DEFAULT_SURFACE,
+} from '../utils/theme';
 
-export const ThemeContext = createContext();
+const ThemeContext = createContext();
 
 export const useTheme = () => useContext(ThemeContext);
 
@@ -13,19 +20,19 @@ export const ThemeProvider = ({ children }) => {
     const cached = getCachedTenantBranding();
     if (cached?.branding?.primaryColor) {
       return {
-        primary: cached.branding.primaryColor || '#6366f1',
-        secondary: cached.branding.secondaryColor || '#8b5cf6',
-        accent: cached.branding.accentColor || '#4f46e5',
-        background: cached.branding.backgroundColor || '#f3f4f6',
-        text: cached.branding.textColor || '#1f2937',
+        primary: cached.branding.primaryColor || DEFAULT_PRIMARY,
+        secondary: cached.branding.secondaryColor || DEFAULT_SECONDARY,
+        accent: cached.branding.accentColor || DEFAULT_PRIMARY,
+        background: cached.branding.backgroundColor || DEFAULT_CANVAS,
+        text: cached.branding.textColor || '#111827',
       };
     }
     return {
-      primary: '#6366f1',    // Default indigo
-      secondary: '#8b5cf6',  // Default purple
-      accent: '#4f46e5',     // Default dark indigo
-      background: '#f3f4f6', // Default gray
-      text: '#1f2937',       // Default dark
+      primary: DEFAULT_PRIMARY,
+      secondary: DEFAULT_SECONDARY,
+      accent: DEFAULT_PRIMARY,
+      background: DEFAULT_CANVAS,
+      text: '#111827',
     };
   };
 
@@ -50,127 +57,91 @@ export const ThemeProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken]);
 
-  // Helper to convert hex to "R G B" triplet (used by CSS var tokens)
-  const toRgbTriplet = (hex) => {
-    if (!hex) return null;
-    const clean = hex.replace('#', '').trim();
-    if (clean.length !== 6) return null;
-    const r = parseInt(clean.slice(0, 2), 16);
-    const g = parseInt(clean.slice(2, 4), 16);
-    const b = parseInt(clean.slice(4, 6), 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
-    return `${r} ${g} ${b}`;
-  };
-
-  const adjustColor = (hex, percent) => {
-    if (!hex) return hex;
-    const clean = hex.replace('#', '').trim();
-    if (clean.length !== 6) return hex;
-    const num = parseInt(clean, 16);
-    if (isNaN(num)) return hex;
-    const r = (num >> 16) & 0xff;
-    const g = (num >> 8) & 0xff;
-    const b = num & 0xff;
-
-    if (percent > 0) {
-      // Lighten towards pure white (#ffffff) smoothly
-      const factor = percent / 100;
-      const R = Math.min(255, Math.max(0, Math.round(r + (255 - r) * factor)));
-      const G = Math.min(255, Math.max(0, Math.round(g + (255 - g) * factor)));
-      const B = Math.min(255, Math.max(0, Math.round(b + (255 - b) * factor)));
-      return `#${((1 << 24) | (R << 16) | (G << 8) | B).toString(16).slice(1)}`;
-    } else {
-      // Darken towards black smoothly
-      const factor = 1 + (percent / 100);
-      const R = Math.min(255, Math.max(0, Math.round(r * factor)));
-      const G = Math.min(255, Math.max(0, Math.round(g * factor)));
-      const B = Math.min(255, Math.max(0, Math.round(b * factor)));
-      return `#${((1 << 24) | (R << 16) | (G << 8) | B).toString(16).slice(1)}`;
-    }
-  };
-
   const applyThemeColors = useCallback((colors) => {
-    if (!colors) return;
     const root = document.documentElement;
-    const primary = colors.primary || colors.primaryColor || '#6366f1';
-    const secondary = colors.secondary || colors.secondaryColor || '#8b5cf6';
-    const accent = colors.accent || colors.accentColor || '#4f46e5';
+    const extracted = extractThemeColors(colors);
 
     const setVar = (name, hex, fallback) => {
-      const triplet = toRgbTriplet(hex) || toRgbTriplet(fallback);
+      const triplet = hexToRgbTriplet(hex) || hexToRgbTriplet(fallback);
       if (triplet) {
         root.style.setProperty(name, triplet);
       }
     };
 
-    setVar('--color-primary', primary, '#6366f1');
-    setVar('--color-primary-light', adjustColor(primary, 20), '#818cf8');
-    setVar('--color-primary-dark', adjustColor(primary, -15), '#4338ca');
-    setVar('--color-primary-soft', adjustColor(primary, 90), '#eef2ff');
-    setVar('--color-primary-surface', adjustColor(primary, 80), '#e0e7ff');
-    setVar('--color-secondary', secondary, '#8b5cf6');
-    setVar('--color-secondary-light', adjustColor(secondary, 20), '#a78bfa');
-    setVar('--color-secondary-dark', adjustColor(secondary, -15), '#6d28d9');
-    setVar('--color-secondary-soft', adjustColor(secondary, 90), '#f5f3ff');
-    setVar('--color-secondary-surface', adjustColor(secondary, 80), '#ede9fe');
-    setVar('--color-accent', accent, '#4f46e5');
+    setVar('--color-primary', extracted.primary, DEFAULT_PRIMARY);
+    setVar('--color-primary-hover', extracted.hover, '#115e59');
+    setVar('--color-primary-active', extracted.active, '#134e4a');
+    setVar('--color-primary-light', extracted.light, '#0f766e');
+    setVar('--color-primary-dark', extracted.dark, '#003c37');
+    setVar('--color-primary-soft', extracted.soft, '#f0fdfa');
+    setVar('--color-primary-surface', extracted.surface, '#ccfbf1');
+    setVar('--color-primary-container', extracted.container, '#0f766e');
+    setVar('--color-primary-ink', extracted.primaryInk, DEFAULT_PRIMARY);
+    setVar('--color-on-primary', extracted.onPrimary, '#ffffff');
 
-    // Also set direct hex variables for standard CSS & SVG rules
-    root.style.setProperty('--theme-primary', primary);
-    root.style.setProperty('--theme-secondary', secondary);
-    root.style.setProperty('--header-primary', primary);
-    root.style.setProperty('--header-secondary', secondary);
+    setVar('--color-secondary', extracted.secondary, DEFAULT_SECONDARY);
+    setVar('--color-secondary-light', extracted.light, '#4069f2');
+    setVar('--color-secondary-dark', extracted.dark, '#1e3a8a');
+    setVar('--color-secondary-soft', extracted.soft, '#eff6ff');
+    setVar('--color-secondary-surface', extracted.surface, '#dbeafe');
+    setVar('--color-secondary-container', extracted.container, '#4069f2');
+    setVar('--color-on-secondary', extracted.onSecondary, '#ffffff');
+
+    setVar('--color-accent', extracted.primary, DEFAULT_PRIMARY);
 
     // Update meta theme color
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      metaThemeColor.content = primary;
+      metaThemeColor.content = extracted.primary;
     }
   }, []);
 
   const fetchTenantBranding = async () => {
     try {
       const hasAuth = localStorage.getItem('userId') || localStorage.getItem('token');
-
-      // Super admins are platform-level — keep default platform branding
-      if (localStorage.getItem('role') === 'super_admin') {
-        const platformDefaults = { primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' };
-        setTenantColors(platformDefaults);
-        applyThemeColors(platformDefaults);
+      if (!hasAuth || window.location.pathname.startsWith('/login')) {
+        // Do not force DEFAULT_PRIMARY if visiting a specific tenant subdomain route (/login/:subdomain)
+        // because NewLogin dynamically retrieves and activates the tenant's custom branding if their plan includes it.
+        const isTenantLogin = window.location.pathname.startsWith('/login/') && window.location.pathname !== '/login/';
+        if (!isTenantLogin) {
+          applyThemeColors({ primary: DEFAULT_PRIMARY, secondary: DEFAULT_SECONDARY });
+        }
         setLoading(false);
         return;
       }
 
-      // Check instant hydration from cache
+      // Super admins are platform-level — keep default branding, never a tenant's
+      if (localStorage.getItem('role') === 'super_admin') {
+        applyThemeColors({ primary: DEFAULT_PRIMARY, secondary: DEFAULT_SECONDARY });
+        setLoading(false);
+        return;
+      }
+
+      // Instant hydration from cache
       const cached = getCachedTenantBranding();
-      if (cached?.branding && (cached.branding.primaryColor || cached.branding.primary)) {
+      if (cached?.branding) {
         const colors = {
-          primary: cached.branding.primaryColor || cached.branding.primary || '#6366f1',
-          secondary: cached.branding.secondaryColor || cached.branding.secondary || '#8b5cf6',
-          accent: cached.branding.accentColor || cached.branding.accent || '#4f46e5',
-          background: cached.branding.backgroundColor || '#f3f4f6',
-          text: cached.branding.textColor || '#1f2937',
+          primary: cached.branding.primaryColor || DEFAULT_PRIMARY,
+          secondary: cached.branding.secondaryColor || DEFAULT_SECONDARY,
+          accent: cached.branding.accentColor || DEFAULT_PRIMARY,
+          background: cached.branding.backgroundColor || DEFAULT_CANVAS,
+          text: cached.branding.textColor || '#111827',
         };
         setTenantColors(colors);
         applyThemeColors(colors);
-      }
-
-      if (!hasAuth) {
-        setLoading(false);
-        return;
       }
 
       const response = await fetchTenantInfo();
 
       if (response.data?.success) {
         const branding = response.data.data?.tenant?.branding;
-        if (branding && (branding.primaryColor || branding.primary)) {
+        if (branding) {
           const colors = {
-            primary: branding.primaryColor || branding.primary || '#6366f1',
-            secondary: branding.secondaryColor || branding.secondary || '#8b5cf6',
-            accent: branding.accentColor || branding.accent || '#4f46e5',
-            background: branding.backgroundColor || '#f3f4f6',
-            text: branding.textColor || '#1f2937',
+            primary: branding.primaryColor || DEFAULT_PRIMARY,
+            secondary: branding.secondaryColor || DEFAULT_SECONDARY,
+            accent: branding.accentColor || DEFAULT_PRIMARY,
+            background: branding.backgroundColor || DEFAULT_CANVAS,
+            text: branding.textColor || '#111827',
           };
           setTenantColors(colors);
           applyThemeColors(colors);
@@ -178,19 +149,22 @@ export const ThemeProvider = ({ children }) => {
       }
     } catch (error) {
       // Fall back to defaults if branding can't be fetched
-      applyThemeColors({ primary: '#6366f1', secondary: '#8b5cf6', accent: '#4f46e5' });
+      applyThemeColors({ primary: DEFAULT_PRIMARY, secondary: DEFAULT_SECONDARY });
     } finally {
       setLoading(false);
     }
   };
 
+
+
+
   const updateTheme = async (colors) => {
     try {
       const response = await api.put('/tenant/settings', {
         branding: {
-          primaryColor: colors.primary || colors.primaryColor,
-          secondaryColor: colors.secondary || colors.secondaryColor,
-          accentColor: colors.accent || colors.accentColor,
+          primaryColor: colors.primary,
+          secondaryColor: colors.secondary,
+          accentColor: colors.accent,
         }
       });
 
@@ -217,9 +191,6 @@ export const ThemeProvider = ({ children }) => {
       loading,
       updateTheme,
       applyThemeColors,
-      refreshTheme: fetchTenantBranding,
-      toRgbTriplet,
-      adjustColor,
     }}>
       {children}
     </ThemeContext.Provider>
