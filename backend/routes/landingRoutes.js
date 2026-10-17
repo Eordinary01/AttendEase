@@ -151,6 +151,87 @@ router.get('/tenant-info', async (req, res) => {
   }
 });
 
+const rateLimit = require('express-rate-limit');
+
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: {
+    success: false,
+    message: 'Too many search requests. Please slow down.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * GET /api/landing/search-tenants
+ * Search active institutions by name or subdomain for campus switcher & walkthrough
+ * Protected with IP rate limiting and strict ReDoS sanitization.
+ */
+router.get('/search-tenants', searchLimiter, async (req, res) => {
+  try {
+    const Tenant = require('../models/Tenant');
+    const { q } = req.query;
+
+    const qStr = typeof q === 'string' ? q.trim() : '';
+
+    if (!qStr || qStr.length < 2) {
+      // Return top active public institutions as suggestions / walkthrough
+      const defaultTenants = await Tenant.find({
+        isActive: true,
+        isDemo: { $ne: true },
+      })
+        .select('name subdomain branding.logo branding.primaryColor branding.institutionName')
+        .limit(8)
+        .lean();
+
+      return res.json({
+        success: true,
+        data: defaultTenants.map((t) => ({
+          name: t.branding?.institutionName || t.name,
+          subdomain: t.subdomain,
+          logo: t.branding?.logo || null,
+          primaryColor: t.branding?.primaryColor || null,
+          loginUrl: `/login/${encodeURIComponent(t.subdomain)}`,
+        })),
+      });
+    }
+
+    // Security: Bound string length and escape regex metacharacters to eliminate ReDoS
+    const safeQ = qStr.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const tenants = await Tenant.find({
+      isActive: true,
+      isDemo: { $ne: true },
+      $or: [
+        { name: { $regex: safeQ, $options: 'i' } },
+        { subdomain: { $regex: safeQ, $options: 'i' } },
+        { 'branding.institutionName': { $regex: safeQ, $options: 'i' } },
+      ],
+    })
+      .select('name subdomain branding.logo branding.primaryColor branding.institutionName')
+      .limit(10)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: tenants.map((t) => ({
+        name: t.branding?.institutionName || t.name,
+        subdomain: t.subdomain,
+        logo: t.branding?.logo || null,
+        primaryColor: t.branding?.primaryColor || null,
+        loginUrl: `/login/${encodeURIComponent(t.subdomain)}`,
+      })),
+    });
+  } catch (error) {
+    logger.error('Error searching tenants:', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search institutions',
+    });
+  }
+});
+
 /**
  * POST /api/landing/contact and POST /api/landing/lead
  * Public prospective lead / inquiry submission

@@ -29,12 +29,22 @@ import {
   Layers,
   Database,
   Cpu,
-  Fingerprint
+  Fingerprint,
+  School,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import RoleSelectorModal from './RoleSelectorModal';
 import WelcomeEntrance from './WelcomeEntrance';
+import CampusSwitcherModal from './CampusSwitcherModal';
 import { useDemo } from '../../contexts/DemoContext';
 import api from '../../utils/api';
+import {
+  getActiveTenant,
+  setActiveTenant as persistActiveTenant,
+  getTenantLoginUrl,
+  getFullTenantUrl
+} from '../../utils/activeTenant';
 
 const CANONICAL_PLANS = [
   {
@@ -233,6 +243,13 @@ export const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeAccentTab, setActiveAccentTab] = useState('a'); // 'a' (deep teal), 'b' (forest green), 'c' (maroon)
 
+  // Campus switcher & active tenant portal states
+  const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
+  const [activeTenant, setActiveTenantState] = useState(() => getActiveTenant());
+  const [showCampusBanner, setShowCampusBanner] = useState(true);
+  const [featuredCampuses, setFeaturedCampuses] = useState([]);
+  const [copiedCampusSubdomain, setCopiedCampusSubdomain] = useState(null);
+
   // Welcome Screen state
   const [showWelcome, setShowWelcome] = useState(() => {
     try {
@@ -241,6 +258,31 @@ export const LandingPage = () => {
       return false;
     }
   });
+
+  // Fetch featured active registered campuses for walkthrough
+  useEffect(() => {
+    let isMounted = true;
+    api.get('/landing/search-tenants')
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setFeaturedCampuses(res.data.data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Unable to load featured campuses:', err);
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleCopyCampusLink = (e, subdomain) => {
+    e.stopPropagation();
+    const url = getFullTenantUrl(subdomain);
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedCampusSubdomain(subdomain);
+      setTimeout(() => setCopiedCampusSubdomain(null), 2000);
+    });
+  };
 
   // Top scroll-scrubbed hairline progress bar
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -478,7 +520,16 @@ export const LandingPage = () => {
           </nav>
 
           {/* Desktop Action Buttons */}
-          <div className="hidden md:flex items-center gap-3 text-xs font-medium">
+          <div className="hidden md:flex items-center gap-2.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setIsCampusModalOpen(true)}
+              className="h-9 inline-flex items-center gap-1.5 px-3 bg-surface hover:bg-surface-subtle text-ink rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+              title="Search institutional login portals"
+            >
+              <School className="w-3.5 h-3.5 text-primary" />
+              <span>{activeTenant ? activeTenant.name : 'Campus Portals'}</span>
+            </button>
             <button
               onClick={() => navigate('/login')}
               className="text-ink-muted hover:text-ink transition-colors px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-primary"
@@ -493,7 +544,7 @@ export const LandingPage = () => {
             </button>
             <button
               onClick={() => navigate('/register/tenant')}
-              className="h-9 inline-flex items-center justify-center px-4 bg-primary hover:bg-primary-hover text-on-primary rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-9 inline-flex items-center justify-center px-4 bg-primary hover:bg-primary-hover text-on-primary rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
             >
               Start Free Trial
             </button>
@@ -547,6 +598,13 @@ export const LandingPage = () => {
                 Campus Consultation
               </button>
               <button
+                onClick={() => { setMobileMenuOpen(false); setIsCampusModalOpen(true); }}
+                className="py-2 text-left text-primary font-medium flex items-center gap-2"
+              >
+                <School className="w-4 h-4" />
+                <span>Find Campus Portal</span>
+              </button>
+              <button
                 onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
                 className="py-2 text-left text-ink-muted hover:text-ink"
               >
@@ -576,6 +634,78 @@ export const LandingPage = () => {
         {/* 1. HERO SECTION */}
         <section className="w-full border-b border-line bg-background">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16">
+            {/* Active Campus Remembered Banner */}
+            {activeTenant && showCampusBanner && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 p-3.5 sm:p-4 rounded-xl border border-primary/30 bg-primary-soft/50 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-primary text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <School className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-ink">
+                        Active Campus Portal: <span className="font-bold">{activeTenant.name}</span>
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-surface border border-line font-mono text-[10px] text-primary font-bold">
+                        {activeTenant.subdomain}
+                      </span>
+                    </div>
+                    <p className="text-xs text-ink-muted truncate font-mono mt-0.5">
+                      {window.location.origin}/login/{activeTenant.subdomain}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => navigate(getTenantLoginUrl(activeTenant.subdomain))}
+                    className="h-8 px-3.5 bg-primary hover:bg-primary-hover text-on-primary rounded text-xs font-semibold flex items-center gap-1.5 shadow-xs transition"
+                  >
+                    <span>Enter Portal</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleCopyCampusLink(e, activeTenant.subdomain)}
+                    className="h-8 px-2.5 bg-surface hover:bg-surface-subtle text-ink border border-line rounded text-xs font-medium flex items-center gap-1 transition"
+                    title="Copy dedicated login link"
+                  >
+                    {copiedCampusSubdomain === activeTenant.subdomain ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-ink-muted" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCampusModalOpen(true)}
+                    className="h-8 px-2.5 text-xs text-ink-muted hover:text-ink hover:bg-surface rounded transition"
+                  >
+                    Switch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCampusBanner(false)}
+                    className="p-1 text-ink-muted hover:text-ink rounded transition"
+                    aria-label="Dismiss banner"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1227,6 +1357,159 @@ export const LandingPage = () => {
                 </div>
               </div>
             </motion.div>
+
+            {/* Live Registered Institution Portals Walkthrough */}
+            <div className="mt-12 pt-10 border-t border-line">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-primary-soft text-primary font-mono text-[11px] font-semibold mb-1">
+                    <School className="w-3.5 h-3.5" />
+                    <span>Campus Portals &amp; Registered Institutions</span>
+                  </div>
+                  <h3 className="font-headline text-lg sm:text-xl font-bold text-ink">
+                    Direct Institutional Walkthrough Endpoints
+                  </h3>
+                  <p className="text-xs text-ink-muted mt-0.5 max-w-2xl">
+                    Every enrolled campus receives its own secure subdomain and custom branded login portal with strict tenant-scoped data isolation.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCampusModalOpen(true)}
+                  className="h-9 px-4 bg-primary hover:bg-primary-hover text-on-primary rounded text-xs font-semibold flex items-center gap-2 shadow-xs transition shrink-0"
+                >
+                  <School className="w-3.5 h-3.5" />
+                  <span>Search Campus Portals</span>
+                </button>
+              </div>
+
+              {/* Campus Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {featuredCampuses.length > 0 ? (
+                  featuredCampuses.map((campus) => (
+                    <div
+                      key={campus.id || campus.subdomain}
+                      className="bg-background border border-line rounded-panel p-4 flex flex-col justify-between hover:border-primary/40 hover:shadow-xs transition group"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          {campus.logo ? (
+                            <img
+                              src={campus.logo}
+                              alt={campus.name}
+                              className="w-8 h-8 rounded object-contain border border-line bg-white p-0.5 shrink-0"
+                            />
+                          ) : (
+                            <div
+                              className="w-8 h-8 rounded flex items-center justify-center font-bold text-xs text-white shadow-xs shrink-0"
+                              style={{ backgroundColor: campus.primaryColor || '#1e3a8a' }}
+                            >
+                              {(campus.name || campus.subdomain).charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface border border-line text-ink-muted truncate max-w-[120px]">
+                            {campus.subdomain}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-sm text-ink group-hover:text-primary transition-colors truncate">
+                          {campus.name}
+                        </h4>
+                        <p className="font-mono text-[11px] text-ink-muted truncate mt-1">
+                          /login/{campus.subdomain}
+                        </p>
+                      </div>
+
+                      <div className="pt-4 mt-4 border-t border-line flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            persistActiveTenant(campus);
+                            setActiveTenantState(campus);
+                            navigate(campus.loginUrl || `/login/${campus.subdomain}`);
+                          }}
+                          className="flex-1 h-8 bg-surface hover:bg-surface-subtle text-ink hover:text-primary border border-line rounded text-xs font-medium flex items-center justify-center gap-1.5 transition"
+                        >
+                          <span>Portal</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCampusLink(e, campus.subdomain)}
+                          className="h-8 w-8 bg-surface hover:bg-surface-subtle text-ink-muted hover:text-ink border border-line rounded flex items-center justify-center transition"
+                          title="Copy Direct Login Link"
+                        >
+                          {copiedCampusSubdomain === campus.subdomain ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  [
+                    { name: 'DPS Global Academy', subdomain: 'dps', color: '#1e3a8a' },
+                    { name: 'St. Xavier Institute', subdomain: 'xavier', color: '#0f766e' },
+                    { name: 'National Public School', subdomain: 'nps', color: '#166534' },
+                    { name: 'Horizon University', subdomain: 'horizon', color: '#881337' },
+                  ].map((campus) => (
+                    <div
+                      key={campus.subdomain}
+                      className="bg-background border border-line rounded-panel p-4 flex flex-col justify-between hover:border-primary/40 hover:shadow-xs transition group"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div
+                            className="w-8 h-8 rounded flex items-center justify-center font-bold text-xs text-white shadow-xs shrink-0"
+                            style={{ backgroundColor: campus.color }}
+                          >
+                            {campus.subdomain.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface border border-line text-ink-muted">
+                            {campus.subdomain}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-sm text-ink group-hover:text-primary transition-colors truncate">
+                          {campus.name}
+                        </h4>
+                        <p className="font-mono text-[11px] text-ink-muted truncate mt-1">
+                          /login/{campus.subdomain}
+                        </p>
+                      </div>
+
+                      <div className="pt-4 mt-4 border-t border-line flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const t = { name: campus.name, subdomain: campus.subdomain, primaryColor: campus.color };
+                            persistActiveTenant(t);
+                            setActiveTenantState(t);
+                            navigate(`/login/${campus.subdomain}`);
+                          }}
+                          className="flex-1 h-8 bg-surface hover:bg-surface-subtle text-ink hover:text-primary border border-line rounded text-xs font-medium flex items-center justify-center gap-1.5 transition"
+                        >
+                          <span>Portal</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCampusLink(e, campus.subdomain)}
+                          className="h-8 w-8 bg-surface hover:bg-surface-subtle text-ink-muted hover:text-ink border border-line rounded flex items-center justify-center transition"
+                          title="Copy Direct Login Link"
+                        >
+                          {copiedCampusSubdomain === campus.subdomain ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1784,6 +2067,14 @@ export const LandingPage = () => {
               <button onClick={() => scrollTo('contact')} className="hover:text-ink transition-colors">
                 Consultation
               </button>
+              <button
+                type="button"
+                onClick={() => setIsCampusModalOpen(true)}
+                className="hover:text-primary transition-colors flex items-center gap-1 font-medium"
+              >
+                <School className="w-3.5 h-3.5 text-primary" />
+                <span>Campus Finder</span>
+              </button>
               <button onClick={() => navigate('/login')} className="hover:text-ink transition-colors">
                 Sign in
               </button>
@@ -1800,6 +2091,18 @@ export const LandingPage = () => {
 
       {/* Interactive Role Sandbox Modal */}
       <RoleSelectorModal />
+
+      {/* Campus Portal Finder & Institution Switcher Modal */}
+      <CampusSwitcherModal
+        isOpen={isCampusModalOpen}
+        onClose={() => setIsCampusModalOpen(false)}
+        onSelectTenant={(tenant) => {
+          persistActiveTenant(tenant);
+          setActiveTenantState(tenant);
+          setShowCampusBanner(true);
+          navigate(getTenantLoginUrl(tenant.subdomain));
+        }}
+      />
     </div>
   );
 };

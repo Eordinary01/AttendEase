@@ -69,7 +69,7 @@ const seedSuperAdmin = async () => {
         name: 'Basic',
         code: 'basic',
         description: 'Great for growing schools',
-        pricing: { monthly: 49, yearly: 499, currency: 'INR' },
+        pricing: { monthly: 999, yearly: 9588, currency: 'INR' },
         limits: {
           maxStudents: 200,
           maxTeachers: 20,
@@ -109,7 +109,7 @@ const seedSuperAdmin = async () => {
         name: 'Professional',
         code: 'professional',
         description: 'For large institutions',
-        pricing: { monthly: 149, yearly: 1499, currency: 'INR' },
+        pricing: { monthly: 2499, yearly: 23988, currency: 'INR' },
         limits: {
           maxStudents: 1000,
           maxTeachers: 100,
@@ -149,7 +149,7 @@ const seedSuperAdmin = async () => {
         name: 'Enterprise',
         code: 'enterprise',
         description: 'Complete ERP solution',
-        pricing: { monthly: 499, yearly: 4999, currency: 'INR' },
+        pricing: { monthly: 4999, yearly: 47988, currency: 'INR' },
         limits: {
           maxStudents: 10000,
           maxTeachers: 1000,
@@ -194,10 +194,12 @@ const seedSuperAdmin = async () => {
         plansCreated++;
         console.log(`  ✓ Created plan: ${planData.name} (${planData.code})`);
       } else {
+        existingPlan.pricing = planData.pricing;
+        existingPlan.limits = { ...existingPlan.limits, ...planData.limits };
         existingPlan.modules = { ...existingPlan.modules, ...planData.modules };
         existingPlan.features = planData.features;
         await existingPlan.save();
-        console.log(`  ✓ Updated modules & features for plan: ${planData.name} (${planData.code})`);
+        console.log(`  ✓ Updated pricing, modules & features for plan: ${planData.name} (${planData.code})`);
       }
     }
     console.log(`\n✓ Plans processed: ${plansCreated} new, ${plans.length - plansCreated} updated`);

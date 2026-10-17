@@ -84,7 +84,7 @@ const defaultPlans = [
   {
     code: "basic",
     name: "Basic",
-    pricing: { monthly: 49, yearly: 499 },
+    pricing: { monthly: 999, yearly: 9588 },
     limits: {
       maxStudents: 200,
       maxTeachers: 20,
@@ -95,7 +95,7 @@ const defaultPlans = [
   {
     code: "professional",
     name: "Professional",
-    pricing: { monthly: 149, yearly: 1499 },
+    pricing: { monthly: 2499, yearly: 23988 },
     limits: {
       maxStudents: 1000,
       maxTeachers: 100,
@@ -106,7 +106,7 @@ const defaultPlans = [
   {
     code: "enterprise",
     name: "Enterprise",
-    pricing: { monthly: 499, yearly: 4999 },
+    pricing: { monthly: 4999, yearly: 47988 },
     limits: {
       maxStudents: 10000,
       maxTeachers: 1000,

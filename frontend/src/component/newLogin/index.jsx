@@ -12,6 +12,7 @@ import { logError } from "../../utils/logger";
 import { getApiBaseUrl } from "../../utils/api";
 import { DEFAULT_PRIMARY, DEFAULT_SECONDARY } from "../../utils/theme";
 import { useTheme } from "../../contexts/ThemeContexts";
+import { setActiveTenant as persistActiveTenant } from "../../utils/activeTenant";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -133,6 +134,14 @@ const NewLogin = ({ onLogin }) => {
               secondary: effectiveSecondary,
             });
           }
+
+          // Persist active campus for walkthrough and switcher recognition
+          persistActiveTenant({
+            subdomain: t.subdomain || subdomain,
+            name: b.institutionName || t.name,
+            logo: b.logo || null,
+            primaryColor: effectivePrimary,
+          });
         }
       })
       .catch((err) => {
