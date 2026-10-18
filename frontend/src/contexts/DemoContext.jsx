@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api from '../utils/api';
+import api, { getApiBaseUrl } from '../utils/api';
 import {
   isDemoActive,
   getDemoSession,
@@ -143,12 +143,25 @@ export const DemoProvider = ({ children }) => {
     const currentRole = demoRole || session?.role;
     const currentSessionId = sessionId || session?.sessionId;
 
-    // Release slot on backend
+    // Release slot on backend before navigating
     if (currentRole && currentSessionId) {
-      api.post('/demo/release', {
-        role: currentRole,
-        sessionId: currentSessionId,
-      }).catch(() => {});
+      try {
+        await api.post('/demo/release', {
+          role: currentRole,
+          sessionId: currentSessionId,
+        });
+      } catch (err) {
+        console.warn('Demo release request failed, attempting beacon fallback:', err);
+        try {
+          const apiBase = getApiBaseUrl();
+          const endpoint = `${apiBase.endsWith('/api') ? apiBase : `${apiBase}/api`}/demo/release`;
+          const payload = JSON.stringify({ role: currentRole, sessionId: currentSessionId });
+          const blob = new Blob([payload], { type: 'application/json' });
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(endpoint, blob);
+          }
+        } catch (_) {}
+      }
     }
 
     // Wipe demo state & client auth credentials

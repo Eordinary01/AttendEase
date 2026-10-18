@@ -2,16 +2,65 @@ const Tenant = require('../models/Tenant');
 const cache = require('./cache');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
+
+const PLATFORM_DOMAINS = [
+  'vercel.app',
+  'onrender.com',
+  'railway.app',
+  'herokuapp.com',
+  'netlify.app',
+  'pages.dev',
+  'render.com',
+];
+
+/**
+ * Extract tenant subdomain from host string, correctly ignoring cloud platform hostnames
+ * where the 3-level domain is the deployment identifier, not a tenant (e.g. attend-ease-kappa.vercel.app).
+ * @param {string} host
+ * @returns {string|null}
+ */
+function extractTenantSubdomain(host) {
+  if (!host || typeof host !== 'string') return null;
+  const cleanHost = host.split(':')[0].toLowerCase();
+
+  const isPlatformHost = PLATFORM_DOMAINS.some((suffix) => cleanHost.endsWith(`.${suffix}`));
+  const parts = cleanHost.split('.');
+
+  if (isPlatformHost) {
+    // Platform deployments (e.g. attend-ease-kappa.vercel.app has 3 parts)
+    // Only 4+ level subdomains represent institutional portals on platform domains (e.g. oxford.attend-ease.vercel.app)
+    if (parts.length >= 4) {
+      const sub = parts[0];
+      if (!['www', 'app', 'api'].includes(sub)) return sub;
+    }
+    return null;
+  }
+
+  // Standard custom domains (e.g. oxford.attendease.com has 3 parts)
+  if (parts.length >= 3) {
+    const sub = parts[0];
+    if (!['www', 'app', 'api'].includes(sub)) return sub;
+  }
+
+  return null;
+}
 
 const tenantResolver = async (req, res, next) => {
   const skipPaths = [
-    '/api/auth/login', '/api/auth/super-admin/login',
-    '/api/tenant/register', '/api/landing',
+    '/api/auth/login',
+    '/api/auth/super-admin/login',
+    '/api/auth/tenant-info',
+    '/api/auth/verify',
+    '/api/tenant/register',
+    '/api/landing',
     '/api/billing/plans',
-    '/api/super-admin', '/api/admin/super', '/api/admin/plans',
+    '/api/super-admin',
+    '/api/admin/super',
+    '/api/admin/plans',
     '/api/demo',
   ];
-  if (skipPaths.some(path => req.originalUrl?.startsWith(path) || req.path?.startsWith(path))) {
+  if (skipPaths.some((path) => req.originalUrl?.startsWith(path) || req.path?.startsWith(path))) {
     return next();
   }
 
@@ -21,18 +70,27 @@ const tenantResolver = async (req, res, next) => {
     const tenantId = req.headers['x-tenant-id'];
     let cacheKey = null;
 
-    const mongoose = require('mongoose');
-
-    // Extract payload from JWT if provided
+    // Extract payload from JWT if provided (via Authorization header OR httpOnly cookie)
     let jwtPayload = null;
     let hasJwt = false;
+    let token = null;
+
     const authHeader = req.headers.authorization || '';
     if (authHeader.startsWith('Bearer ')) {
-      hasJwt = true;
+      token = authHeader.slice(7);
+    } else if (req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
+    }
+
+    if (token) {
       try {
-        jwtPayload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+        jwtPayload = jwt.verify(token, process.env.JWT_SECRET);
+        hasJwt = true;
       } catch (e) {
         jwtPayload = null;
+        hasJwt = false;
       }
     }
 
@@ -47,8 +105,26 @@ const tenantResolver = async (req, res, next) => {
     // TENANT ISOLATION RESOLUTION MATRIX (SECURITY GUARANTEED)
     // ------------------------------------------------------------------
 
-    // Case A: Authenticated User (Non-SuperAdmin) -> Strict Tenant Isolation
-    if (hasJwt && jwtPayload && jwtPayload.role !== 'super_admin') {
+    // Special Case: Demo Sandbox User -> strictly resolve to demo tenant
+    if (hasJwt && jwtPayload && jwtPayload.demo) {
+      cacheKey = 'tenant:demo';
+      tenant = await cache.get(cacheKey);
+      if (!tenant) {
+        const targetId = jwtPayload.tenantId;
+        tenant = await Tenant.findOne({
+          $or: [
+            ...(targetId && mongoose.Types.ObjectId.isValid(targetId) ? [{ _id: targetId }] : []),
+            { subdomain: 'demo' },
+            { isDemo: true },
+          ],
+          isActive: true,
+        }).lean();
+        if (tenant) await cache.set(cacheKey, tenant, 600);
+      }
+    }
+
+    // Case A: Authenticated User (Non-SuperAdmin, Non-Demo) -> Strict Tenant Isolation
+    else if (hasJwt && jwtPayload && jwtPayload.role !== 'super_admin') {
       const jwtTenantId = jwtPayload.tenantId;
       if (!jwtTenantId || !mongoose.Types.ObjectId.isValid(jwtTenantId)) {
         return res.status(401).json({
@@ -66,7 +142,6 @@ const tenantResolver = async (req, res, next) => {
       }
 
       // SECURITY GUARANTEE: An authenticated user MUST strictly resolve to THEIR tenant.
-      // If their tenant was deleted or re-seeded in DB, fail with 401 to clear stale token.
       if (!tenant) {
         return res.status(401).json({
           success: false,
@@ -89,7 +164,7 @@ const tenantResolver = async (req, res, next) => {
       }
     }
 
-    // Case C: Unauthenticated Requests (Header, Subdomain, or Localhost Dev Fallback)
+    // Case C: Unauthenticated Requests (Header, Query, Subdomain, or Localhost Dev Fallback)
     else {
       // C1: Check x-tenant-id header
       if (tenantId && mongoose.Types.ObjectId.isValid(tenantId)) {
@@ -101,23 +176,34 @@ const tenantResolver = async (req, res, next) => {
         }
       }
 
-      // C2: Check Subdomain
-      if (!tenant) {
-        const subdomainMatch = host?.match(/^([^.]+)\./);
-        if (subdomainMatch) {
-          const subdomain = subdomainMatch[1];
-          if (!['www', 'app', 'api'].includes(subdomain)) {
-            cacheKey = `tenant:subdomain:${subdomain}`;
-            tenant = await cache.get(cacheKey);
-            if (!tenant) {
-              tenant = await Tenant.findOne({ subdomain }).lean();
-              if (tenant) await cache.set(cacheKey, tenant, 600);
-            }
+      // C2: Check x-tenant-subdomain header or subdomain query parameter
+      const requestedSubdomain = req.headers['x-tenant-subdomain'] || req.query.subdomain || req.query.tenantSubdomain;
+      if (!tenant && requestedSubdomain && typeof requestedSubdomain === 'string') {
+        const cleanSub = requestedSubdomain.trim().toLowerCase();
+        if (!['www', 'app', 'api'].includes(cleanSub)) {
+          cacheKey = `tenant:subdomain:${cleanSub}`;
+          tenant = await cache.get(cacheKey);
+          if (!tenant) {
+            tenant = await Tenant.findOne({ subdomain: cleanSub, isActive: true }).lean();
+            if (tenant) await cache.set(cacheKey, tenant, 600);
           }
         }
       }
 
-      // C3: Development / Localhost Fallback for Unauthenticated Requests
+      // C3: Check Host Subdomain (only if host represents a valid institutional tenant subdomain)
+      if (!tenant) {
+        const extractedSub = extractTenantSubdomain(host);
+        if (extractedSub) {
+          cacheKey = `tenant:subdomain:${extractedSub}`;
+          tenant = await cache.get(cacheKey);
+          if (!tenant) {
+            tenant = await Tenant.findOne({ subdomain: extractedSub, isActive: true }).lean();
+            if (tenant) await cache.set(cacheKey, tenant, 600);
+          }
+        }
+      }
+
+      // C4: Development / Localhost Fallback for Unauthenticated Requests
       const isDevOrTest = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || !process.env.NODE_ENV;
       if (!tenant && isDevOrTest && (host?.includes('localhost') || host?.includes('127.0.0.1'))) {
         tenant = await Tenant.findOne({ subdomain: 'default' }).lean();
@@ -139,18 +225,18 @@ const tenantResolver = async (req, res, next) => {
       });
     }
 
-    if (tenant.subscription.status !== 'active' && tenant.subscription.status !== 'trial') {
-      const isExpired = tenant.subscription.status === 'expired';
+    if (tenant.subscription?.status !== 'active' && tenant.subscription?.status !== 'trial') {
+      const isExpired = tenant.subscription?.status === 'expired';
       return res.status(403).json({
         success: false,
-        message: isExpired ? 'Your trial has expired. Please upgrade to continue.' : `Your account is ${tenant.subscription.status}. Please contact support.`,
-        status: tenant.subscription.status,
-        subscriptionStatus: tenant.subscription.status,
+        message: isExpired ? 'Your trial has expired. Please upgrade to continue.' : `Your account is ${tenant.subscription?.status}. Please contact support.`,
+        status: tenant.subscription?.status,
+        subscriptionStatus: tenant.subscription?.status,
         upgradeRequired: isExpired
       });
     }
 
-    if (tenant.subscription.plan === 'free' && tenant.subscription.trialEndsAt && new Date(tenant.subscription.trialEndsAt) < new Date()) {
+    if (tenant.subscription?.plan === 'free' && tenant.subscription?.trialEndsAt && new Date(tenant.subscription.trialEndsAt) < new Date()) {
       await Tenant.findByIdAndUpdate(tenant._id, { 'subscription.status': 'expired' });
       if (cacheKey) await cache.del(cacheKey);
       return res.status(403).json({
@@ -191,15 +277,20 @@ const tenantResolver = async (req, res, next) => {
 const optionalTenant = async (req, res, next) => {
   try {
     const host = req.headers.host;
-    const subdomainMatch = host.match(/^([^.]+)\./);
+    const requestedSubdomain =
+      extractTenantSubdomain(host) ||
+      req.headers['x-tenant-subdomain'] ||
+      req.query.subdomain ||
+      req.query.tenantSubdomain;
     
-    if (subdomainMatch) {
-      const subdomain = subdomainMatch[1];
-      if (!['www', 'app', 'api'].includes(subdomain)) {
-        const tenant = await Tenant.findOne({ subdomain: subdomain, isActive: true });
+    if (requestedSubdomain && typeof requestedSubdomain === 'string') {
+      const cleanSub = requestedSubdomain.trim().toLowerCase();
+      if (!['www', 'app', 'api'].includes(cleanSub)) {
+        const tenant = await Tenant.findOne({ subdomain: cleanSub, isActive: true });
         if (tenant) {
           req.tenant = tenant;
-          logger.debug('Optional tenant resolved', { subdomain });
+          req.tenantId = tenant._id;
+          logger.debug('Optional tenant resolved', { subdomain: cleanSub });
         }
       }
     }
@@ -210,4 +301,4 @@ const optionalTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { tenantResolver, optionalTenant };
+module.exports = { tenantResolver, optionalTenant, extractTenantSubdomain };

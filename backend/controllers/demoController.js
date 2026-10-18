@@ -154,11 +154,26 @@ async function claimDemo(req, res) {
  */
 async function releaseDemo(req, res) {
   try {
-    const role = req.body.role || req.user?.role;
-    const sessionId = req.body.sessionId || req.user?.sessionId;
+    let role = req.body?.role || req.user?.role;
+    let sessionId = req.body?.sessionId || req.user?.sessionId;
 
-    if (role && sessionId) {
-      await demoService.releaseSlot(role.toLowerCase(), sessionId);
+    // Check Authorization header or cookies if missing in body
+    if (!sessionId) {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : (req.cookies?.accessToken || req.cookies?.token);
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          role = role || decoded.role;
+          sessionId = decoded.sessionId;
+        } catch (_) {}
+      }
+    }
+
+    if (role) {
+      await demoService.releaseSlot(role.toLowerCase(), sessionId || '', req.ip);
     }
 
     clearAuthCookies(res);

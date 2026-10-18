@@ -129,7 +129,8 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://attend-ease-f.vercel.app'
+  'https://attend-ease-f.vercel.app',
+  'https://attend-ease-kappa.vercel.app',
 ];
 if (process.env.FRONTEND_URL) {
   process.env.FRONTEND_URL.split(',').forEach((u) => {
@@ -141,7 +142,8 @@ if (process.env.FRONTEND_URL) {
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    const isVercelOrigin = /^https:\/\/[a-z0-9-]+(\.vercel\.app)$/i.test(origin);
+    if (allowedOrigins.includes(origin) || isVercelOrigin || process.env.NODE_ENV !== 'production') {
       return callback(null, origin);
     }
     return callback(new Error('Not allowed by CORS'));

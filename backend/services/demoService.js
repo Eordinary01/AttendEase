@@ -130,12 +130,13 @@ async function claimSlot(role, sessionId, ip = '', durationSeconds = DEFAULT_DUR
 }
 
 /**
- * Release a demo slot only if owned by the requesting session
+ * Release a demo slot if owned by the requesting session or matching IP
  * @param {string} role
  * @param {string} sessionId
+ * @param {string} [ip]
  * @returns {Promise<{ success: boolean, message?: string }>}
  */
-async function releaseSlot(role, sessionId) {
+async function releaseSlot(role, sessionId, ip = '') {
   if (!VALID_ROLES.includes(role)) {
     return { success: false, message: 'Invalid role' };
   }
@@ -145,23 +146,24 @@ async function releaseSlot(role, sessionId) {
 
   if (redis) {
     try {
-      // Lua script for atomic check-and-delete
+      // Lua script for atomic check-and-delete: matches either sessionId or client IP
       const luaScript = `
         local current = redis.call('get', KEYS[1])
         if not current then return 1 end
         local decoded = cjson.decode(current)
-        if decoded.sessionId == ARGV[1] then
+        if (ARGV[1] and ARGV[1] ~= '' and decoded.sessionId == ARGV[1]) or
+           (ARGV[2] and ARGV[2] ~= '' and decoded.ip == ARGV[2]) then
           return redis.call('del', KEYS[1])
         else
           return 0
         end
       `;
-      const res = await redis.eval(luaScript, 1, slotKey, sessionId);
+      const res = await redis.eval(luaScript, 1, slotKey, sessionId || '', ip || '');
       if (res === 1) {
-        logger.info(`[DemoService] Released Redis slot for role "${role}" (session: ${sessionId})`);
+        logger.info(`[DemoService] Released Redis slot for role "${role}" (session: ${sessionId}, ip: ${ip})`);
         return { success: true, message: 'Slot released successfully' };
       } else {
-        logger.warn(`[DemoService] Ownership mismatch on Redis release for "${role}"`);
+        logger.warn(`[DemoService] Ownership mismatch on Redis release for "${role}" (session: ${sessionId}, ip: ${ip})`);
         return { success: false, message: 'Slot is not owned by this session' };
       }
     } catch (err) {
@@ -174,7 +176,7 @@ async function releaseSlot(role, sessionId) {
   if (!existing) {
     return { success: true, message: 'Slot was already free' };
   }
-  if (existing.sessionId === sessionId) {
+  if ((sessionId && existing.sessionId === sessionId) || (ip && existing.ip === ip)) {
     if (existing.timer) clearTimeout(existing.timer);
     inMemorySlots.delete(role);
     logger.info(`[DemoService] Released in-memory slot for role "${role}" (session: ${sessionId})`);
