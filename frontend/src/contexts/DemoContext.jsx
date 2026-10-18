@@ -96,7 +96,7 @@ export const DemoProvider = ({ children }) => {
         // 2. Set client UI context in localStorage (NO TOKENS OR SECRETS STORED - Phase 10)
         localStorage.removeItem('token');
         localStorage.setItem('role', data.role);
-        localStorage.setItem('userId', `demo-${data.role}`);
+        localStorage.setItem('userId', data.user.id || data.user._id || `demo-${data.role}`);
         localStorage.setItem('userName', data.user.name);
         localStorage.setItem('userEmail', `${data.role}.demo@attendease.internal`);
         localStorage.setItem('tenantSubdomain', data.user.tenantSubdomain || 'demo');

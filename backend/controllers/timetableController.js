@@ -807,7 +807,8 @@ const getBySection = async (req, res) => {
 
 const getByTeacher = async (req, res) => {
   try {
-    const rawTeacherId = req.params.teacherId || req.user?._id || req.user?.id;
+    const isDemoId = req.params.teacherId === 'demo-teacher' || req.params.teacherId === 'demo' || String(req.params.teacherId).startsWith('demo-');
+    const rawTeacherId = (isDemoId || !req.params.teacherId) ? (req.user?._id || req.user?.id) : req.params.teacherId;
     const teacherId = toObjectId(rawTeacherId);
     const tenantId = toObjectId(req.user?.tenantId || req.tenantId || req.tenant?._id);
 

@@ -200,7 +200,7 @@ const App = () => {
       if (demo && demo.role) {
         setIsAuthenticated(true);
         setRole(demo.role);
-        setUserId(`demo-${demo.role}`);
+        setUserId(demo.user?.id || demo.user?._id || storedUserId || `demo-${demo.role}`);
         setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
         setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
       }
@@ -225,7 +225,7 @@ const App = () => {
         if (demo && demo.role) {
           setIsAuthenticated(true);
           setRole(demo.role);
-          setUserId(`demo-${demo.role}`);
+          setUserId(demo.user?.id || demo.user?._id || storedUserId || `demo-${demo.role}`);
           setUserName(demo.user?.name || `${demo.role.toUpperCase()} Demo`);
           setUserEmail(demo.user?.email || `${demo.role}.demo@attendease.internal`);
         }

@@ -127,6 +127,8 @@ async function claimDemo(req, res) {
       durationSeconds,
       isDemo: true,
       user: {
+        id: demoUser._id,
+        _id: demoUser._id,
         name: normalizedRole === 'parent' ? (demoUser.parentName || 'Demo Parent') : demoUser.name,
         role: normalizedRole,
         tenantSubdomain: demoTenant.subdomain,

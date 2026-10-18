@@ -1025,8 +1025,9 @@ const getTeacherSubjects = async (req, res) => {
   const { teacherId } = req.params;
   const { section, semester } = req.query;
 
-  // In demo mode or when 'me' is specified, resolve to the current user's authenticated identity
-  const targetTeacherId = (teacherId === 'me' || req.user?.demo || !teacherId) ? req.user?._id : teacherId;
+  // In demo mode or when 'me' or 'demo-teacher' is specified, resolve to the current user's authenticated identity
+  const isDemo = Boolean(req.user?.demo || teacherId === 'demo-teacher' || teacherId === 'demo' || String(teacherId).startsWith('demo-'));
+  const targetTeacherId = (teacherId === 'me' || isDemo || !teacherId) ? req.user?._id : teacherId;
 
   if (!targetTeacherId) {
     return res.status(400).json({
@@ -1040,7 +1041,8 @@ const getTeacherSubjects = async (req, res) => {
     const tenantId = req.user?.tenantId || req.tenantId;
 
     // Check permissions
-    if (requesterRole !== "admin" && requesterRole !== "super_admin" && !req.user?.demo && requesterId !== String(targetTeacherId)) {
+    const isSelf = requesterId === String(targetTeacherId) || (isDemo && (requesterRole === 'teacher' || req.user?.demo));
+    if (requesterRole !== "admin" && requesterRole !== "super_admin" && !isSelf) {
       return res.status(403).json({
         message: "You do not have permission to view this information",
       });

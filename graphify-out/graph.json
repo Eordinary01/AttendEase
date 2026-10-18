@@ -1034,7 +1034,7 @@
       "file_type": "code",
       "norm_label": "deactivatesubject()",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1427"
+      "source_location": "L1429"
     },
     {
       "id": "backend_controllers_subjectcontroller_updatesubject",
@@ -1046,7 +1046,7 @@
       "file_type": "code",
       "norm_label": "updatesubject()",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1378"
+      "source_location": "L1380"
     },
     {
       "id": "backend_controllers_tenantcontroller_invalidatetenantstats",
@@ -1070,7 +1070,7 @@
       "file_type": "code",
       "norm_label": "deleteentry()",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L953"
+      "source_location": "L954"
     },
     {
       "id": "backend_middleware_cache_delpattern",
@@ -2090,7 +2090,7 @@
       "file_type": "code",
       "norm_label": "deletesubject()",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1447"
+      "source_location": "L1449"
     },
     {
       "id": "backend_controllers_subjectcontroller_getallsubjects",
@@ -2186,7 +2186,7 @@
       "file_type": "code",
       "norm_label": "searchsubjects()",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1194"
+      "source_location": "L1196"
     },
     {
       "id": "frontend_src_component_add_tickets_index_fileuploadarea",
@@ -3566,7 +3566,7 @@
       "file_type": "code",
       "norm_label": "updateentry()",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L873"
+      "source_location": "L874"
     },
     {
       "id": "backend_controllers_timetablecontroller_validateentry",
@@ -5726,7 +5726,7 @@
       "file_type": "code",
       "norm_label": "getdemostatus()",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L199"
+      "source_location": "L201"
     },
     {
       "id": "backend_controllers_democontroller_releasedemo",
@@ -5738,7 +5738,7 @@
       "file_type": "code",
       "norm_label": "releasedemo()",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L155"
+      "source_location": "L157"
     },
     {
       "id": "backend_services_demoservice_claimslot",
@@ -6494,7 +6494,7 @@
       "file_type": "code",
       "norm_label": "parentauth()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L357"
+      "source_location": "L359"
     },
     {
       "id": "backend_controllers_admincontroller_getalltenants",
@@ -7742,7 +7742,7 @@
       "file_type": "code",
       "norm_label": "adminauth()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L265"
+      "source_location": "L267"
     },
     {
       "id": "backend_middleware_auth_gettenantfromrequest",
@@ -7754,7 +7754,7 @@
       "file_type": "code",
       "norm_label": "gettenantfromrequest()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L451"
+      "source_location": "L453"
     },
     {
       "id": "backend_middleware_auth_requiretenant",
@@ -7766,7 +7766,7 @@
       "file_type": "code",
       "norm_label": "requiretenant()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L500"
+      "source_location": "L502"
     },
     {
       "id": "backend_middleware_auth_resolvetenant",
@@ -7778,7 +7778,7 @@
       "file_type": "code",
       "norm_label": "resolvetenant()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L486"
+      "source_location": "L488"
     },
     {
       "id": "backend_middleware_auth_studentauth",
@@ -7790,7 +7790,7 @@
       "file_type": "code",
       "norm_label": "studentauth()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L383"
+      "source_location": "L385"
     },
     {
       "id": "backend_middleware_auth_teacherauth",
@@ -7802,7 +7802,7 @@
       "file_type": "code",
       "norm_label": "teacherauth()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L331"
+      "source_location": "L333"
     },
     {
       "id": "backend_controllers_attendancecontroller_getattendancebydate",
@@ -7850,7 +7850,7 @@
       "file_type": "code",
       "norm_label": "authorizeroles()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L414"
+      "source_location": "L416"
     },
     {
       "id": "backend_middleware_permission_getcachedrolepermissions",
@@ -10118,7 +10118,7 @@
       "file_type": "code",
       "norm_label": "superadminauth()",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L301"
+      "source_location": "L303"
     },
     {
       "id": "docs_build_both_layouts_v2_add_heading",
@@ -31232,7 +31232,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L201",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -31244,7 +31244,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L176",
+      "source_location": "L178",
       "weight": 1.0
     },
     {
@@ -31256,7 +31256,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L179",
+      "source_location": "L181",
       "weight": 1.0
     },
     {
@@ -32876,7 +32876,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1434",
+      "source_location": "L1436",
       "weight": 1.0
     },
     {
@@ -32888,7 +32888,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1458",
+      "source_location": "L1460",
       "weight": 1.0
     },
     {
@@ -32984,7 +32984,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1303",
+      "source_location": "L1305",
       "weight": 1.0
     },
     {
@@ -32996,7 +32996,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1305",
+      "source_location": "L1307",
       "weight": 1.0
     },
     {
@@ -33008,7 +33008,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1414",
+      "source_location": "L1416",
       "weight": 1.0
     },
     {
@@ -33572,7 +33572,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L961",
+      "source_location": "L962",
       "weight": 1.0
     },
     {
@@ -33644,7 +33644,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L811",
+      "source_location": "L812",
       "weight": 1.0
     },
     {
@@ -33716,7 +33716,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L919",
+      "source_location": "L920",
       "weight": 1.0
     },
     {
@@ -33728,7 +33728,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L927",
+      "source_location": "L928",
       "weight": 1.0
     },
     {
@@ -33740,7 +33740,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L933",
+      "source_location": "L934",
       "weight": 1.0
     },
     {
@@ -33752,7 +33752,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L938",
+      "source_location": "L939",
       "weight": 1.0
     },
     {
@@ -33764,7 +33764,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L945",
+      "source_location": "L946",
       "weight": 1.0
     },
     {
@@ -34100,7 +34100,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L502",
+      "source_location": "L504",
       "weight": 1.0
     },
     {
@@ -34112,7 +34112,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L488",
+      "source_location": "L490",
       "weight": 1.0
     },
     {
@@ -101411,7 +101411,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L216",
+      "source_location": "L218",
       "weight": 1.0
     },
     {
@@ -101423,7 +101423,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L217",
+      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -101435,7 +101435,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/demoController.js",
-      "source_location": "L218",
+      "source_location": "L220",
       "weight": 1.0
     },
     {
@@ -102431,7 +102431,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1469",
+      "source_location": "L1471",
       "weight": 1.0
     },
     {
@@ -102443,7 +102443,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1470",
+      "source_location": "L1472",
       "weight": 1.0
     },
     {
@@ -102455,7 +102455,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1471",
+      "source_location": "L1473",
       "weight": 1.0
     },
     {
@@ -102467,7 +102467,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1472",
+      "source_location": "L1474",
       "weight": 1.0
     },
     {
@@ -102479,7 +102479,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1473",
+      "source_location": "L1475",
       "weight": 1.0
     },
     {
@@ -102491,7 +102491,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1474",
+      "source_location": "L1476",
       "weight": 1.0
     },
     {
@@ -102503,7 +102503,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1475",
+      "source_location": "L1477",
       "weight": 1.0
     },
     {
@@ -102515,7 +102515,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1476",
+      "source_location": "L1478",
       "weight": 1.0
     },
     {
@@ -102527,7 +102527,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/subjectController.js",
-      "source_location": "L1477",
+      "source_location": "L1479",
       "weight": 1.0
     },
     {
@@ -102863,7 +102863,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102875,7 +102875,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102887,7 +102887,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102899,7 +102899,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102911,7 +102911,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102923,7 +102923,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -102935,7 +102935,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/controllers/timetableController.js",
-      "source_location": "L970",
+      "source_location": "L971",
       "weight": 1.0
     },
     {
@@ -103367,7 +103367,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L523",
+      "source_location": "L525",
       "weight": 1.0
     },
     {
@@ -103379,7 +103379,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L524",
+      "source_location": "L526",
       "weight": 1.0
     },
     {
@@ -103391,7 +103391,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L525",
+      "source_location": "L527",
       "weight": 1.0
     },
     {
@@ -103403,7 +103403,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L526",
+      "source_location": "L528",
       "weight": 1.0
     },
     {
@@ -103415,7 +103415,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L527",
+      "source_location": "L529",
       "weight": 1.0
     },
     {
@@ -103427,7 +103427,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L528",
+      "source_location": "L530",
       "weight": 1.0
     },
     {
@@ -103439,7 +103439,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L529",
+      "source_location": "L531",
       "weight": 1.0
     },
     {
@@ -103451,7 +103451,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L530",
+      "source_location": "L532",
       "weight": 1.0
     },
     {
@@ -103463,7 +103463,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L531",
+      "source_location": "L533",
       "weight": 1.0
     },
     {
@@ -103475,7 +103475,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "backend/middleware/auth.js",
-      "source_location": "L532",
+      "source_location": "L534",
       "weight": 1.0
     },
     {
@@ -105178,5 +105178,5 @@
       "source_file": "ARCHITECTURE.md"
     }
   ],
-  "built_at_commit": "7738fa77208c255cc46780b5de56e601c75bc6e6"
+  "built_at_commit": "0de5f9e1566355953c7115edf21d9b03bbfe22ab"
 }

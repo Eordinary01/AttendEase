@@ -203,6 +203,8 @@ const authenticateToken = async (req, res, next) => {
       courseName: user.courseName,
       branch: user.branch,
       semester: user.semester,
+      demo: Boolean(decoded.demo || user.isDemo),
+      sessionId: decoded.sessionId || undefined,
     };
     
     // Attach tenant info preserving full tenant document shape (subscription, limits, settings)
