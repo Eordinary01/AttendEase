@@ -1,8 +1,8 @@
 # AttendEase — Enterprise Product Architecture & Technical Blueprint
 
-> **System Version:** 2.2.0 (Subdomain Tenant Custom Branding + Profile UI Revamp + Biometric AI HUD Revamp & Optimizations + SSE Log Streaming)  
+> **System Version:** 2.4.0 (Interactive Demo Sandbox Concurrency Engine + Real-Time Campus Freshness & Verification + Subdomain Custom Branding + Legal & Compliance Architecture)  
 > **Architecture Pattern:** Multi-Tenant Modular Monolith with Asynchronous Queue Workers & Client-Side Edge Biometrics  
-> **Last Updated:** 2026-08-29  
+> **Last Updated:** 2026-10-19  
 
 ---
 
@@ -21,6 +21,9 @@
 8. **Privacy-Preserving Biometric AI Face Recognition & Anti-Spoofing Engine** — 100% Vector-Only mathematical landmark embedding recognition (`face-api.js`), active 3D perspective yaw anti-spoofing challenge, eye-aspect-ratio (EAR) blink validation, token-aligned HUD with `ReticleCorners`, memoized detector instances (320/416), gated countdown and liveness loops, IndexedDB local caching (<10ms startup & true offline mode), Stale-While-Revalidate delta sync, and zero raw facial photo storage guarantee.
 9. **Media & Cloudinary Asset Engine** — Direct in-memory buffer streaming for profile avatars and tenant branding with face-centered auto-cropping and resilient local disk fallback.
 10. **Platform Monitoring & Real-Time SSE Log Streaming** — Centralized request and audit tracing (`APILog`) with live Server-Sent Events (SSE) log feed streaming to Super Admin dashboards.
+11. **Interactive Multi-Role Demo Sandbox & Mutex Concurrency Locks** — High-fidelity demonstration environment supporting 4 live simulated personas (`student`, `teacher`, `admin`, `parent`) protected by distributed mutex locks, cookie-only auth, and an in-memory mutation interceptor (`demoGuard`) that guarantees database isolation and integrity.
+12. **Real-Time Campus Freshness & Cache Invalidation Pipeline** — Active client-side verification gate (`isTenantVerified`) coupled with strict HTTP cache-prevention headers (`no-store, no-cache, must-revalidate`), automatic `localStorage` cleanup, and comprehensive wildcard pattern cache purging (`tenant:*`, `landing:*`) on tenant deletion and suspension.
+13. **Comprehensive Public Compliance & Static Legal Documentation** — Dedicated standalone routes (`/privacy`, `/terms`, `/support`) addressing multi-tenant FERPA, GDPR, Indian DPDP Act compliance, licensing SLAs, and institutional escalation runbooks.
 
 ---
 
@@ -533,9 +536,62 @@ The seating engine distributes students across 2D room matrices ($R \times C$):
 
 ---
 
-## 10. Operations, Deployment & Quality Standards
+## 11. Interactive Demo Sandbox & Concurrency Engine
 
-### 10.1 Running locally
+### 11.1 Multi-Role Sandbox Isolation & Distributed Mutex Locks
+To allow prospective campus decision-makers, faculty, and students to evaluate AttendEase without manual account creation:
+1. **Four Simulated Personas**:
+   - `student` (Aarav Sharma — roll CS-101, attendance history, fees ledger, marksheet).
+   - `teacher` (Dr. Vikramaditya Sen — lecture roster, face scan session, assignment grading).
+   - `admin` (Prof. Sunita Rao — timetable builder, leave approvals, institutional settings).
+   - `parent` (Rajesh Sharma — student progress tracker, fee payments, parent portal).
+2. **Distributed Mutex Lock**:
+   - Backed by Redis with in-memory Map fallback (`backend/services/demoService.js`).
+   - Prevents multiple visitors from simultaneously overwriting or conflicting in the same active demo session.
+   - Enforces a 15-minute lease with automatic expiration and renewal.
+   - Explicit cleanup triggers on walkthrough exit (`POST /api/demo/end`) or disconnect.
+3. **Cookie-Only Authentication**:
+   - Demo access tokens are transmitted exclusively via secure, `httpOnly` session cookies.
+   - The frontend API client automatically strips `Authorization: Bearer` headers in demo mode to prevent token exposure.
+4. **State-Preserving Mutation Interceptor (`demoGuard.js`)**:
+   - Read requests pass through directly to the database.
+   - Mutating requests (e.g. submitting a leave request or marking a simulated ticket) are intercepted by `demoGuard`, returning realistic HTTP 200/201 mock payloads while keeping the live database 100% pristine.
+
+---
+
+## 12. Campus Discovery & Real-Time Tenant Verification Pipeline
+
+### 12.1 Client-Side Verification Gate & Auto-Healing
+To eliminate stale institution data when institutions are deleted or suspended by super administrators:
+1. **Active Verification on Mount**:
+   - `LandingPage.jsx` gates remembered campus branding with `isTenantVerified`.
+   - On initialization, it queries `GET /api/landing/tenant-info?subdomain=:subdomain&_t=:timestamp`.
+   - If the backend returns `hasTenant: false` or an error, `activeTenant` is automatically cleared from `localStorage` and `recentTenants` is pruned.
+2. **HTTP Cache Suppression**:
+   - Public discovery routes (`/api/landing/search-tenants` and `/api/landing/tenant-info`) emit `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`, `Pragma: no-cache`, and `Expires: 0`.
+   - Browser disk caching is neutralized with millisecond timestamp parameters (`_t`).
+3. **Super Admin Pattern Invalidation**:
+   - When a tenant is deleted (`deleteTenant`) or suspended (`suspendTenant`), `adminController.js` clears wildcard cache keys across `tenant:*`, `landing:*`, `*subdomain*`, and `*tenantId*`.
+
+---
+
+## 13. Public Legal, Security & Compliance Architecture
+
+### 13.1 Standalone Public Compliance Surface
+1. **Zero-Auth Accessibility**:
+   - Dedicated frontend routes (`/privacy`, `/terms`, `/support`) rendered outside tenant-specific subdomains to ensure universal prospective access.
+2. **Multi-Jurisdiction Academic Compliance**:
+   - **FERPA Compliance**: Student educational records, directory information opt-outs, and parent access governance.
+   - **Indian DPDP Act 2023**: Purpose limitation, parental consent mechanisms for minors, and data fiduciary transparency.
+   - **GDPR**: Right to erasure, biometric vector isolation, and cryptographic auditability.
+3. **Uptime & Disaster Recovery Commitments**:
+   - Documented 99.9% uptime SLA commitments, automated failover procedures, and institutional support escalation matrix.
+
+---
+
+## 14. Operations, Deployment & Quality Standards
+
+### 14.1 Running locally
 
 ```bash
 # 1. Start Backend API Server (Port 8011)
@@ -551,7 +607,7 @@ cd ../frontend
 npm start
 ```
 
-### 10.2 Production Quality Verification Gates
+### 14.2 Production Quality Verification Gates
 All production code updates must strictly adhere to the following quality checks:
 1. **Backend Syntax & Runtime Integrity:**
    ```bash
@@ -569,7 +625,7 @@ All production code updates must strictly adhere to the following quality checks
 
 ---
 
-## 11. Cross-Reference Documentation
+## 15. Cross-Reference Documentation
 
 For detailed step-by-step developer guides and roadmap details, refer to:
 - [CONTEXT.md](file:///c:/Users/Parth%20Manocha/Desktop/DEV/attendease_/CONTEXT.md) — Comprehensive Fast On-boarding & Conventions Guide.

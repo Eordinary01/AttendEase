@@ -13,7 +13,8 @@
 4. [Sev-2: Razorpay Billing Desync & Double Charging](#4-sev-2-razorpay-billing-desync--double-charging)
 5. [Sev-2: Bull Queue Worker Backlog / Crash](#5-sev-2-bull-queue-worker-backlog--crash)
 6. [Sev-3: Multi-Tenant Data Leak Investigation](#6-sev-3-multi-tenant-data-leak-investigation)
-7. [Health Checks & Diagnostics Cheat Sheet](#7-health-checks--diagnostics-cheat-sheet)
+7. [Sev-3: Stale Campus Discovery or Tenant Deletion Ghost Artifacts](#7-sev-3-stale-campus-discovery-or-tenant-deletion-ghost-artifacts)
+8. [Health Checks & Diagnostics Cheat Sheet](#8-health-checks--diagnostics-cheat-sheet)
 
 ---
 
@@ -166,7 +167,39 @@
 
 ---
 
-## 7. Health Checks & Diagnostics Cheat Sheet
+## 7. Sev-3: Stale Campus Discovery or Tenant Deletion Ghost Artifacts
+
+### Symptoms
+- An institution deleted or suspended in Super Admin console continues to appear in public landing page searches, hero banners, or campus switcher autocomplete.
+- A user reports their deleted campus name still appearing in their top navigation bar.
+
+### Root Cause
+1. Wildcard cache keys (`landing:*` or `tenant:subdomain:*`) lingered in Redis / in-memory cache without deletion invalidation.
+2. The user's browser retained `activeTenant` or `recentTenants` in `localStorage` without validating active existence against `/api/landing/tenant-info`.
+
+### Immediate Actions
+1. **Flush Wildcard Pattern Caches**:
+   ```javascript
+   // In Node REPL:
+   const cache = require('./backend/middleware/cache');
+   await cache.delPattern('landing:*');
+   await cache.delPattern('*<subdomain>*');
+   await cache.delPattern('tenant:*');
+   ```
+2. **Verify Public Route Response**:
+   ```bash
+   curl -i "http://localhost:8011/api/landing/tenant-info?subdomain=<subdomain>&_t=$(date +%s)"
+   # Expected response: HTTP 200 with { "success": true, "hasTenant": false }
+   # Headers must include: Cache-Control: no-store, no-cache, must-revalidate
+   ```
+3. **Inspect Database Document**:
+   - Ensure the `Tenant` document is removed or marked with `{ isActive: false, deletedAt: { $ne: null } }`.
+4. **Client-Side Self-Healing**:
+   - When the user visits the landing page, the `isTenantVerified` gate automatically calls `clearActiveTenant()` and `removeRecentTenant()` to purge the ghost campus from client storage.
+
+---
+
+## 8. Health Checks & Diagnostics Cheat Sheet
 
 | Check | Command / Endpoint | Expected Response |
 |---|---|---|

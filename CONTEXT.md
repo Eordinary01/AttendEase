@@ -348,6 +348,76 @@ AttendEase provides an automated, queue-backed semester progression engine that 
 
 ---
 
+## Interactive Demo Sandbox & Concurrency Locks
+
+- **Slot Concurrency & Lock Engine (`backend/services/demoService.js` & `backend/controllers/demoController.js`)**:
+  - Multi-role sandbox support for `student`, `teacher`, `admin`, and `parent`.
+  - Concurrency mutex lock prevents multiple simultaneous visitors from colliding on the same demo role session.
+  - Automatic slot release on demo exit (`POST /api/demo/end`), session expiration, or disconnect.
+- **Cookie-Only Authentication Mode (`frontend/src/utils/api.js` & `backend/middleware/csrf.js`)**:
+  - When demo mode is active (`isDemoActive()`), outgoing requests suppress the `Authorization: Bearer` header and rely strictly on secure `httpOnly` cookies.
+  - CSRF exemptions configured for public demo claims (`POST /api/demo/claim`) and parent walkthrough logins (`POST /api/auth/parent-login`).
+- **Simulated Mutation Interceptor (`backend/middleware/demoGuard.js` & `frontend/src/utils/demoSandbox.js`)**:
+  - Intercepts state-altering actions (e.g. leave applications, ticket creation) in demo mode with synthetic responses, keeping the underlying demonstration database completely pristine.
+  - Sensitive operations (billing, plan changes, tenant deletion) return a clear 403 explanatory error in demo mode.
+
+---
+
+## Evaluation Access, Feature Limits & Registration Plan Selection
+
+- **14-Day Evaluation Access (`backend/middleware/featureGuard.js` & `backend/middleware/limitGuard.js`)**:
+  - Tenants in active trial (`subscription.status === 'trial'` and within `trialEndsAt`) are granted evaluation access to advanced tier features (such as Reports & Analytics).
+  - Student limit guard assigns 500 slots during evaluation trials (upgraded from the default 50 of the standard free tier).
+  - Hard feature gating activates only when a trial expires or transitions to a paid tier.
+- **Registration Plan Selection (`frontend/src/component/Landing/TenantRegistration.jsx` & `backend/controllers/tenantController.js`)**:
+  - Landing page pricing CTAs pass the selected plan query parameter (e.g. `/register/tenant?plan=professional`).
+  - Tenant registration captures `?plan=` and provisions the trial for that requested tier.
+- **Pricing Modal Count Normalization (`frontend/src/component/common/PricingModal.jsx`)**:
+  - Strict type checking (`typeof context.current === 'number' && typeof context.limit === 'number'`) ensures usage displays cleanly without `undefined/undefined` rendering artifacts.
+
+---
+
+## Institutional Theme & Branding Customization
+
+- **Brand Defaults & Standards (`backend/models/Tenant.js` & `frontend/src/component/header/index.jsx`)**:
+  - Default primary branding colors updated to **Deep Teal** (`#005c55`) and **Cobalt Blue** (`#1d4ed8`) replacing legacy purple defaults.
+- **Dynamic CSS Variable Injection (`frontend/src/contexts/ThemeContexts.jsx` & `frontend/src/component/Admin/TenantSettings.jsx`)**:
+  - When tenant branding is fetched or updated, CSS custom properties (`--theme-primary`, `--theme-primary-hover`, `--theme-primary-soft`, `--theme-primary-border`, `--theme-primary-rgb`) are injected directly into `document.documentElement.style`.
+  - Instant cache-busting in `TenantSettings.jsx` updates `localStorage` and forces immediate re-application of theme styles across the entire application shell without requiring a hard page refresh.
+
+---
+
+## Landing Page Campus Freshness & Super Admin Deletion Sync
+
+- **Real-Time Tenant Verification (`frontend/src/component/Landing/LandingPage.jsx`)**:
+  - `activeTenant` display is strictly gated by an `isTenantVerified` state.
+  - On mount, an effect validates the locally remembered campus against `GET /api/landing/tenant-info?subdomain=...&_t=Date.now()`.
+  - If the backend reports `hasTenant: false` (deleted, inactive, or suspended), the client automatically purges `localStorage` via `clearActiveTenant()` and `removeRecentTenant(subdomain)` and resets the active tenant state to `null`.
+  - Completely prevents stale or deleted institution names from lingering in the navbar button or hero campus banner.
+- **Public Endpoint Caching Hygiene (`backend/routes/landingRoutes.js`)**:
+  - `GET /api/landing/search-tenants` and `GET /api/landing/tenant-info` emit HTTP cache-prevention headers (`Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`, `Pragma: no-cache`, `Expires: 0`).
+  - Database queries explicitly filter `{ isActive: true, deletedAt: null, 'subscription.status': { $in: ['active', 'trial'] } }`.
+- **Super Admin Invalidation (`backend/controllers/adminController.js` & `frontend/src/component/SuperAdmin/TenantList.jsx`)**:
+  - Tenant deletion (`deleteTenant`) and suspension (`suspendTenant`) invalidate all matching Redis/in-memory patterns (`tenant:*`, `landing:*`, `*subdomain*`, `*tenantId*`).
+  - `TenantList.jsx` purges client-side `activeTenant` and `recentTenants` storage if the deleted campus matches the admin's currently remembered tenant.
+- **Campus Switcher Management (`frontend/src/component/Landing/CampusSwitcherModal.jsx`)**:
+  - Appends cache-busting timestamps (`_t`) to tenant searches.
+  - Renders an interactive remove button `(×)` on each recent campus badge so users can manually purge old visits from their device history.
+
+---
+
+## Legal & Public Compliance Routes
+
+- **Public Static Routes (`frontend/src/App.js`)**:
+  - Dedicated standalone routes accessible without authentication:
+    - `/privacy` &rarr; `<PrivacyPolicy />` (`frontend/src/component/Legal/PrivacyPolicy.jsx`): Multi-tenant FERPA, GDPR, and DPDP compliance documentation.
+    - `/terms` &rarr; `<TermsOfService />` (`frontend/src/component/Legal/TermsOfService.jsx`): Academic SaaS licensing, acceptable use, and uptime SLAs.
+    - `/support` &rarr; `<PublicSupport />` (`frontend/src/component/Legal/PublicSupport.jsx`): Self-service troubleshooting, emergency escalation channels, and campus onboarding contact.
+- **Footer & Authentication Interlinking**:
+  - Direct links embedded across `LandingPage` footer, `TenantRegistration`, and login forms.
+
+---
+
 ## Running Locally
 
 ```
