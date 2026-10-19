@@ -32,6 +32,7 @@ import {
   FileText
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContexts';
+import { DEFAULT_PRIMARY, DEFAULT_SECONDARY } from '../../utils/theme';
 
 const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const { colors: themeContextColors } = useTheme();
@@ -40,13 +41,13 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
   const [planModules, setPlanModules] = useState(null);
   const getInitialColors = () => {
     const cached = getCachedTenantBranding();
-    const primary = cached?.branding?.primaryColor || themeContextColors?.primary || '#6366f1';
-    const secondary = cached?.branding?.secondaryColor || themeContextColors?.secondary || '#8b5cf6';
+    const primary = cached?.branding?.primaryColor || themeContextColors?.primary || DEFAULT_PRIMARY;
+    const secondary = cached?.branding?.secondaryColor || themeContextColors?.secondary || DEFAULT_SECONDARY;
     return {
       primary,
       secondary,
-      light: '#ede9fe',
-      lighter: '#f5f3ff',
+      light: '#f0fdfa',
+      lighter: '#f0fdfa',
     };
   };
   const [themeColors, setThemeColors] = useState(getInitialColors);
@@ -57,7 +58,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
     if (themeContextColors?.primary) {
       setThemeColors({
         primary: themeContextColors.primary,
-        secondary: themeContextColors.secondary || '#8b5cf6',
+        secondary: themeContextColors.secondary || DEFAULT_SECONDARY,
         light: adjustColor(themeContextColors.primary, 85),
         lighter: adjustColor(themeContextColors.primary, 92),
       });
@@ -107,10 +108,10 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
         
         if (branding) {
           const colors = {
-            primary: branding.primaryColor || '#7c3aed',
-            secondary: branding.secondaryColor || '#6d28d9',
-            light: adjustColor(branding.primaryColor || '#7c3aed', 85),
-            lighter: adjustColor(branding.primaryColor || '#7c3aed', 92),
+            primary: branding.primaryColor || DEFAULT_PRIMARY,
+            secondary: branding.secondaryColor || DEFAULT_SECONDARY,
+            light: adjustColor(branding.primaryColor || DEFAULT_PRIMARY, 85),
+            lighter: adjustColor(branding.primaryColor || DEFAULT_PRIMARY, 92),
           };
           setThemeColors(colors);
           
@@ -268,8 +269,8 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             </Link>
           )}
 
-          {/* SUBJECTS LINK - Available for everyone */}
-          {isAuthenticated && (
+          {/* SUBJECTS LINK - Available for everyone except parent */}
+          {isAuthenticated && role !== 'parent' && (
             <Link 
               to={getSubjectsRoute()}
               className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
@@ -279,7 +280,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             </Link>
           )}
           
-          {/* Parent-specific links (minimal nav) */}
+          {/* Parent-specific links */}
           {isAuthenticated && role === 'parent' && (
             <>
               <Link
@@ -290,12 +291,37 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
                 <span>Dashboard</span>
               </Link>
               <Link
-                to="/timetable"
+                to="/attendance-history"
+                className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+              >
+                <ClipboardCheck className="h-5 w-5" />
+                <span>Attendance</span>
+              </Link>
+              <Link
+                to="/calendar"
                 className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
               >
                 <Calendar className="h-5 w-5" />
-                <span>Timetable</span>
+                <span>Calendar</span>
               </Link>
+              {(planModules === null || planModules.examManagement) && (
+                <Link
+                  to="/exams/results"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <FileText className="h-5 w-5" />
+                  <span>Exam Results</span>
+                </Link>
+              )}
+              {(planModules === null || planModules.financeManagement) && (
+                <Link
+                  to="/fees"
+                  className="flex items-center space-x-2 hover:bg-white/20 transition-colors duration-200 px-3 py-2 rounded-lg"
+                >
+                  <DollarSign className="h-5 w-5" />
+                  <span>My Fees</span>
+                </Link>
+              )}
             </>
           )}
 
@@ -667,7 +693,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           {isAuthenticated && (
             <Link 
               to="/dashboard" 
-              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <Home className="h-5 w-5" />
@@ -676,10 +702,10 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           )}
 
           {/* Subjects link */}
-          {isAuthenticated && (
+          {isAuthenticated && role !== 'parent' && (
             <Link 
               to={getSubjectsRoute()}
-              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <BookMarked className="h-5 w-5" />
@@ -687,12 +713,62 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             </Link>
           )}
 
+          {/* Parent-specific mobile links */}
+          {isAuthenticated && role === 'parent' && (
+            <>
+              <Link
+                to="/parent/dashboard"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Home className="h-5 w-5" />
+                <span>Parent Dashboard</span>
+              </Link>
+              <Link
+                to="/attendance-history"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <ClipboardCheck className="h-5 w-5" />
+                <span>Attendance History</span>
+              </Link>
+              <Link
+                to="/calendar"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Calendar className="h-5 w-5" />
+                <span>Academic Calendar</span>
+              </Link>
+              {(planModules === null || planModules.examManagement) && (
+                <Link
+                  to="/exams/results"
+                  className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <FileText className="h-5 w-5" />
+                  <span>Exam Results</span>
+                </Link>
+              )}
+              {(planModules === null || planModules.financeManagement) && (
+                <Link
+                  to="/fees"
+                  className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <DollarSign className="h-5 w-5" />
+                  <span>My Fees</span>
+                </Link>
+              )}
+            </>
+          )}
+
           {/* Student-specific mobile links */}
           {isAuthenticated && role === 'student' && (
             <>
               <Link 
                 to="/tickets" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Ticket className="h-5 w-5" />
@@ -701,7 +777,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {(planModules === null || planModules.examManagement) && (
               <Link
                 to="/exams"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <FileText className="h-5 w-5" />
@@ -711,7 +787,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {(planModules === null || planModules.financeManagement) && (
               <Link
                 to="/fees"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <DollarSign className="h-5 w-5" />
@@ -726,7 +802,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <>
               <Link 
                 to="/attendance" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <PenSquare className="h-5 w-5" />
@@ -735,7 +811,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/attendance-overview" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <ClipboardCheck className="h-5 w-5" />
@@ -745,7 +821,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {(planModules === null || planModules.examManagement) && (
               <Link
                 to="/exams"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <FileText className="h-5 w-5" />
@@ -760,7 +836,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <>
               <Link 
                 to="/super-admin/dashboard" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Home className="h-5 w-5" />
@@ -768,7 +844,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               </Link>
               <Link 
                 to="/super-admin/tenants" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Building2 className="h-5 w-5" />
@@ -776,7 +852,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               </Link>
               <Link 
                 to="/super-admin/support" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <LifeBuoy className="h-5 w-5" />
@@ -784,7 +860,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               </Link>
               <Link
                 to="/super-admin/plans"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Package className="h-5 w-5" />
@@ -798,7 +874,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
             <>
               <Link 
                 to="/admin/upload-enrollments" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Upload className="h-5 w-5" />
@@ -807,7 +883,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/admin/manage-teachers" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Users className="h-5 w-5" />
@@ -816,7 +892,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/admin/assign-subjects" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Settings className="h-5 w-5" />
@@ -825,7 +901,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/admin/settings" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <Settings className="h-5 w-5" />
@@ -834,7 +910,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
 
               <Link 
                 to="/admin/support" 
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <LifeBuoy className="h-5 w-5" />
@@ -844,7 +920,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
               {(planModules === null || planModules.financeManagement) && (
               <Link
                 to="/admin/fees"
-                className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+                className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <DollarSign className="h-5 w-5" />
@@ -858,7 +934,7 @@ const Header = ({ isAuthenticated, onLogout, role, userName, userId }) => {
           {isAuthenticated && (
             <Link 
               to="/profile" 
-              className="flex items-center space-x-2 text-gray-700 hover:bg-purple-50 px-3 py-2 rounded-lg transition"
+              className="flex items-center space-x-2 text-gray-700 hover:bg-primary/10 hover:text-primary px-3 py-2 rounded-lg transition"
               onClick={() => setIsMenuOpen(false)}
             >
               <User className="h-5 w-5" />

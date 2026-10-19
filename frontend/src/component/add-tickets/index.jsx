@@ -227,12 +227,12 @@ export default function Ticket() {
 
         // Parallel fetch of user profile and subjects with assigned teachers
         const [userRes, subjectsRes] = await Promise.allSettled([
-          userId ? api.get(`/users/public/users/${userId}`) : Promise.reject("No user ID"),
+          api.get("/users/profile"),
           api.get("/tickets/student/subjects-teachers")
         ]);
 
         if (userRes.status === "fulfilled" && userRes.value.data) {
-          const user = userRes.value.data;
+          const user = userRes.value.data.data || userRes.value.data;
           setUserData({
             name: user.name || "",
             email: user.email || "",
@@ -240,7 +240,7 @@ export default function Ticket() {
             rollNo: user.rollNo || "",
             branch: user.branch || "",
             semester: user.semester || 1,
-            courseName: user.courseName || "Undergraduate",
+            courseName: user.courseName || (user.courseId?.name || "Undergraduate"),
             userId: user._id || userId
           });
         } else {

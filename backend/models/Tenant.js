@@ -55,9 +55,9 @@ const tenantSchema = new mongoose.Schema({
   // Branding
   branding: {
     logo: String,
-    primaryColor: { type: String, default: '#6366f1' },
-    secondaryColor: { type: String, default: '#8b5cf6' },
-    accentColor: { type: String, default: '#6366f1' },
+    primaryColor: { type: String, default: '#005c55' },
+    secondaryColor: { type: String, default: '#1d4ed8' },
+    accentColor: { type: String, default: '#005c55' },
     institutionName: String,
     welcomeMessage: String,
     customMessage: String,

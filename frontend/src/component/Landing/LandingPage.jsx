@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check,
@@ -42,6 +42,8 @@ import api from '../../utils/api';
 import {
   getActiveTenant,
   setActiveTenant as persistActiveTenant,
+  clearActiveTenant,
+  removeRecentTenant,
   getTenantLoginUrl,
   getFullTenantUrl
 } from '../../utils/activeTenant';
@@ -245,7 +247,8 @@ export const LandingPage = () => {
 
   // Campus switcher & active tenant portal states
   const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
-  const [activeTenant, setActiveTenantState] = useState(() => getActiveTenant());
+  const [activeTenant, setActiveTenantState] = useState(null);
+  const [isTenantVerified, setIsTenantVerified] = useState(false);
   const [showCampusBanner, setShowCampusBanner] = useState(true);
   const [featuredCampuses, setFeaturedCampuses] = useState([]);
   const [copiedCampusSubdomain, setCopiedCampusSubdomain] = useState(null);
@@ -259,10 +262,57 @@ export const LandingPage = () => {
     }
   });
 
+  // Validate remembered active tenant against live backend
+  useEffect(() => {
+    const current = getActiveTenant();
+    if (!current || !current.subdomain || current.subdomain === 'demo') {
+      setActiveTenantState(null);
+      setIsTenantVerified(false);
+      return;
+    }
+
+    let isMounted = true;
+    api.get('/landing/tenant-info', {
+      params: { subdomain: current.subdomain, _t: Date.now() },
+    })
+      .then((res) => {
+        if (!isMounted) return;
+        if (!res.data?.hasTenant || !res.data?.tenant) {
+          // Tenant no longer exists or was deleted/suspended
+          clearActiveTenant();
+          removeRecentTenant(current.subdomain);
+          setActiveTenantState(null);
+          setIsTenantVerified(false);
+        } else {
+          // Tenant is active; sync fresh branding and name
+          const updated = {
+            subdomain: res.data.tenant.subdomain,
+            name: res.data.tenant.name || current.name,
+            logo: res.data.tenant.branding?.logo || null,
+            primaryColor: res.data.tenant.branding?.primaryColor || null,
+          };
+          persistActiveTenant(updated);
+          setActiveTenantState(updated);
+          setIsTenantVerified(true);
+        }
+      })
+      .catch(() => {
+        // Any error fetching tenant info means tenant is not accessible
+        clearActiveTenant();
+        removeRecentTenant(current.subdomain);
+        setActiveTenantState(null);
+        setIsTenantVerified(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Fetch featured active registered campuses for walkthrough
   useEffect(() => {
     let isMounted = true;
-    api.get('/landing/search-tenants')
+    api.get('/landing/search-tenants', { params: { _t: Date.now() } })
       .then((res) => {
         if (!isMounted) return;
         if (res.data?.success && Array.isArray(res.data.data)) {
@@ -486,36 +536,30 @@ export const LandingPage = () => {
           </div>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
+          <nav className="hidden lg:flex items-center gap-7 text-xs font-semibold tracking-wide uppercase text-ink-muted">
             <button
               onClick={() => scrollTo('features')}
-              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+              className="hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
             >
               Modules
             </button>
             <button
               onClick={() => scrollTo('how-it-works')}
-              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+              className="hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
             >
-              How it works
+              Architecture
             </button>
             <button
               onClick={() => scrollTo('portals')}
-              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+              className="hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
             >
               Portals
             </button>
             <button
               onClick={() => scrollTo('pricing')}
-              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
+              className="hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
             >
-              Plans
-            </button>
-            <button
-              onClick={() => scrollTo('contact')}
-              className="text-ink-muted hover:text-ink transition-colors focus:outline-none focus:ring-1 focus:ring-primary rounded px-1"
-            >
-              Inquiry
+              Pricing
             </button>
           </nav>
 
@@ -524,27 +568,33 @@ export const LandingPage = () => {
             <button
               type="button"
               onClick={() => setIsCampusModalOpen(true)}
-              className="h-9 inline-flex items-center gap-1.5 px-3 bg-surface hover:bg-surface-subtle text-ink rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
-              title="Search institutional login portals"
+              className="h-8.5 inline-flex items-center gap-1.5 px-2.5 bg-surface-subtle/80 hover:bg-surface-subtle text-ink rounded-lg border border-line transition max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-primary"
+              title={isTenantVerified && activeTenant ? activeTenant.name : 'Select Campus Portal'}
             >
-              <School className="w-3.5 h-3.5 text-primary" />
-              <span>{activeTenant ? activeTenant.name : 'Campus Portals'}</span>
+              <School className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="truncate">{isTenantVerified && activeTenant ? activeTenant.name : 'Campuses'}</span>
+              <ChevronDown className="w-3 h-3 text-ink-muted shrink-0 opacity-60" />
             </button>
+
             <button
               onClick={() => navigate('/login')}
-              className="text-ink-muted hover:text-ink transition-colors px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              className="text-ink-muted hover:text-ink transition-colors px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-primary"
             >
               Sign in
             </button>
+
             <button
               onClick={openRoleModal}
-              className="h-9 inline-flex items-center justify-center px-3.5 bg-surface hover:bg-surface-subtle text-ink rounded border border-line transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              className="h-8.5 inline-flex items-center gap-1.5 px-3 bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 rounded-lg text-xs font-semibold transition active:scale-95"
+              title="Launch interactive role sandbox"
             >
-              Explore Demo Sandbox
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span>Sandbox</span>
             </button>
+
             <button
               onClick={() => navigate('/register/tenant')}
-              className="h-9 inline-flex items-center justify-center px-4 bg-primary hover:bg-primary-hover text-on-primary rounded border border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary shadow-xs"
+              className="h-8.5 inline-flex items-center justify-center px-3.5 bg-primary hover:bg-primary-hover text-on-primary rounded-lg font-semibold text-xs border border-primary transition shadow-xs active:scale-95"
             >
               Start Free Trial
             </button>
@@ -635,7 +685,7 @@ export const LandingPage = () => {
         <section className="w-full border-b border-line bg-background">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16">
             {/* Active Campus Remembered Banner */}
-            {activeTenant && showCampusBanner && (
+            {isTenantVerified && activeTenant && showCampusBanner && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1425,6 +1475,7 @@ export const LandingPage = () => {
                           onClick={() => {
                             persistActiveTenant(campus);
                             setActiveTenantState(campus);
+                            setIsTenantVerified(true);
                             navigate(campus.loginUrl || `/login/${campus.subdomain}`);
                           }}
                           className="flex-1 h-8 bg-surface hover:bg-surface-subtle text-ink hover:text-primary border border-line rounded text-xs font-medium flex items-center justify-center gap-1.5 transition"
@@ -1485,6 +1536,7 @@ export const LandingPage = () => {
                             const t = { name: campus.name, subdomain: campus.subdomain, primaryColor: campus.color };
                             persistActiveTenant(t);
                             setActiveTenantState(t);
+                            setIsTenantVerified(true);
                             navigate(`/login/${campus.subdomain}`);
                           }}
                           className="flex-1 h-8 bg-surface hover:bg-surface-subtle text-ink hover:text-primary border border-line rounded text-xs font-medium flex items-center justify-center gap-1.5 transition"
@@ -2080,10 +2132,16 @@ export const LandingPage = () => {
               </button>
             </nav>
           </div>
-          <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-ink-muted">
-            <p>&copy; {new Date().getFullYear()} AttendEase. All rights reserved.</p>
-            <div className="font-mono text-xs">
-              tenant-scoped data isolation &bull; WCAG AA compliant
+          <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-ink-muted">
+            <p>&copy; {new Date().getFullYear()} AttendEase Technologies Inc. All rights reserved.</p>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 font-medium">
+              <Link to="/privacy" className="hover:text-ink transition-colors">Privacy Policy</Link>
+              <span>&bull;</span>
+              <Link to="/terms" className="hover:text-ink transition-colors">Terms of Service</Link>
+              <span>&bull;</span>
+              <Link to="/support" className="hover:text-ink transition-colors">Helpdesk & FAQ</Link>
+              <span className="hidden sm:inline">&bull;</span>
+              <span className="font-mono text-ink-faint hidden sm:inline">tenant-scoped isolation &bull; FERPA &bull; DPDP</span>
             </div>
           </div>
         </div>
@@ -2099,6 +2157,7 @@ export const LandingPage = () => {
         onSelectTenant={(tenant) => {
           persistActiveTenant(tenant);
           setActiveTenantState(tenant);
+          setIsTenantVerified(true);
           setShowCampusBanner(true);
           navigate(getTenantLoginUrl(tenant.subdomain));
         }}

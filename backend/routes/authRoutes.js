@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { authenticateToken } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const { extractTenantSubdomain } = require('../middleware/tenantResolver');
 const {
   login,
   superAdminLogin,
@@ -121,13 +122,11 @@ authRoute.get('/tenant-info', async (req, res) => {
       }
     }
     
-    // If no subdomain, try to detect from host
-    const host = req.headers.host;
-    const subdomainMatch = host?.match(/^([^.]+)\./);
-    if (subdomainMatch && subdomainMatch[1] !== 'www' && subdomainMatch[1] !== 'app') {
-      const detectedSubdomain = subdomainMatch[1];
+    // If no subdomain, try to detect from host using canonical extractor
+    const detectedSubdomain = extractTenantSubdomain(req.headers.host);
+    if (detectedSubdomain) {
       const tenant = await Tenant.findOne({ 
-        subdomain: detectedSubdomain,
+        subdomain: detectedSubdomain.toLowerCase(),
         isActive: true 
       }).select('name subdomain domain branding subscription.plan');
       

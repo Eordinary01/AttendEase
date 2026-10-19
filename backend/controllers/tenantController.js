@@ -35,6 +35,7 @@ const registerTenant = async (req, res) => {
       primaryColor,
       secondaryColor,
       welcomeMessage,
+      plan: requestedPlan,
     } = req.body;
 
     // Validation
@@ -127,14 +128,21 @@ const registerTenant = async (req, res) => {
         counter++;
       }
 
-      // Get free plan
-      const freePlan = await Plan.findOne({ code: "free" });
+      // Resolve trial plan
+      const validPlans = ['free', 'basic', 'professional', 'enterprise'];
+      const selectedPlanCode = (requestedPlan && validPlans.includes(requestedPlan.toLowerCase()))
+        ? requestedPlan.toLowerCase()
+        : 'enterprise';
 
-      if (!freePlan) {
+      let targetPlan = await Plan.findOne({ code: selectedPlanCode });
+      if (!targetPlan) {
+        targetPlan = await Plan.findOne({ code: "free" });
+      }
+      if (!targetPlan) {
         throw new Error("Default plan not found. Please run seed:plans first.");
       }
 
-      // Create tenant
+      // Create tenant with 14-day trial of selected plan
       const tenant = new Tenant({
         name: institutionName.trim(),
         subdomain: subdomain,
@@ -148,16 +156,24 @@ const registerTenant = async (req, res) => {
           pincode: pincode || "",
         },
         subscription: {
-          plan: 'free',
+          plan: selectedPlanCode,
           status: 'trial',
           startDate: new Date(),
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
         },
-        limits: freePlan.limits,
+        limits: targetPlan.limits || {
+          maxStudents: 500,
+          maxTeachers: 50,
+          maxAdmins: 5,
+          maxSubjects: 100,
+          maxStorageMB: 20480,
+          maxAPIcallsPerDay: 50000,
+        },
         branding: {
           institutionName: institutionName.trim(),
-          primaryColor: primaryColor || "#6366f1",
-          secondaryColor: secondaryColor || "#8b5cf6",
+          primaryColor: primaryColor || "#005c55",
+          secondaryColor: secondaryColor || "#1d4ed8",
+          accentColor: primaryColor || "#005c55",
           welcomeMessage: welcomeMessage || "",
         },
         isActive: true,

@@ -85,8 +85,18 @@ const featureGuard = (featureName, options = {}) => {
         });
       }
 
+      // Check if tenant is currently in an active trial
+      const subscription = req.tenant.subscription || {};
+      const trialEndsAt = subscription.trialEndsAt ? new Date(subscription.trialEndsAt).getTime() : 0;
+      const isActiveTrial = subscription.status === 'trial' && trialEndsAt > Date.now();
+
+      // Active trial grants full enterprise evaluation access
+      if (isActiveTrial) {
+        return next();
+      }
+
       // Supports both full Tenant document (subscription.plan) and flattened req.tenant (plan)
-      const planCode = req.tenant.subscription?.plan || req.tenant.plan;
+      const planCode = req.tenant.subscription?.plan || req.tenant.plan || 'free';
       const tenantId = req.tenant._id || req.tenant.id;
 
       const planCacheKey = `plan:${planCode}`;
@@ -182,6 +192,11 @@ const limitGuard = (resourceType) => {
       let limit = 0;
       let resourceName = "";
 
+      // Check if tenant is currently in an active trial
+      const subscription = req.tenant.subscription || {};
+      const trialEndsAt = subscription.trialEndsAt ? new Date(subscription.trialEndsAt).getTime() : 0;
+      const isActiveTrial = subscription.status === 'trial' && trialEndsAt > Date.now();
+
       // Get current count based on resource type
       switch (resourceType) {
         case "student":
@@ -191,6 +206,9 @@ const limitGuard = (resourceType) => {
             isActive: true,
           });
           limit = limits.maxStudents || 50;
+          if (isActiveTrial && limit < 500) {
+            limit = 500;
+          }
           resourceName = "Students";
           break;
 

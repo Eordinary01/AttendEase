@@ -280,8 +280,8 @@ const PricingModal = ({
                   {resourceLabel
                     ? `${resourceLabel} limit reached`
                     : "Plan limit reached"}
-                  {context.current !== null &&
-                    context.limit !== null &&
+                  {typeof context.current === 'number' &&
+                    typeof context.limit === 'number' &&
                     ` (${context.current}/${context.limit})`}
                 </p>
                 <p className="text-amber-700 mt-0.5">{context.message}</p>
@@ -418,7 +418,7 @@ const PricingModal = ({
                 <button
                   onClick={async () => {
                     try {
-                      await api.post(`${process.env.REACT_APP_API_URL}/billing/continue-free`, {});
+                      await api.post('/billing/continue-free', {});
                       setSuccessMessage("Free tier resumed!");
                       setTimeout(() => {
                         setSuccessMessage(null);

@@ -86,8 +86,43 @@ export const clearActiveTenant = () => {
   try {
     localStorage.removeItem(ACTIVE_TENANT_KEY);
     localStorage.removeItem(SUBDOMAIN_KEY);
+    localStorage.removeItem('tenantName');
+    localStorage.removeItem('attendease:tenant_branding');
   } catch (err) {
     console.warn('Failed to clear active tenant:', err);
+  }
+};
+
+/**
+ * Remove a specific tenant from recent campuses list
+ * @param {string} subdomain
+ */
+export const removeRecentTenant = (subdomain) => {
+  if (!subdomain) return;
+  try {
+    const cleanSub = subdomain.trim().toLowerCase();
+    const recents = getRecentTenants().filter((t) => t.subdomain?.toLowerCase() !== cleanSub);
+    localStorage.setItem(RECENT_TENANTS_KEY, JSON.stringify(recents));
+
+    // If removing the active tenant, also clear active tenant storage
+    const active = getActiveTenant();
+    if (active && active.subdomain?.toLowerCase() === cleanSub) {
+      clearActiveTenant();
+    }
+  } catch (err) {
+    console.warn('Failed to remove recent tenant:', err);
+  }
+};
+
+/**
+ * Clear all cached campus and tenant data
+ */
+export const clearAllTenantCaches = () => {
+  clearActiveTenant();
+  try {
+    localStorage.removeItem(RECENT_TENANTS_KEY);
+  } catch (err) {
+    console.warn('Failed to clear recent tenants:', err);
   }
 };
 

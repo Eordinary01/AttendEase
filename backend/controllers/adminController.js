@@ -2352,7 +2352,14 @@ const suspendTenant = async (req, res) => {
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
+      await cache.delPattern(`*${tenant.subdomain}*`).catch(() => {});
     }
+    if (tenant.domain) {
+      await cache.del(`tenant:domain:${tenant.domain}`);
+    }
+    await cache.delPattern(`*${tenant._id}*`).catch(() => {});
+    await cache.delPattern('landing:*').catch(() => {});
+    await cache.delPattern('tenant:*').catch(() => {});
 
     logActivity({
       tenantId: tenant._id,
@@ -2404,7 +2411,14 @@ const activateTenant = async (req, res) => {
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
+      await cache.delPattern(`*${tenant.subdomain}*`).catch(() => {});
     }
+    if (tenant.domain) {
+      await cache.del(`tenant:domain:${tenant.domain}`);
+    }
+    await cache.delPattern(`*${tenant._id}*`).catch(() => {});
+    await cache.delPattern('landing:*').catch(() => {});
+    await cache.delPattern('tenant:*').catch(() => {});
 
     logActivity({
       tenantId: tenant._id,
@@ -2472,11 +2486,19 @@ const deleteTenant = async (req, res) => {
 
     await session.commitTransaction();
 
-    // Invalidate tenant cache
+    // Invalidate tenant and landing cache
     await cache.del(`tenant:${tenant._id}`);
     if (tenant.subdomain) {
       await cache.del(`tenant:subdomain:${tenant.subdomain}`);
+      await cache.delPattern(`*${tenant.subdomain}*`).catch(() => {});
     }
+    if (tenant.domain) {
+      await cache.del(`tenant:domain:${tenant.domain}`);
+      await cache.delPattern(`*${tenant.domain}*`).catch(() => {});
+    }
+    await cache.delPattern(`*${tenant._id}*`).catch(() => {});
+    await cache.delPattern('landing:*').catch(() => {});
+    await cache.delPattern('tenant:*').catch(() => {});
 
     logActivity({
       tenantId: tenant._id,

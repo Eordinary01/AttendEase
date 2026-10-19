@@ -18,6 +18,7 @@ import api from '../../utils/api';
 import {
   getRecentTenants,
   setActiveTenant,
+  removeRecentTenant,
   getTenantLoginUrl,
   getFullTenantUrl
 } from '../../utils/activeTenant';
@@ -58,7 +59,7 @@ export default function CampusSwitcherModal({ isOpen, onClose, onSelectTenant })
     setError(null);
     try {
       const res = await api.get('/landing/search-tenants', {
-        params: { q: searchTerm || '' },
+        params: { q: searchTerm || '', _t: Date.now() },
       });
       if (res.data?.success && Array.isArray(res.data.data)) {
         setResults(res.data.data);
@@ -72,6 +73,12 @@ export default function CampusSwitcherModal({ isOpen, onClose, onSelectTenant })
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRemoveRecent = (e, subdomain) => {
+    e.stopPropagation();
+    removeRecentTenant(subdomain);
+    setRecentTenants(getRecentTenants());
   };
 
   const handleSelect = (tenant) => {
@@ -179,14 +186,28 @@ export default function CampusSwitcherModal({ isOpen, onClose, onSelectTenant })
                   <Clock className="w-3 h-3" /> Recent:
                 </span>
                 {recentTenants.map((recent) => (
-                  <button
+                  <div
                     key={recent.subdomain}
-                    onClick={() => handleSelect(recent)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle hover:bg-primary/10 border border-line hover:border-primary/30 text-xs font-mono text-ink transition-colors"
+                    className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-surface-subtle hover:bg-primary/10 border border-line hover:border-primary/30 text-xs font-mono text-ink transition-colors group"
                   >
-                    <span>{recent.name || recent.subdomain}</span>
-                    <span className="text-[10px] text-ink-muted">({recent.subdomain})</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(recent)}
+                      className="inline-flex items-center gap-1.5 text-left focus:outline-none"
+                    >
+                      <span>{recent.name || recent.subdomain}</span>
+                      <span className="text-[10px] text-ink-muted">({recent.subdomain})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRemoveRecent(e, recent.subdomain)}
+                      className="p-0.5 text-ink-muted hover:text-rose-600 rounded hover:bg-surface transition ml-0.5"
+                      title={`Remove ${recent.name || recent.subdomain} from recents`}
+                      aria-label={`Remove ${recent.name || recent.subdomain} from recents`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

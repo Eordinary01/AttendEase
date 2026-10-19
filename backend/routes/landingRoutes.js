@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { optionalTenant } = require('../middleware/tenantResolver');
+const Tenant = require('../models/Tenant');
 const Plan = require('../models/Plan');
 const Lead = require("../models/Lead");
 const logger = require("../utils/logger");
@@ -100,6 +101,10 @@ router.get('/features', (req, res) => {
  */
 router.get('/tenant-info', async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     const { subdomain } = req.query;
     const host = req.headers.host;
     
@@ -111,7 +116,9 @@ router.get('/tenant-info', async (req, res) => {
           { subdomain: subdomain.toLowerCase() },
           { domain: subdomain.toLowerCase() }
         ],
-        isActive: true 
+        isActive: true,
+        deletedAt: null,
+        'subscription.status': { $in: ['active', 'trial'] }
       }).select('name subdomain branding subscription.plan');
     } else if (req.tenant) {
       tenant = req.tenant;
@@ -171,6 +178,10 @@ const searchLimiter = rateLimit({
  */
 router.get('/search-tenants', searchLimiter, async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     const Tenant = require('../models/Tenant');
     const { q } = req.query;
 
@@ -180,7 +191,9 @@ router.get('/search-tenants', searchLimiter, async (req, res) => {
       // Return top active public institutions as suggestions / walkthrough
       const defaultTenants = await Tenant.find({
         isActive: true,
+        deletedAt: null,
         isDemo: { $ne: true },
+        'subscription.status': { $in: ['active', 'trial'] }
       })
         .select('name subdomain branding.logo branding.primaryColor branding.institutionName')
         .limit(8)
@@ -202,7 +215,9 @@ router.get('/search-tenants', searchLimiter, async (req, res) => {
     const safeQ = qStr.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const tenants = await Tenant.find({
       isActive: true,
+      deletedAt: null,
       isDemo: { $ne: true },
+      'subscription.status': { $in: ['active', 'trial'] },
       $or: [
         { name: { $regex: safeQ, $options: 'i' } },
         { subdomain: { $regex: safeQ, $options: 'i' } },

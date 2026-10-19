@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { formatDateDMY } from '../../utils/dateUtils';
 import { logError } from '../../utils/logger';
+import { getActiveTenant, clearActiveTenant, removeRecentTenant } from '../../utils/activeTenant';
 import {
   Building2,
   RefreshCw,
@@ -103,9 +104,18 @@ const TenantList = () => {
   const handleDeleteTenant = async (tenantId) => {
     try {
       setActionLoading(tenantId);
+      const targetTenant = tenants.find((t) => t._id === tenantId);
       const response = await api.delete(`/admin/super/tenants/${tenantId}`);
       if (response.data?.success) {
         setTenants((prev) => prev.filter((t) => t._id !== tenantId));
+        // Invalidate active tenant and recents if the deleted tenant was remembered
+        if (targetTenant?.subdomain) {
+          const active = getActiveTenant();
+          if (active && active.subdomain?.toLowerCase() === targetTenant.subdomain.toLowerCase()) {
+            clearActiveTenant();
+          }
+          removeRecentTenant(targetTenant.subdomain);
+        }
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete tenant');

@@ -1,7 +1,7 @@
 // src/components/newLogin.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { 
   Mail, Lock, ArrowRight, GraduationCap, School, Building2, 
   Users, Link2, Eye, EyeOff, ShieldCheck, 
@@ -107,8 +107,9 @@ const NewLogin = ({ onLogin }) => {
           const b = t.branding || {};
           const customMsg = b.customMessage || b.welcomeMessage || null;
 
-          // Check if tenant's plan allows custom branding AND custom colors were specified
-          const planAllowsBranding = t.hasCustomBranding ?? (['professional', 'enterprise'].includes(t.plan));
+          // Check if tenant's plan allows custom branding OR if tenant is in active trial, AND custom colors were specified
+          const isTrial = t.subscription?.status === 'trial' || Boolean(t.trialEndsAt);
+          const planAllowsBranding = isTrial || (t.hasCustomBranding ?? ['professional', 'enterprise'].includes(t.plan || t.subscription?.plan));
           const hasCustomColors = planAllowsBranding && b.primaryColor && b.primaryColor.trim() !== '';
 
           const effectivePrimary = hasCustomColors ? b.primaryColor.trim() : DEFAULT_PRIMARY;
@@ -882,11 +883,11 @@ const NewLogin = ({ onLogin }) => {
       <footer className="max-w-6xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-ink-soft py-2 border-t border-line/40 gap-2">
         <p>&copy; {new Date().getFullYear()} {tenantBranding?.name || "AttendEase Technologies Inc."}. All rights reserved.</p>
         <div className="flex items-center gap-4 text-xs">
-          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Privacy Policy</span>
+          <Link to="/privacy" className="text-ink-faint hover:text-ink transition-colors">Privacy Policy</Link>
           <span>•</span>
-          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Terms of Service</span>
+          <Link to="/terms" className="text-ink-faint hover:text-ink transition-colors">Terms of Service</Link>
           <span>•</span>
-          <span className="text-ink-faint hover:text-ink transition-colors cursor-pointer">Support</span>
+          <Link to="/support" className="text-ink-faint hover:text-ink transition-colors">Support</Link>
         </div>
       </footer>
     </div>

@@ -60,14 +60,15 @@ import Input, { Select, Textarea } from "../common/ui/Input";
 import PricingModal from "../common/PricingModal";
 import { useUpgradeModal } from "../../utils/billing";
 import { useTheme } from '../../contexts/ThemeContexts';
+import { clearCachedTenantBranding } from "../../utils/tenantService";
 
 const TenantSettings = () => {
-  const { colors } = useTheme();
+  const { colors, applyThemeColors } = useTheme();
   
   const themeColors = {
-    primary: colors?.primary || '#6366f1',
-    secondary: colors?.secondary || '#8b5cf6',
-    lighter: colors?.primary ? `${colors.primary}10` : '#f5f3ff',
+    primary: colors?.primary || '#005c55',
+    secondary: colors?.secondary || '#1d4ed8',
+    lighter: colors?.primary ? `${colors.primary}10` : '#f0fdfa',
   };
   const { modalProps, openUpgrade, setPlanCode } = useUpgradeModal();
   const [loading, setLoading] = useState(true);
@@ -90,8 +91,8 @@ const TenantSettings = () => {
     // Branding
     branding: {
       institutionName: "",
-      primaryColor: "#6366f1",
-      secondaryColor: "#8b5cf6",
+      primaryColor: "#005c55",
+      secondaryColor: "#1d4ed8",
       logo: "",
       favicon: "",
     },
@@ -292,6 +293,15 @@ const TenantSettings = () => {
 
       if (response.data.success) {
         setSuccess("Settings updated successfully!");
+        clearCachedTenantBranding();
+        if (formData.branding?.primaryColor && applyThemeColors) {
+          applyThemeColors({
+            primary: formData.branding.primaryColor,
+            secondary: formData.branding.secondaryColor,
+          });
+        }
+        window.dispatchEvent(new CustomEvent("attendease:auth-changed"));
+
         if (response.data.data?.settings) {
           setFormData(prev => ({
             ...prev,
@@ -301,11 +311,7 @@ const TenantSettings = () => {
             collegeMetadata: response.data.data.collegeMetadata || prev.collegeMetadata,
           }));
         }
-        if (activeTab === "branding") {
-          setTimeout(() => setReloginRequired(true), 1000);
-        } else {
-          setTimeout(() => setSuccess(null), 5000);
-        }
+        setTimeout(() => setSuccess(null), 5000);
       }
     } catch (err) {
       logError("Save Settings", err);

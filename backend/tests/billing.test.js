@@ -79,6 +79,66 @@ async function runTests() {
     assert.strictEqual(typeof billingController.continueFreeTier, "function");
   });
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // TEST GROUP 3: Active Trial Feature & Limit Access
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log("\n--- TEST GROUP 3: Active Trial Feature & Limit Guard ---");
+
+  test("featureGuard permits reports and evaluation features during active 14-day trial", async () => {
+    const { featureGuard } = require("../middleware/featureGuard");
+    const mw = featureGuard("reports");
+
+    let nextCalled = false;
+    const req = {
+      tenant: {
+        _id: "tenant-trial-test",
+        subscription: {
+          plan: "free",
+          status: "trial",
+          trialEndsAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+        },
+      },
+      user: { role: "admin" },
+    };
+    const res = {
+      status: (code) => ({ json: (d) => ({ code, d }) }),
+    };
+
+    await mw(req, res, () => { nextCalled = true; });
+    assert.strictEqual(nextCalled, true, "featureGuard must call next() during active trial");
+  });
+
+  test("featureGuard blocks reports when trial has expired on free plan", async () => {
+    const { featureGuard } = require("../middleware/featureGuard");
+    const mw = featureGuard("reports");
+
+    let blockedStatus = null;
+    let blockedPayload = null;
+    const req = {
+      tenant: {
+        _id: "tenant-expired-test",
+        subscription: {
+          plan: "free",
+          status: "active", // trial expired, now active on free
+          trialEndsAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        },
+      },
+      user: { role: "admin" },
+    };
+    const res = {
+      status: (code) => {
+        blockedStatus = code;
+        return {
+          json: (data) => { blockedPayload = data; },
+        };
+      },
+    };
+
+    await mw(req, res, () => {});
+    assert.strictEqual(blockedStatus, 403, "featureGuard must block free plan when not in trial");
+    assert.strictEqual(blockedPayload?.upgradeRequired, true);
+  });
+
   console.log(`\n=== TEST RUN COMPLETE: ${passedTests} / ${totalTests} PASSED ===`);
   if (passedTests !== totalTests) {
     process.exit(1);

@@ -80,6 +80,9 @@ const ResetPassword = lazy(() => import("./component/Auth/ResetPassword"));
 const LeaveApplication = lazy(() => import("./component/Student/LeaveApplication"));
 const LeaveApprovalQueue = lazy(() => import("./component/Teacher/LeaveApprovalQueue"));
 const LeaveManagement = lazy(() => import("./component/Admin/LeaveManagement"));
+const PrivacyPolicy = lazy(() => import("./component/Legal/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./component/Legal/TermsOfService"));
+const PublicSupport = lazy(() => import("./component/Legal/PublicSupport"));
 
 const PageLoader = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
@@ -122,10 +125,18 @@ const PublicRoute = ({ children, isAuthenticated }) => {
   return children;
 };
 
-// Header shown only on public non-auth pages (hidden on the login screen)
+// Header shown only on public non-auth pages (hidden on login and standalone public pages)
 const PublicHeader = ({ isAuthenticated, onLogout, role, userName }) => {
   const location = useLocation();
-  if (isAuthenticated || location.pathname.startsWith("/login")) return null;
+  if (
+    isAuthenticated || 
+    location.pathname.startsWith("/login") ||
+    location.pathname === "/" ||
+    location.pathname === "/privacy" ||
+    location.pathname === "/terms" ||
+    location.pathname === "/support" ||
+    location.pathname.startsWith("/register")
+  ) return null;
   return (
     <Header isAuthenticated={isAuthenticated} onLogout={onLogout} role={role} userName={userName} />
   );
@@ -458,6 +469,11 @@ const App = () => {
             </PublicRoute>
           }
         />
+
+        {/* Public Legal & Support Routes */}
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/support" element={<PublicSupport />} />
 
         {/* Dashboard Route - Protected */}
         <Route
@@ -936,10 +952,18 @@ const App = () => {
         <Route
           path="/fees"
           element={
-            <Protected requiredRole="student">
+            <Protected requiredRole={["student", "parent"]}>
               <PlanGate requiredModule="financeManagement">
                 <FeePortal role={role} userId={userId} />
               </PlanGate>
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin/billing"
+          element={
+            <Protected requiredRole="admin">
+              <Navigate to="/admin/settings" replace />
             </Protected>
           }
         />

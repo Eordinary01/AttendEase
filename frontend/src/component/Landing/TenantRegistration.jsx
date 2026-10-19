@@ -1,6 +1,6 @@
 // src/components/Landing/TenantRegistration.jsx
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import {
@@ -27,6 +27,9 @@ const API_URL = process.env.REACT_APP_API_URL;
 
 const TenantRegistration = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlPlan = (searchParams.get('plan') || 'enterprise').toLowerCase();
+
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -45,9 +48,10 @@ const TenantRegistration = () => {
     state: '',
     country: 'India',
     pincode: '',
-    primaryColor: '#6366f1',
-    secondaryColor: '#8b5cf6',
-    welcomeMessage: ''
+    primaryColor: '#005c55',
+    secondaryColor: '#1d4ed8',
+    welcomeMessage: '',
+    selectedPlan: urlPlan,
   });
 
   const handleChange = (e) => {
@@ -108,6 +112,7 @@ const TenantRegistration = () => {
         primaryColor: formData.primaryColor,
         secondaryColor: formData.secondaryColor,
         welcomeMessage: formData.welcomeMessage,
+        plan: formData.selectedPlan,
       });
 
       if (response.data.success) {
@@ -213,7 +218,8 @@ const TenantRegistration = () => {
             Set Up Your Institution
           </h1>
           <p className="text-xs text-ink-soft">
-            Start your 14-day free trial. No credit card required.
+            Start your 14-day free trial on the{' '}
+            <span className="font-semibold text-primary capitalize">{formData.selectedPlan}</span> evaluation tier. No credit card required.
           </p>
         </div>
 
@@ -495,7 +501,14 @@ const TenantRegistration = () => {
         {/* Features List */}
         <div className="text-center space-y-3">
           <p className="text-xs text-ink-soft">
-            By signing up, you agree to our Terms of Service and Privacy Policy.
+            By signing up, you agree to our{' '}
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+              Privacy Policy
+            </Link>.
           </p>
           <div className="flex flex-wrap justify-center gap-4 text-xs font-semibold text-ink-soft">
             <span className="flex items-center gap-1">

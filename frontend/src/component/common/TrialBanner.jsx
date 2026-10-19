@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Clock, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
 import api from '../../utils/api';
+import { useUpgradeModal } from '../../utils/billing';
+import PricingModal from './PricingModal';
 
 export const TrialBanner = ({ subscription, tenantId, onRefresh, role }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const { modalProps, openUpgrade } = useUpgradeModal(subscription?.plan);
 
   if (!subscription || role === 'super_admin') return null;
 
@@ -98,7 +101,7 @@ export const TrialBanner = ({ subscription, tenantId, onRefresh, role }) => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/admin/billing')}
+                onClick={() => openUpgrade({ feature: 'trial_upgrade' })}
                 className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-primary text-white hover:opacity-90 shadow-sm transition-all active:scale-95 cursor-pointer"
               >
                 <span>Upgrade Plan</span>
@@ -108,6 +111,7 @@ export const TrialBanner = ({ subscription, tenantId, onRefresh, role }) => {
           )}
         </div>
       </div>
+      <PricingModal {...modalProps} onPlanChanged={onRefresh} />
     </div>
   );
 };
